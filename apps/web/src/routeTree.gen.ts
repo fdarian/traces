@@ -12,10 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppTokenShowcaseRouteImport } from './routes/_app/token-showcase'
-import { Route as AppIssuesRouteImport } from './routes/_app/issues'
 import { Route as AppTracesRouteRouteImport } from './routes/_app/traces/route'
+import { Route as AppIssuesRouteRouteImport } from './routes/_app/issues/route'
 import { Route as AppTracesIndexRouteImport } from './routes/_app/traces/index'
+import { Route as AppIssuesIndexRouteImport } from './routes/_app/issues/index'
 import { Route as AppTracesTraceIdRouteImport } from './routes/_app/traces/$traceId'
+import { Route as AppIssuesIssueIdRouteImport } from './routes/_app/issues/$issueId'
 
 const AppRouteRoute = AppRouteRouteImport.update({
   id: '/_app',
@@ -31,14 +33,14 @@ const AppTokenShowcaseRoute = AppTokenShowcaseRouteImport.update({
   path: '/token-showcase',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppIssuesRoute = AppIssuesRouteImport.update({
-  id: '/issues',
-  path: '/issues',
-  getParentRoute: () => AppRouteRoute,
-} as any)
 const AppTracesRouteRoute = AppTracesRouteRouteImport.update({
   id: '/traces',
   path: '/traces',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppIssuesRouteRoute = AppIssuesRouteRouteImport.update({
+  id: '/issues',
+  path: '/issues',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppTracesIndexRoute = AppTracesIndexRouteImport.update({
@@ -46,56 +48,81 @@ const AppTracesIndexRoute = AppTracesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppTracesRouteRoute,
 } as any)
+const AppIssuesIndexRoute = AppIssuesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppIssuesRouteRoute,
+} as any)
 const AppTracesTraceIdRoute = AppTracesTraceIdRouteImport.update({
   id: '/$traceId',
   path: '/$traceId',
   getParentRoute: () => AppTracesRouteRoute,
 } as any)
+const AppIssuesIssueIdRoute = AppIssuesIssueIdRouteImport.update({
+  id: '/$issueId',
+  path: '/$issueId',
+  getParentRoute: () => AppIssuesRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/issues': typeof AppIssuesRouteRouteWithChildren
   '/traces': typeof AppTracesRouteRouteWithChildren
-  '/issues': typeof AppIssuesRoute
   '/token-showcase': typeof AppTokenShowcaseRoute
+  '/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/traces/$traceId': typeof AppTracesTraceIdRoute
+  '/issues/': typeof AppIssuesIndexRoute
   '/traces/': typeof AppTracesIndexRoute
 }
 export interface FileRoutesByTo {
-  '/issues': typeof AppIssuesRoute
   '/token-showcase': typeof AppTokenShowcaseRoute
   '/': typeof AppIndexRoute
+  '/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/traces/$traceId': typeof AppTracesTraceIdRoute
+  '/issues': typeof AppIssuesIndexRoute
   '/traces': typeof AppTracesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteRouteWithChildren
+  '/_app/issues': typeof AppIssuesRouteRouteWithChildren
   '/_app/traces': typeof AppTracesRouteRouteWithChildren
-  '/_app/issues': typeof AppIssuesRoute
   '/_app/token-showcase': typeof AppTokenShowcaseRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/_app/traces/$traceId': typeof AppTracesTraceIdRoute
+  '/_app/issues/': typeof AppIssuesIndexRoute
   '/_app/traces/': typeof AppTracesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/traces'
     | '/issues'
+    | '/traces'
     | '/token-showcase'
+    | '/issues/$issueId'
     | '/traces/$traceId'
+    | '/issues/'
     | '/traces/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/issues' | '/token-showcase' | '/' | '/traces/$traceId' | '/traces'
+  to:
+    | '/token-showcase'
+    | '/'
+    | '/issues/$issueId'
+    | '/traces/$traceId'
+    | '/issues'
+    | '/traces'
   id:
     | '__root__'
     | '/_app'
-    | '/_app/traces'
     | '/_app/issues'
+    | '/_app/traces'
     | '/_app/token-showcase'
     | '/_app/'
+    | '/_app/issues/$issueId'
     | '/_app/traces/$traceId'
+    | '/_app/issues/'
     | '/_app/traces/'
   fileRoutesById: FileRoutesById
 }
@@ -126,18 +153,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTokenShowcaseRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/issues': {
-      id: '/_app/issues'
-      path: '/issues'
-      fullPath: '/issues'
-      preLoaderRoute: typeof AppIssuesRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
     '/_app/traces': {
       id: '/_app/traces'
       path: '/traces'
       fullPath: '/traces'
       preLoaderRoute: typeof AppTracesRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/issues': {
+      id: '/_app/issues'
+      path: '/issues'
+      fullPath: '/issues'
+      preLoaderRoute: typeof AppIssuesRouteRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/traces/': {
@@ -147,6 +174,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTracesIndexRouteImport
       parentRoute: typeof AppTracesRouteRoute
     }
+    '/_app/issues/': {
+      id: '/_app/issues/'
+      path: '/'
+      fullPath: '/issues/'
+      preLoaderRoute: typeof AppIssuesIndexRouteImport
+      parentRoute: typeof AppIssuesRouteRoute
+    }
     '/_app/traces/$traceId': {
       id: '/_app/traces/$traceId'
       path: '/$traceId'
@@ -154,8 +188,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTracesTraceIdRouteImport
       parentRoute: typeof AppTracesRouteRoute
     }
+    '/_app/issues/$issueId': {
+      id: '/_app/issues/$issueId'
+      path: '/$issueId'
+      fullPath: '/issues/$issueId'
+      preLoaderRoute: typeof AppIssuesIssueIdRouteImport
+      parentRoute: typeof AppIssuesRouteRoute
+    }
   }
 }
+
+interface AppIssuesRouteRouteChildren {
+  AppIssuesIssueIdRoute: typeof AppIssuesIssueIdRoute
+  AppIssuesIndexRoute: typeof AppIssuesIndexRoute
+}
+
+const AppIssuesRouteRouteChildren: AppIssuesRouteRouteChildren = {
+  AppIssuesIssueIdRoute: AppIssuesIssueIdRoute,
+  AppIssuesIndexRoute: AppIssuesIndexRoute,
+}
+
+const AppIssuesRouteRouteWithChildren = AppIssuesRouteRoute._addFileChildren(
+  AppIssuesRouteRouteChildren,
+)
 
 interface AppTracesRouteRouteChildren {
   AppTracesTraceIdRoute: typeof AppTracesTraceIdRoute
@@ -172,15 +227,15 @@ const AppTracesRouteRouteWithChildren = AppTracesRouteRoute._addFileChildren(
 )
 
 interface AppRouteRouteChildren {
+  AppIssuesRouteRoute: typeof AppIssuesRouteRouteWithChildren
   AppTracesRouteRoute: typeof AppTracesRouteRouteWithChildren
-  AppIssuesRoute: typeof AppIssuesRoute
   AppTokenShowcaseRoute: typeof AppTokenShowcaseRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppIssuesRouteRoute: AppIssuesRouteRouteWithChildren,
   AppTracesRouteRoute: AppTracesRouteRouteWithChildren,
-  AppIssuesRoute: AppIssuesRoute,
   AppTokenShowcaseRoute: AppTokenShowcaseRoute,
   AppIndexRoute: AppIndexRoute,
 }
