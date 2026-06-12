@@ -17,10 +17,10 @@ const SearchTracesInputSchema = S.Struct({
 
 export const searchTraces = createServerFn({ method: 'GET' })
   .validator(S.standardSchemaV1(SearchTracesInputSchema))
-  .handler(async ({ data }) => {
+  .handler(async (ctx) => {
     const effect = Effect.gen(function* () {
       const backend = yield* TraceBackend;
-      return yield* backend.searchTraces(data);
+      return yield* backend.searchTraces(ctx.data);
     });
     const result = await RuntimeServer.runPromise(effect);
     return result;

@@ -8,10 +8,10 @@ const ListOperationsInputSchema = S.String;
 
 export const listOperations = createServerFn({ method: 'GET' })
   .validator(S.standardSchemaV1(ListOperationsInputSchema))
-  .handler(async ({ data }) => {
+  .handler(async (ctx) => {
     const effect = Effect.gen(function* () {
       const backend = yield* TraceBackend;
-      return yield* backend.listOperations(data);
+      return yield* backend.listOperations(ctx.data);
     });
     const result = await RuntimeServer.runPromise(effect);
     return result;
