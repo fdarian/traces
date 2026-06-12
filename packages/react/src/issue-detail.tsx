@@ -28,6 +28,28 @@ export type IssueOccurrenceRow = {
   readonly serviceName: string;
 };
 
+/**
+ * Full-page detail view for a single error issue: header with sparkline and
+ * resolve/unresolve action, latest stacktrace, and a paginated occurrences table.
+ * Controlled: resolution and pagination are caller-owned; trace links are built
+ * via `getTraceHref` so the component stays router-agnostic.
+ *
+ * @example
+ * ```tsx
+ * <IssueDetail
+ *   issue={issue}
+ *   occurrences={occurrences}
+ *   page={page}
+ *   totalPages={totalPages}
+ *   isLoadingOccurrences={isLoading}
+ *   onPageChange={setPage}
+ *   onResolve={() => resolve(issue.id)}
+ *   onUnresolve={() => unresolve(issue.id)}
+ *   isResolving={isResolving}
+ *   getTraceHref={(traceId, spanId) => `/traces/${traceId}?span=${spanId}`}
+ * />
+ * ```
+ */
 export function IssueDetail(props: {
   readonly issue: IssueDetailData;
   readonly occurrences: ReadonlyArray<IssueOccurrenceRow>;

@@ -14,6 +14,15 @@ function serviceColor(name: string): string {
   return `oklch(0.72 0.12 ${hue})`;
 }
 
+/**
+ * Compact pill that renders a service name with a deterministic hue derived
+ * from the name string.
+ *
+ * @example
+ * ```tsx
+ * <ServiceBadge name="checkout-service" />
+ * ```
+ */
 export function ServiceBadge(props: { readonly name: string }) {
   const color = serviceColor(props.name);
   return (
@@ -29,6 +38,7 @@ export function ServiceBadge(props: { readonly name: string }) {
   );
 }
 
+/** Returns the deterministic oklch color string for a service name. */
 export function serviceColorValue(name: string): string {
   return serviceColor(name);
 }

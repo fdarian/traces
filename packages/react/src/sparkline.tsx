@@ -1,3 +1,4 @@
+/** Maps time-bucketed histogram data into a fixed-length counts array aligned to a sliding window. */
 export function fillHistogramCounts(props: {
   readonly buckets: ReadonlyArray<{
     readonly bucketStart: number;
@@ -21,6 +22,16 @@ export function fillHistogramCounts(props: {
   return counts;
 }
 
+/**
+ * Inline SVG sparkline that plots a sequence of counts as a polyline with a
+ * terminal dot. Sized as `sm` (72×16) or `lg` (160×32); color defaults to the
+ * accent token.
+ *
+ * @example
+ * ```tsx
+ * <Sparkline counts={issue.sparklineCounts} color="var(--status-error)" size="sm" />
+ * ```
+ */
 export function Sparkline(props: {
   readonly counts: ReadonlyArray<number>;
   readonly color?: string;

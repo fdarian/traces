@@ -31,6 +31,16 @@ const statusConfig: Record<
   },
 };
 
+/**
+ * Pill badge with a colored dot that communicates a span or issue status.
+ * Accepts an optional `label` override; otherwise renders the status name.
+ *
+ * @example
+ * ```tsx
+ * <StatusBadge status="error" />
+ * <StatusBadge status="resolved" label="closed" />
+ * ```
+ */
 export function StatusBadge(props: {
   readonly status: Status;
   readonly label?: string;

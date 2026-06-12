@@ -22,6 +22,7 @@ export interface FlatSpanRow {
   readonly node: SpanTreeNode;
 }
 
+/** Returns the span's start time in milliseconds. */
 export function spanStartMs(span: Span): number {
   return normalizeTimestampToMs(span.startTimeUnixNano);
 }
@@ -46,6 +47,7 @@ function removeFromChildrenMap(
   }
 }
 
+/** Walks up the parent chain from `spanId` and returns all ancestor span IDs in order (parent first). */
 export function collectAncestorSpanIds(
   spanId: string,
   spans: ReadonlyArray<Span>,
@@ -72,6 +74,7 @@ export function collectAncestorSpanIds(
   return ancestors;
 }
 
+/** Returns a new collapsed set with all `ancestorIds` removed (expanded). */
 export function expandCollapsedAncestors(
   collapsed: ReadonlySet<string>,
   ancestorIds: ReadonlyArray<string>,
@@ -87,6 +90,11 @@ export function expandCollapsedAncestors(
   return next;
 }
 
+/**
+ * Builds a forest of `SpanTreeNode` from a flat span array, resolving parent-child
+ * relationships and grouping orphans (missing parent, self-referential, or cyclic)
+ * under a synthetic `ORPHAN_ROOT_ID` node.
+ */
 export function buildSpanTree(
   spans: ReadonlyArray<Span>,
 ): ReadonlyArray<SpanTreeNode> {
@@ -234,6 +242,7 @@ export function buildSpanTree(
   return result;
 }
 
+/** Flattens the span tree into a depth-first ordered array of `FlatSpanRow`, skipping children of collapsed nodes. */
 export function flattenSpanTree(
   roots: ReadonlyArray<SpanTreeNode>,
   collapsed: ReadonlySet<string>,
@@ -265,6 +274,7 @@ export function flattenSpanTree(
   return result;
 }
 
+/** Returns a set of span IDs to collapse by default when `spanCount` exceeds `threshold`. */
 export function collectDefaultCollapsed(
   roots: ReadonlyArray<SpanTreeNode>,
   spanCount: number,

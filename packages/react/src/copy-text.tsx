@@ -1,6 +1,15 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
+/**
+ * Button that copies `value` to the clipboard on click, briefly showing a
+ * "copied" tooltip. Renders `children` when provided, otherwise the raw value.
+ *
+ * @example
+ * ```tsx
+ * <CopyText value={span.spanId} className="font-data text-data text-text-tertiary" />
+ * ```
+ */
 export function CopyText(props: {
   readonly value: string;
   readonly className?: string;

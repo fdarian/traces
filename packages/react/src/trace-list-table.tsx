@@ -6,6 +6,26 @@ import { SkeletonRow } from './skeleton-row.js';
 import { StatusBadge } from './status-badge.js';
 import type { TraceSummary } from './types.js';
 
+/**
+ * Sortable table of trace summaries with inline duration bars, service badges,
+ * and a paginated "load more" footer. Controlled: sorting state is owned by
+ * the caller via `sort`/`onSortChange`. Navigation is router-agnostic —
+ * supply `getTraceHref` to build the link href for each row.
+ *
+ * @example
+ * ```tsx
+ * <TraceListTable
+ *   traces={traces}
+ *   sort={sort}
+ *   onSortChange={setSort}
+ *   isLoading={isLoading}
+ *   hasMore={hasMore}
+ *   onLoadMore={loadMore}
+ *   error={error}
+ *   getTraceHref={(traceId) => `/traces/${traceId}`}
+ * />
+ * ```
+ */
 export function TraceListTable(props: {
   readonly traces: ReadonlyArray<TraceSummary>;
   readonly sort: 'start' | 'duration';

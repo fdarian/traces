@@ -1,5 +1,18 @@
 import type { ReactNode } from 'react';
 
+/**
+ * Centered placeholder with a dot-grid background for empty list states.
+ * Accepts an optional `action` node (e.g. a link or button) rendered below
+ * the message.
+ *
+ * @example
+ * ```tsx
+ * <EmptyState
+ *   message="no traces in this range"
+ *   action={<a href="/settings">configure data source</a>}
+ * />
+ * ```
+ */
 export function EmptyState(props: {
   readonly message: string;
   readonly action?: ReactNode;

@@ -68,6 +68,22 @@ function findSpan(spans: ReadonlyArray<Span>, spanId: string): Span | null {
   return null;
 }
 
+/**
+ * Composite trace page — header summary, `TraceWaterfall`, and `SpanDetailPanel`
+ * composed together with keyboard navigation (↑↓ to move, ←→ to collapse, Esc
+ * to deselect). Controlled: selected span state and the callback are caller-owned.
+ * Pass `deepLinkSpanId` to auto-expand ancestors and scroll to a span on mount.
+ *
+ * @example
+ * ```tsx
+ * <TraceDetailView
+ *   trace={trace}
+ *   selectedSpanId={selectedSpanId}
+ *   onSelectSpan={setSelectedSpanId}
+ *   deepLinkSpanId={searchParams.span}
+ * />
+ * ```
+ */
 export function TraceDetailView(props: {
   readonly trace: Trace;
   readonly selectedSpanId: string | null;

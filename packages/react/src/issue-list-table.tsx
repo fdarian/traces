@@ -18,6 +18,23 @@ export type IssueListRow = {
   readonly regressed: boolean;
 };
 
+/**
+ * Table of grouped error issues with occurrence counts, sparklines, and inline
+ * resolve actions. Controlled: navigation uses `getIssueHref` for row links;
+ * resolution is caller-owned via `onResolve`/`resolvingIssueId`.
+ *
+ * @example
+ * ```tsx
+ * <IssueListTable
+ *   issues={issues}
+ *   isLoading={isLoading}
+ *   error={error}
+ *   getIssueHref={(id) => `/issues/${id}`}
+ *   onResolve={(id) => resolveIssue(id)}
+ *   resolvingIssueId={resolvingId}
+ * />
+ * ```
+ */
 export function IssueListTable(props: {
   readonly issues: ReadonlyArray<IssueListRow>;
   readonly isLoading: boolean;

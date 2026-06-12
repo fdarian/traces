@@ -40,6 +40,7 @@ function niceStep(raw: number): number {
   return nice * magnitude;
 }
 
+/** Computes the earliest start and latest end across all spans in milliseconds. */
 export function computeTraceTimeBounds(spans: ReadonlyArray<Span>): TimeBounds {
   if (spans.length === 0) {
     return { startMs: 0, endMs: 1 };
@@ -66,6 +67,7 @@ export function computeTraceTimeBounds(spans: ReadonlyArray<Span>): TimeBounds {
   return { startMs, endMs };
 }
 
+/** Maps a millisecond timestamp to a pixel x-position within the given zoom window and canvas width. */
 export function timeToX(
   timeMs: number,
   zoom: ZoomWindow,
@@ -80,6 +82,7 @@ export function timeToX(
   return clamp(x, 0, widthPx);
 }
 
+/** Inverse of `timeToX` — maps a pixel x-position back to a millisecond timestamp within the zoom window. */
 export function xToTime(
   xPx: number,
   zoom: ZoomWindow,
@@ -93,6 +96,7 @@ export function xToTime(
   return zoom.startMs + ratio * range;
 }
 
+/** Clamps a zoom window to stay within `bounds` and respect a minimum window size. */
 export function clampZoomWindow(
   zoom: ZoomWindow,
   bounds: TimeBounds,
@@ -143,6 +147,7 @@ export function clampZoomWindow(
   return { startMs, endMs };
 }
 
+/** Formats a tick timestamp as a relative offset from the zoom start (`ms` or `s`). */
 export function formatTickLabel(ms: number, zoom: ZoomWindow): string {
   const offset = ms - zoom.startMs;
   if (offset >= 1000) {
@@ -151,6 +156,7 @@ export function formatTickLabel(ms: number, zoom: ZoomWindow): string {
   return `${Math.round(offset)}ms`;
 }
 
+/** Generates up to `tickCount` evenly spaced time axis ticks with labels and x-ratios for the given zoom window. */
 export function generateTimeTicks(
   zoom: ZoomWindow,
   tickCount: number,

@@ -99,6 +99,7 @@ function parseFrameLine(line: string): StackFrame | null {
   };
 }
 
+/** Parses a raw stacktrace string (Node/Java/Python format) into structured `StackFrame` objects. */
 export function parseStackFrames(
   stacktrace: string,
 ): ReadonlyArray<StackFrame> {
@@ -113,6 +114,19 @@ export function parseStackFrames(
   return frames;
 }
 
+/**
+ * Renders a parsed exception stacktrace with the exception type and message
+ * header. Library frames (node_modules, vendor, etc.) are dimmed at 0.6 opacity.
+ *
+ * @example
+ * ```tsx
+ * <StacktraceBlock
+ *   type="TypeError"
+ *   message="Cannot read properties of undefined"
+ *   stacktrace={span.exceptionStacktrace}
+ * />
+ * ```
+ */
 export function StacktraceBlock(props: {
   readonly type: string;
   readonly message: string;

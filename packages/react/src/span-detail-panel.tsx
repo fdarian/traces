@@ -70,6 +70,20 @@ function AttributeRow(props: { readonly attribute: AttributeValue }) {
   );
 }
 
+/**
+ * Slide-in side panel that shows attributes, events, and resource metadata for
+ * a selected span. Controlled: visibility is driven by `open`; call `onClose`
+ * to dismiss (the component never closes itself).
+ *
+ * @example
+ * ```tsx
+ * <SpanDetailPanel
+ *   span={selectedSpan}
+ *   open={selectedSpan !== null}
+ *   onClose={() => setSelectedSpan(null)}
+ * />
+ * ```
+ */
 export function SpanDetailPanel(props: {
   readonly span: Span | null;
   readonly open: boolean;

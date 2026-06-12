@@ -1,3 +1,12 @@
+/**
+ * Formats a duration in milliseconds as a human-readable value with a
+ * de-emphasized unit suffix — renders `ms` below 1 s, `s` above.
+ *
+ * @example
+ * ```tsx
+ * <Duration ms={span.durationMs} />
+ * ```
+ */
 export function Duration(props: { readonly ms: number }) {
   const value =
     props.ms >= 1000

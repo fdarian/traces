@@ -75,6 +75,22 @@ function computeVisibleRange(
   };
 }
 
+/**
+ * Virtualized span waterfall for a single trace — renders the span tree on the
+ * left and time-scaled bars on the right with a zoomable minimap.
+ * Controlled: pass `selectedSpanId`/`onSelectSpan`, `collapsed`/`onCollapsedChange`,
+ * and `zoom`/`onZoomChange` to own state externally; omit them for uncontrolled defaults.
+ *
+ * @example
+ * ```tsx
+ * <TraceWaterfall
+ *   trace={trace}
+ *   selectedSpanId={selectedSpanId}
+ *   onSelectSpan={setSelectedSpanId}
+ *   animateBars
+ * />
+ * ```
+ */
 export function TraceWaterfall(props: {
   readonly trace: Trace;
   readonly selectedSpanId?: string | null;
