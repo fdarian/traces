@@ -8,7 +8,9 @@ import { StatusBadge } from './status-badge.js';
 import { TraceWaterfall } from './trace-waterfall.js';
 import {
   buildSpanTree,
+  collectAncestorSpanIds,
   collectDefaultCollapsed,
+  expandCollapsedAncestors,
   flattenSpanTree,
   ORPHAN_ROOT_ID,
 } from './utils/span-tree.js';
@@ -17,8 +19,9 @@ import { computeTraceTimeBounds } from './utils/time-scale.js';
 const AUTO_COLLAPSE_THRESHOLD = 500;
 
 interface TraceHeaderInfo {
-  readonly rootOperation: string;
-  readonly rootService: string;
+  readonly hasRoot: boolean;
+  readonly rootOperation: string | null;
+  readonly rootService: string | null;
   readonly durationMs: number;
   readonly spanCount: number;
   readonly errorSpanCount: number;
@@ -27,7 +30,10 @@ interface TraceHeaderInfo {
 }
 
 function computeHeaderInfo(trace: Trace): TraceHeaderInfo {
-  const rootSpan = trace.spans.find((span) => span.parentSpanId === undefined);
+  const tree = buildSpanTree(trace.spans);
+  const rootNode = tree.find(
+    (node) => !node.isOrphanRoot && node.span !== null,
+  );
   const bounds = computeTraceTimeBounds(trace.spans);
   const serviceSet = new Set<string>();
   let errorSpanCount = 0;
@@ -39,10 +45,12 @@ function computeHeaderInfo(trace: Trace): TraceHeaderInfo {
     }
   }
 
+  const rootSpan = rootNode?.span ?? null;
+
   return {
-    rootOperation: rootSpan !== undefined ? rootSpan.name : 'unknown',
-    rootService:
-      rootSpan !== undefined ? rootSpan.resource.serviceName : 'unknown',
+    hasRoot: rootSpan !== null,
+    rootOperation: rootSpan !== null ? rootSpan.name : null,
+    rootService: rootSpan !== null ? rootSpan.resource.serviceName : null,
     durationMs: bounds.endMs - bounds.startMs,
     spanCount: trace.spans.length,
     errorSpanCount,
@@ -116,7 +124,16 @@ export function TraceDetailView(props: {
       return;
     }
     const exists = findSpan(props.trace.spans, deepLink);
-    if (exists !== null && props.selectedSpanId !== deepLink) {
+    if (exists === null) {
+      return;
+    }
+
+    const ancestors = collectAncestorSpanIds(deepLink, props.trace.spans);
+    if (ancestors.length > 0) {
+      setCollapsed((current) => expandCollapsedAncestors(current, ancestors));
+    }
+
+    if (props.selectedSpanId !== deepLink) {
       props.onSelectSpan(deepLink);
     }
   }, [
@@ -210,10 +227,20 @@ export function TraceDetailView(props: {
     >
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border-default px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-title font-semibold text-text-primary">
-            {header.rootOperation}
-          </span>
-          <ServiceBadge name={header.rootService} />
+          {header.hasRoot ? (
+            <>
+              <span className="truncate text-title font-semibold text-text-primary">
+                {header.rootOperation}
+              </span>
+              {header.rootService !== null && (
+                <ServiceBadge name={header.rootService} />
+              )}
+            </>
+          ) : (
+            <span className="text-title font-semibold text-text-secondary">
+              no root span
+            </span>
+          )}
         </div>
 
         <Duration ms={header.durationMs} />
