@@ -107,7 +107,7 @@ function ServiceRow(props: {
         {health.p99 !== null ? <Duration ms={health.p99} /> : '—'}
       </span>
 
-      <span className="text-label text-text-tertiary">
+      <span className="shrink-0 text-label text-text-tertiary">
         from last {health.traceCount} traces
       </span>
     </button>
