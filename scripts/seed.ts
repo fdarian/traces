@@ -1,18 +1,24 @@
+import { Span, TraceFlags, trace } from '@opentelemetry/api';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   BatchSpanProcessor,
   NodeTracerProvider,
 } from '@opentelemetry/sdk-trace-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { trace, Span, TraceFlags } from '@opentelemetry/api';
-import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 const SERVICE_NAMES = ['web', 'api', 'payments', 'db'];
 
 const EXCEPTION_TYPES = [
-  { type: 'DatabaseConnectionError', message: 'connection refused to postgres:5432' },
+  {
+    type: 'DatabaseConnectionError',
+    message: 'connection refused to postgres:5432',
+  },
   { type: 'PaymentGatewayError', message: 'stripe returned 402 card declined' },
-  { type: 'NullPointerException', message: 'cannot read property of undefined at line 42' },
+  {
+    type: 'NullPointerException',
+    message: 'cannot read property of undefined at line 42',
+  },
   { type: 'ValidationError', message: 'field email is required' },
   { type: 'TimeoutError', message: 'request timed out after 30000ms' },
 ];
@@ -27,7 +33,8 @@ const OPERATIONS: Record<string, string[]> = {
 function getConfig() {
   const traceCount = Number.parseInt(process.env.TRACE_COUNT ?? '50', 10);
   const errorRate = Number.parseFloat(process.env.ERROR_RATE ?? '0.15');
-  const endpoint = process.env.OTLP_ENDPOINT ?? 'http://localhost:4318/v1/traces';
+  const endpoint =
+    process.env.OTLP_ENDPOINT ?? 'http://localhost:4318/v1/traces';
   return { traceCount, errorRate, endpoint };
 }
 
@@ -74,18 +81,18 @@ function emitTrace(
 ) {
   if (depth > 3) return;
 
-  const service = depth === 0 ? 'web' : pick(SERVICE_NAMES.filter((s) => s !== parentService));
+  const service =
+    depth === 0
+      ? 'web'
+      : pick(SERVICE_NAMES.filter((s) => s !== parentService));
   const operation = pick(OPERATIONS[service]);
   const provider = providers[service];
   const tracer = provider.getTracer('seed-script');
 
-  const span = tracer.startSpan(
-    operation,
-    {
-      startTime: Date.now(),
-      ...(parentSpan && { parent: parentSpan.spanContext() }),
-    },
-  );
+  const span = tracer.startSpan(operation, {
+    startTime: Date.now(),
+    ...(parentSpan && { parent: parentSpan.spanContext() }),
+  });
 
   span.setAttribute('operation', operation);
   span.setAttribute('span.kind', depth === 0 ? 'server' : 'internal');
@@ -114,7 +121,9 @@ function emitTrace(
 async function main() {
   const { traceCount, errorRate, endpoint } = getConfig();
 
-  console.log(`Seeding ${traceCount} traces to ${endpoint} (errorRate=${errorRate})`);
+  console.log(
+    `Seeding ${traceCount} traces to ${endpoint} (errorRate=${errorRate})`,
+  );
 
   const providers = createProviders(endpoint);
 

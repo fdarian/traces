@@ -3,6 +3,6 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "formatter": { "indentStyle": "space" },
   "javascript": { "formatter": { "quoteStyle": "single" } },
-  "linter": { "enabled": true, "rules": { "recommended": true } },
+  "linter": { "enabled": true, "rules": { "preset": "none" } },
   "assist": { "actions": { "source": { "organizeImports": "on" } } }
 }
