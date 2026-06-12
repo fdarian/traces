@@ -1,7 +1,7 @@
 import type { Span } from '@traces/core';
 import { normalizeTimestampToMs } from '@traces/core';
 import type { PointerEvent } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { serviceColorValue } from './service-badge.js';
 import { spanStartMs } from './utils/span-tree.js';
 import {
@@ -26,13 +26,28 @@ export function WaterfallMinimap(props: {
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const bounds = computeTraceTimeBounds(props.spans);
+  const [width, setWidth] = useState(1);
   const [brush, setBrush] = useState<{
     readonly startX: number;
     readonly endX: number;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  const width = ref.current?.clientWidth ?? 1;
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry !== undefined) {
+        setWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(element);
+    setWidth(element.clientWidth);
+    return () => observer.disconnect();
+  }, []);
 
   const brushLeft = brush !== null ? Math.min(brush.startX, brush.endX) : 0;
   const brushWidth = brush !== null ? Math.abs(brush.endX - brush.startX) : 0;
