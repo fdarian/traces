@@ -106,6 +106,20 @@ export function computeTimeRange(range: RangeValue | null): {
   return { startTimeMin, startTimeMax };
 }
 
+export const IssueFilterSchema = S.Struct({
+  status: S.optional(S.Literal('unresolved', 'resolved')),
+});
+
+export type RawIssueFilters = typeof IssueFilterSchema.Type;
+
+export function normalizeIssueFilters(raw: RawIssueFilters): {
+  readonly status: 'unresolved' | 'resolved';
+} {
+  return {
+    status: raw.status ?? 'unresolved',
+  };
+}
+
 export function parseAttributes(
   input: string | undefined,
 ): Record<string, string> | undefined {
