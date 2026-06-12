@@ -3,6 +3,13 @@ export { Duration } from './duration.js';
 export { EmptyState } from './empty-state.js';
 export { ServiceBadge, serviceColorValue } from './service-badge.js';
 export { SkeletonRow } from './skeleton-row.js';
+export type {
+  IssueDetailData,
+  IssueOccurrenceRow,
+} from './issue-detail.js';
+export { IssueDetail } from './issue-detail.js';
+export type { IssueListRow } from './issue-list-table.js';
+export { IssueListTable } from './issue-list-table.js';
 export { fillHistogramCounts, Sparkline } from './sparkline.js';
 export { SpanDetailPanel } from './span-detail-panel.js';
 export type { StackFrame } from './stacktrace-block.js';
