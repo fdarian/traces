@@ -32,6 +32,7 @@ export type {
   TraceSummary,
   TraceSummaryService,
 } from './types.js';
+export { relativeTime } from './utils/relative-time.js';
 // utils
 export type { FlatSpanRow, SpanTreeNode } from './utils/span-tree.js';
 export {
