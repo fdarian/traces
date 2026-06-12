@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Run the traces dashboard against a local Jaeger v2 in under five minutes.
+description: Point the dashboard at a local Jaeger v2 instance and explore traces, services, and issues in under five minutes.
 ---
 
 ## Prerequisites
@@ -8,7 +8,7 @@ description: Run the traces dashboard against a local Jaeger v2 in under five mi
 - [Bun](https://bun.sh) v1.1+
 - [Docker](https://docs.docker.com/get-docker/)
 
-## 1. Clone the repo
+## 1. Clone and install
 
 ```bash
 git clone https://github.com/your-org/traces.git
@@ -22,7 +22,17 @@ bun install
 docker compose up -d
 ```
 
-This starts Jaeger v2 all-in-one with an in-memory backend, exposed at `http://localhost:16686` (UI) and `http://localhost:4318` (OTLP HTTP).
+This starts Jaeger v2 all-in-one with an in-memory backend. Ports exposed:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| `16686` | HTTP | Query API + Jaeger UI |
+| `4318` | HTTP | OTLP HTTP ingest |
+| `4317` | gRPC | OTLP gRPC ingest |
+
+<Callout type="warn">
+the in-memory backend caps at 10 000 traces and loses all data on restart. it is intended for local dev and demos. see [self-hosting](/docs/app/self-hosting) for persistent storage options.
+</Callout>
 
 ## 3. Seed sample traces
 
@@ -30,9 +40,29 @@ This starts Jaeger v2 all-in-one with an in-memory backend, exposed at `http://l
 bun run scripts/seed.ts
 ```
 
-Generates realistic multi-service traces so there is something to explore immediately.
+This emits 50 root traces (each starting from the `web` service with up to 3 levels of children spanning `web`, `api`, `payments`, and `db`). 15% of spans record an exception and set `status.code = ERROR`. Exception types emitted:
 
-## 4. Start the app
+- `DatabaseConnectionError`
+- `PaymentGatewayError`
+- `NullPointerException`
+- `ValidationError`
+- `TimeoutError`
+
+Traces are sent via OTLP HTTP to `http://localhost:4318/v1/traces`.
+
+You can override the defaults with environment variables:
+
+```bash
+TRACE_COUNT=100 ERROR_RATE=0.3 bun run scripts/seed.ts
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRACE_COUNT` | `50` | number of root traces to emit |
+| `ERROR_RATE` | `0.15` | fraction of spans that record an error (0–1) |
+| `OTLP_ENDPOINT` | `http://localhost:4318/v1/traces` | OTLP HTTP receiver URL |
+
+## 4. Start the dashboard
 
 ```bash
 cd apps/web
@@ -41,8 +71,48 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## What you get
+## What you'll see
 
-- **Home** — request rate and error rate sparklines per service
-- **Traces** — sortable table of recent traces, click to open waterfall
-- **Issues** — grouped error list with occurrence counts and sparklines
+### home
+
+the home view gives a fleet-level summary across all services discovered in Jaeger.
+
+- **error rate** — fraction of error spans across a recent sample of traces, with a trend sparkline.
+- **service health** — per-service p50 / p95 / p99 latency computed from a recent trace sample.
+- **recent traces** — a compact table of the most recent traces across all services.
+- **top issues** — the highest-occurrence unresolved issues, linking directly into the issues view.
+
+<Callout type="info">
+📸 screenshot: home dashboard — capture from the running seeded app (`bun dev` in apps/web, after seeding).
+</Callout>
+
+### traces
+
+the traces view is a searchable, filterable list of all traces visible to Jaeger.
+
+- filter by service, operation, time range, duration, and span attributes.
+- each row shows root service, root operation, total span count, error span count, and duration.
+- click any row to open the **waterfall detail view**: a gantt-style timeline of every span in the trace, color-coded by service, with attributes and exception events in a side panel.
+
+<Callout type="info">
+📸 screenshot: trace waterfall — capture a seeded trace with at least one error span to show the red highlight.
+</Callout>
+
+### issues
+
+the issues view aggregates error spans into grouped issues (similar to Sentry's issue list).
+
+- each issue represents a unique error fingerprint (service + exception type + normalized message + top stack frame).
+- columns: exception type, title, service, occurrence count, first seen, last seen, status.
+- issues can be **resolved** or **unresolved** manually. if a resolved issue gets a new occurrence, it **re-opens automatically** and is flagged as a **regression**.
+- click an issue to see its occurrence history, stacktrace, span attributes, and a link back to the originating trace in Jaeger.
+
+<Callout type="info">
+📸 screenshot: issues list — capture after seeding so several unresolved issues are visible. resolve one, then seed again to demonstrate the regression badge.
+</Callout>
+
+---
+
+<Callout type="info">
+the SDK component-reference pages show live-rendered examples of the same UI components used in the dashboard — useful for seeing the components even without a running app. see [SDK getting started](/docs/sdk/getting-started).
+</Callout>
