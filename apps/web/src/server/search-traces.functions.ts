@@ -14,7 +14,7 @@ const SearchTracesInputSchema = S.Struct({
   maxDuration: S.optional(S.String),
   attributes: S.optional(S.Record({ key: S.String, value: S.String })),
   limit: S.optional(S.Number),
-}) as S.Schema<any, any, never>;
+});
 
 export const searchTraces = createServerFn({ method: 'GET' })
   .middleware([wrapErrorsMiddleware])
