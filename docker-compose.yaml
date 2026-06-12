@@ -5,9 +5,9 @@ services:
       - "16686:16686"
       - "4318:4318"
       - "4317:4317"
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    command: ["--memory.max-traces", "10000"]
+    volumes:
+      - ./jaeger-config.yaml:/etc/jaeger/config.yaml:ro
+    command: ["--config", "/etc/jaeger/config.yaml"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:16686/"]
       interval: 5s
