@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { fileURLToPath } from 'node:url';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { Config, Effect, Layer, Schema } from 'effect';
@@ -8,13 +8,24 @@ import { sqliteSchema } from './drizzle/schema-sqlite.js';
 import { IssueNotFound, IssueStoreError } from './errors.js';
 import { mapIssueRow, mapOccurrenceRow } from './map-row.js';
 import type {
+  HistogramGranularity,
   Issue,
+  IssueDetail,
   ListIssuesFilter,
+  ListIssuesResult,
   Occurrence,
+  OccurrenceBucket,
+  PaginatedOccurrences,
   UpsertOccurrenceInput,
 } from './model.js';
+import { OCCURRENCES_PAGE_SIZE } from './model.js';
 import { IssueStore, MAX_OCCURRENCES_PER_ISSUE } from './store.js';
-import { issueStoreDefect, maxTimestamp } from './store-helpers.js';
+import {
+  combineSqlConditions,
+  issueListFilterConditions,
+  issueStoreDefect,
+  maxTimestamp,
+} from './store-helpers.js';
 
 type UpsertTransactionResult =
   | 'deduped'
@@ -127,8 +138,7 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
               lastSeen: nextLastSeen,
               occurrenceCount: nextCount,
               status: nextStatus,
-              resolvedAt:
-                nextStatus === 'unresolved' ? null : issueRow.resolvedAt,
+              resolvedAt: issueRow.resolvedAt,
             })
             .where(eq(sqliteSchema.issues.id, issueId))
             .run();
@@ -223,46 +233,75 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
     });
   };
 
+  const mapIssueRows = (rows: ReadonlyArray<(typeof sqliteSchema.issues)['$inferSelect']>): Array<Issue> => {
+    const result: Array<Issue> = [];
+    for (const row of rows) {
+      result.push(
+        mapIssueRow({
+          id: row.id,
+          fingerprint: row.fingerprint,
+          title: row.title,
+          service: row.service,
+          exceptionType: row.exceptionType,
+          status: row.status,
+          firstSeen: row.firstSeen,
+          lastSeen: row.lastSeen,
+          occurrenceCount: row.occurrenceCount,
+          resolvedAt: row.resolvedAt ?? null,
+        }),
+      );
+    }
+    return result;
+  };
+
   const listIssues = (
     filter: ListIssuesFilter,
   ): Effect.Effect<ReadonlyArray<Issue>, IssueStoreError, never> => {
     return Effect.gen(function* () {
-      const rows = yield* wrapStoreError(() => {
-        const conditions = [];
-        if (filter.status !== undefined) {
-          conditions.push(eq(sqliteSchema.issues.status, filter.status));
-        }
-        if (filter.service !== undefined) {
-          conditions.push(eq(sqliteSchema.issues.service, filter.service));
-        }
+      const result = yield* listIssuesWithSummary(filter);
+      return result.issues;
+    });
+  };
 
+  const listIssuesWithSummary = (
+    filter: ListIssuesFilter,
+  ): Effect.Effect<ListIssuesResult, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const conditions = issueListFilterConditions(filter, sqliteSchema.issues);
+      const whereClause = combineSqlConditions(conditions);
+
+      const rows = yield* wrapStoreError(() => {
         let query = db.select().from(sqliteSchema.issues).$dynamic();
-        if (conditions.length === 1) {
-          query = query.where(conditions[0]);
-        } else if (conditions.length === 2) {
-          query = query.where(and(conditions[0], conditions[1]));
+        if (whereClause !== undefined) {
+          query = query.where(whereClause);
         }
         return query.orderBy(desc(sqliteSchema.issues.lastSeen)).all();
       });
 
-      const result: Array<Issue> = [];
-      for (const row of rows) {
-        result.push(
-          mapIssueRow({
-            id: row.id,
-            fingerprint: row.fingerprint,
-            title: row.title,
-            service: row.service,
-            exceptionType: row.exceptionType,
-            status: row.status,
-            firstSeen: row.firstSeen,
-            lastSeen: row.lastSeen,
-            occurrenceCount: row.occurrenceCount,
-            resolvedAt: row.resolvedAt ?? null,
-          }),
-        );
-      }
-      return result;
+      const summaryRows = yield* wrapStoreError(() => {
+        let query = db
+          .select({
+            totalCount: sql<number>`count(*)`,
+            serviceCount: sql<number>`count(distinct ${sqliteSchema.issues.service})`,
+          })
+          .from(sqliteSchema.issues)
+          .$dynamic();
+        if (whereClause !== undefined) {
+          query = query.where(whereClause);
+        }
+        return query.all();
+      });
+
+      const summaryRow = summaryRows[0];
+      const summary = {
+        totalCount: summaryRow?.totalCount ?? 0,
+        serviceCount: summaryRow?.serviceCount ?? 0,
+      };
+
+      return {
+        issues: mapIssueRows(rows),
+        summary,
+      };
     });
   };
 
@@ -296,6 +335,195 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
     });
   };
 
+  const mapOccurrenceRows = (
+    rows: ReadonlyArray<(typeof sqliteSchema.occurrences)['$inferSelect']>,
+  ): Array<Occurrence> => {
+    const result: Array<Occurrence> = [];
+    for (const row of rows) {
+      const attributes =
+        typeof row.attributes === 'object' && row.attributes !== null
+          ? (row.attributes as Record<string, unknown>)
+          : {};
+      result.push(
+        mapOccurrenceRow({
+          id: row.id,
+          issueId: row.issueId,
+          traceId: row.traceId,
+          spanId: row.spanId,
+          serviceName: row.serviceName,
+          timestamp: row.timestamp,
+          exceptionMessage: row.exceptionMessage,
+          exceptionStacktrace: row.exceptionStacktrace ?? null,
+          attributes,
+        }),
+      );
+    }
+    return result;
+  };
+
+  const getIssueDetail = (
+    issueId: number,
+  ): Effect.Effect<IssueDetail, IssueStoreError | IssueNotFound, never> => {
+    return Effect.gen(function* () {
+      const issue = yield* getIssue(issueId);
+      const latestRows = yield* wrapStoreError(() =>
+        db
+          .select()
+          .from(sqliteSchema.occurrences)
+          .where(eq(sqliteSchema.occurrences.issueId, issueId))
+          .orderBy(desc(sqliteSchema.occurrences.timestamp))
+          .limit(1)
+          .all(),
+      );
+      const latestRow = latestRows[0];
+      const latestOccurrence =
+        latestRow === undefined ? null : mapOccurrenceRows([latestRow])[0];
+      return { issue, latestOccurrence };
+    });
+  };
+
+  const getIssueOccurrencesPaginated = (
+    issueId: number,
+    page: number,
+  ): Effect.Effect<PaginatedOccurrences, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const safePage = page < 1 ? 1 : page;
+      const offset = (safePage - 1) * OCCURRENCES_PAGE_SIZE;
+
+      const countRows = yield* wrapStoreError(() =>
+        db
+          .select({ totalCount: sql<number>`count(*)` })
+          .from(sqliteSchema.occurrences)
+          .where(eq(sqliteSchema.occurrences.issueId, issueId))
+          .all(),
+      );
+      const totalCount = countRows[0]?.totalCount ?? 0;
+
+      const rows = yield* wrapStoreError(() =>
+        db
+          .select()
+          .from(sqliteSchema.occurrences)
+          .where(eq(sqliteSchema.occurrences.issueId, issueId))
+          .orderBy(desc(sqliteSchema.occurrences.timestamp))
+          .limit(OCCURRENCES_PAGE_SIZE)
+          .offset(offset)
+          .all(),
+      );
+
+      return {
+        occurrences: mapOccurrenceRows(rows),
+        page: safePage,
+        pageSize: OCCURRENCES_PAGE_SIZE,
+        totalCount,
+      };
+    });
+  };
+
+  function parseSqliteBucketStart(
+    bucket: string,
+    granularity: HistogramGranularity,
+  ): Date {
+    if (granularity === 'day') {
+      return new Date(`${bucket}T00:00:00.000Z`);
+    }
+    return new Date(`${bucket.replace(' ', 'T')}.000Z`);
+  }
+
+  function sqliteHistogramBucketExpr(granularity: HistogramGranularity) {
+    if (granularity === 'day') {
+      return sql<string>`strftime('%Y-%m-%d', ${sqliteSchema.occurrences.timestamp} / 1000, 'unixepoch')`;
+    }
+    return sql<string>`strftime('%Y-%m-%d %H:00:00', ${sqliteSchema.occurrences.timestamp} / 1000, 'unixepoch')`;
+  }
+
+  const getOccurrenceHistogram = (
+    issueId: number,
+    granularity: HistogramGranularity,
+    since: Date,
+  ): Effect.Effect<ReadonlyArray<OccurrenceBucket>, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const bucketExpr = sqliteHistogramBucketExpr(granularity);
+      const rows = yield* wrapStoreError(() =>
+        db
+          .select({
+            bucket: bucketExpr,
+            count: sql<number>`count(*)`,
+          })
+          .from(sqliteSchema.occurrences)
+          .where(
+            and(
+              eq(sqliteSchema.occurrences.issueId, issueId),
+              gte(sqliteSchema.occurrences.timestamp, since),
+            ),
+          )
+          .groupBy(bucketExpr)
+          .orderBy(bucketExpr)
+          .all(),
+      );
+
+      const result: Array<OccurrenceBucket> = [];
+      for (const row of rows) {
+        result.push({
+          bucketStart: parseSqliteBucketStart(row.bucket, granularity),
+          count: row.count,
+        });
+      }
+      return result;
+    });
+  };
+
+  const getOccurrenceHistograms = (
+    issueIds: ReadonlyArray<number>,
+    granularity: HistogramGranularity,
+    since: Date,
+  ): Effect.Effect<
+    ReadonlyMap<number, ReadonlyArray<OccurrenceBucket>>,
+    IssueStoreError,
+    never
+  > => {
+    return Effect.gen(function* () {
+      const map = new Map<number, ReadonlyArray<OccurrenceBucket>>();
+      if (issueIds.length === 0) {
+        return map;
+      }
+
+      const bucketExpr = sqliteHistogramBucketExpr(granularity);
+      const rows = yield* wrapStoreError(() =>
+        db
+          .select({
+            issueId: sqliteSchema.occurrences.issueId,
+            bucket: bucketExpr,
+            count: sql<number>`count(*)`,
+          })
+          .from(sqliteSchema.occurrences)
+          .where(
+            and(
+              inArray(sqliteSchema.occurrences.issueId, [...issueIds]),
+              gte(sqliteSchema.occurrences.timestamp, since),
+            ),
+          )
+          .groupBy(sqliteSchema.occurrences.issueId, bucketExpr)
+          .orderBy(sqliteSchema.occurrences.issueId, bucketExpr)
+          .all(),
+      );
+
+      const grouped = new Map<number, Array<OccurrenceBucket>>();
+      for (const row of rows) {
+        const buckets = grouped.get(row.issueId) ?? [];
+        buckets.push({
+          bucketStart: parseSqliteBucketStart(row.bucket, granularity),
+          count: row.count,
+        });
+        grouped.set(row.issueId, buckets);
+      }
+
+      for (const issueId of issueIds) {
+        map.set(issueId, grouped.get(issueId) ?? []);
+      }
+      return map;
+    });
+  };
+
   const getIssueOccurrences = (
     issueId: number,
   ): Effect.Effect<ReadonlyArray<Occurrence>, IssueStoreError, never> => {
@@ -309,27 +537,7 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
           .all(),
       );
 
-      const result: Array<Occurrence> = [];
-      for (const row of rows) {
-        const attributes =
-          typeof row.attributes === 'object' && row.attributes !== null
-            ? (row.attributes as Record<string, unknown>)
-            : {};
-        result.push(
-          mapOccurrenceRow({
-            id: row.id,
-            issueId: row.issueId,
-            traceId: row.traceId,
-            spanId: row.spanId,
-            serviceName: row.serviceName,
-            timestamp: row.timestamp,
-            exceptionMessage: row.exceptionMessage,
-            exceptionStacktrace: row.exceptionStacktrace ?? null,
-            attributes,
-          }),
-        );
-      }
-      return result;
+      return mapOccurrenceRows(rows);
     });
   };
 
@@ -379,8 +587,13 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
     resolveIssue,
     unresolveIssue,
     listIssues,
+    listIssuesWithSummary,
     getIssue,
+    getIssueDetail,
     getIssueOccurrences,
+    getIssueOccurrencesPaginated,
+    getOccurrenceHistogram,
+    getOccurrenceHistograms,
     getIngestCursor,
     setIngestCursor,
   };

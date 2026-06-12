@@ -26,12 +26,20 @@ export {
 } from './issues/ingester.js';
 export { IssueStoreLayer } from './issues/issue-store-layer.js';
 export type {
+  HistogramGranularity,
   Issue,
+  IssueDetail,
   IssueStatus,
   ListIssuesFilter,
+  ListIssuesResult,
+  ListIssuesSummary,
   Occurrence,
+  OccurrenceBucket,
+  PaginatedOccurrences,
   UpsertOccurrenceInput,
 } from './issues/model.js';
+export { OCCURRENCES_PAGE_SIZE } from './issues/model.js';
+export { isRegressedIssue } from './issues/store-helpers.js';
 export { normalizeExceptionMessage } from './issues/normalize-message.js';
 export { PgIssueStoreLayer } from './issues/pg-store.js';
 export { SqliteIssueStoreLayer } from './issues/sqlite-store.js';

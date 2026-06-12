@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { Config, Effect, Layer, Schema } from 'effect';
@@ -8,13 +8,24 @@ import { pgSchema } from './drizzle/schema-pg.js';
 import { IssueNotFound, IssueStoreError } from './errors.js';
 import { mapIssueRow, mapOccurrenceRow } from './map-row.js';
 import type {
+  HistogramGranularity,
   Issue,
+  IssueDetail,
   ListIssuesFilter,
+  ListIssuesResult,
   Occurrence,
+  OccurrenceBucket,
+  PaginatedOccurrences,
   UpsertOccurrenceInput,
 } from './model.js';
+import { OCCURRENCES_PAGE_SIZE } from './model.js';
 import { IssueStore, MAX_OCCURRENCES_PER_ISSUE } from './store.js';
-import { issueStoreDefect, maxTimestamp } from './store-helpers.js';
+import {
+  combineSqlConditions,
+  issueListFilterConditions,
+  issueStoreDefect,
+  maxTimestamp,
+} from './store-helpers.js';
 
 type UpsertTransactionResult =
   | 'deduped'
@@ -125,8 +136,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
                 lastSeen: nextLastSeen,
                 occurrenceCount: nextCount,
                 status: nextStatus,
-                resolvedAt:
-                  nextStatus === 'unresolved' ? null : issueRow.resolvedAt,
+                resolvedAt: issueRow.resolvedAt,
               })
               .where(eq(pgSchema.issues.id, issueId));
 
@@ -217,46 +227,77 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     });
   };
 
+  const mapIssueRows = (
+    rows: ReadonlyArray<(typeof pgSchema.issues)['$inferSelect']>,
+  ): Array<Issue> => {
+    const result: Array<Issue> = [];
+    for (const row of rows) {
+      result.push(
+        mapIssueRow({
+          id: row.id,
+          fingerprint: row.fingerprint,
+          title: row.title,
+          service: row.service,
+          exceptionType: row.exceptionType,
+          status: row.status,
+          firstSeen: row.firstSeen,
+          lastSeen: row.lastSeen,
+          occurrenceCount: row.occurrenceCount,
+          resolvedAt: row.resolvedAt ?? null,
+        }),
+      );
+    }
+    return result;
+  };
+
   const listIssues = (
     filter: ListIssuesFilter,
   ): Effect.Effect<ReadonlyArray<Issue>, IssueStoreError, never> => {
     return Effect.gen(function* () {
-      const rows = yield* wrapStoreError(() => {
-        const conditions = [];
-        if (filter.status !== undefined) {
-          conditions.push(eq(pgSchema.issues.status, filter.status));
-        }
-        if (filter.service !== undefined) {
-          conditions.push(eq(pgSchema.issues.service, filter.service));
-        }
+      const result = yield* listIssuesWithSummary(filter);
+      return result.issues;
+    });
+  };
 
+  const listIssuesWithSummary = (
+    filter: ListIssuesFilter,
+  ): Effect.Effect<ListIssuesResult, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const conditions = issueListFilterConditions(filter, pgSchema.issues);
+      const whereClause = combineSqlConditions(conditions);
+
+      const rows = yield* wrapStoreError(() => {
         let query = db.select().from(pgSchema.issues).$dynamic();
-        if (conditions.length === 1) {
-          query = query.where(conditions[0]);
-        } else if (conditions.length === 2) {
-          query = query.where(and(conditions[0], conditions[1]));
+        if (whereClause !== undefined) {
+          query = query.where(whereClause);
         }
         return query.orderBy(desc(pgSchema.issues.lastSeen));
       });
 
-      const result: Array<Issue> = [];
-      for (const row of rows) {
-        result.push(
-          mapIssueRow({
-            id: row.id,
-            fingerprint: row.fingerprint,
-            title: row.title,
-            service: row.service,
-            exceptionType: row.exceptionType,
-            status: row.status,
-            firstSeen: row.firstSeen,
-            lastSeen: row.lastSeen,
-            occurrenceCount: row.occurrenceCount,
-            resolvedAt: row.resolvedAt ?? null,
-          }),
-        );
-      }
-      return result;
+      const summaryRows = yield* wrapStoreError(() => {
+        let query = db
+          .select({
+            totalCount: sql<number>`count(*)::int`,
+            serviceCount: sql<number>`count(distinct ${pgSchema.issues.service})::int`,
+          })
+          .from(pgSchema.issues)
+          .$dynamic();
+        if (whereClause !== undefined) {
+          query = query.where(whereClause);
+        }
+        return query;
+      });
+
+      const summaryRow = summaryRows[0];
+      const summary = {
+        totalCount: summaryRow?.totalCount ?? 0,
+        serviceCount: summaryRow?.serviceCount ?? 0,
+      };
+
+      return {
+        issues: mapIssueRows(rows),
+        summary,
+      };
     });
   };
 
@@ -289,6 +330,180 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     });
   };
 
+  const mapOccurrenceRows = (
+    rows: ReadonlyArray<(typeof pgSchema.occurrences)['$inferSelect']>,
+  ): Array<Occurrence> => {
+    const result: Array<Occurrence> = [];
+    for (const row of rows) {
+      const attributes =
+        typeof row.attributes === 'object' && row.attributes !== null
+          ? (row.attributes as Record<string, unknown>)
+          : {};
+      result.push(
+        mapOccurrenceRow({
+          id: row.id,
+          issueId: row.issueId,
+          traceId: row.traceId,
+          spanId: row.spanId,
+          serviceName: row.serviceName,
+          timestamp: row.timestamp,
+          exceptionMessage: row.exceptionMessage,
+          exceptionStacktrace: row.exceptionStacktrace ?? null,
+          attributes,
+        }),
+      );
+    }
+    return result;
+  };
+
+  const getIssueDetail = (
+    issueId: number,
+  ): Effect.Effect<IssueDetail, IssueStoreError | IssueNotFound, never> => {
+    return Effect.gen(function* () {
+      const issue = yield* getIssue(issueId);
+      const latestRows = yield* wrapStoreError(() =>
+        db
+          .select()
+          .from(pgSchema.occurrences)
+          .where(eq(pgSchema.occurrences.issueId, issueId))
+          .orderBy(desc(pgSchema.occurrences.timestamp))
+          .limit(1),
+      );
+      const latestRow = latestRows[0];
+      const latestOccurrence =
+        latestRow === undefined ? null : mapOccurrenceRows([latestRow])[0];
+      return { issue, latestOccurrence };
+    });
+  };
+
+  const getIssueOccurrencesPaginated = (
+    issueId: number,
+    page: number,
+  ): Effect.Effect<PaginatedOccurrences, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const safePage = page < 1 ? 1 : page;
+      const offset = (safePage - 1) * OCCURRENCES_PAGE_SIZE;
+
+      const countRows = yield* wrapStoreError(() =>
+        db
+          .select({ totalCount: sql<number>`count(*)::int` })
+          .from(pgSchema.occurrences)
+          .where(eq(pgSchema.occurrences.issueId, issueId)),
+      );
+      const totalCount = countRows[0]?.totalCount ?? 0;
+
+      const rows = yield* wrapStoreError(() =>
+        db
+          .select()
+          .from(pgSchema.occurrences)
+          .where(eq(pgSchema.occurrences.issueId, issueId))
+          .orderBy(desc(pgSchema.occurrences.timestamp))
+          .limit(OCCURRENCES_PAGE_SIZE)
+          .offset(offset),
+      );
+
+      return {
+        occurrences: mapOccurrenceRows(rows),
+        page: safePage,
+        pageSize: OCCURRENCES_PAGE_SIZE,
+        totalCount,
+      };
+    });
+  };
+
+  function pgHistogramBucketExpr(granularity: HistogramGranularity) {
+    if (granularity === 'day') {
+      return sql<Date>`date_trunc('day', ${pgSchema.occurrences.timestamp})`;
+    }
+    return sql<Date>`date_trunc('hour', ${pgSchema.occurrences.timestamp})`;
+  }
+
+  const getOccurrenceHistogram = (
+    issueId: number,
+    granularity: HistogramGranularity,
+    since: Date,
+  ): Effect.Effect<ReadonlyArray<OccurrenceBucket>, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const bucketExpr = pgHistogramBucketExpr(granularity);
+      const rows = yield* wrapStoreError(() =>
+        db
+          .select({
+            bucket: bucketExpr,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(pgSchema.occurrences)
+          .where(
+            and(
+              eq(pgSchema.occurrences.issueId, issueId),
+              gte(pgSchema.occurrences.timestamp, since),
+            ),
+          )
+          .groupBy(bucketExpr)
+          .orderBy(bucketExpr),
+      );
+
+      const result: Array<OccurrenceBucket> = [];
+      for (const row of rows) {
+        result.push({
+          bucketStart: row.bucket,
+          count: row.count,
+        });
+      }
+      return result;
+    });
+  };
+
+  const getOccurrenceHistograms = (
+    issueIds: ReadonlyArray<number>,
+    granularity: HistogramGranularity,
+    since: Date,
+  ): Effect.Effect<
+    ReadonlyMap<number, ReadonlyArray<OccurrenceBucket>>,
+    IssueStoreError,
+    never
+  > => {
+    return Effect.gen(function* () {
+      const map = new Map<number, ReadonlyArray<OccurrenceBucket>>();
+      if (issueIds.length === 0) {
+        return map;
+      }
+
+      const bucketExpr = pgHistogramBucketExpr(granularity);
+      const rows = yield* wrapStoreError(() =>
+        db
+          .select({
+            issueId: pgSchema.occurrences.issueId,
+            bucket: bucketExpr,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(pgSchema.occurrences)
+          .where(
+            and(
+              inArray(pgSchema.occurrences.issueId, [...issueIds]),
+              gte(pgSchema.occurrences.timestamp, since),
+            ),
+          )
+          .groupBy(pgSchema.occurrences.issueId, bucketExpr)
+          .orderBy(pgSchema.occurrences.issueId, bucketExpr),
+      );
+
+      const grouped = new Map<number, Array<OccurrenceBucket>>();
+      for (const row of rows) {
+        const buckets = grouped.get(row.issueId) ?? [];
+        buckets.push({
+          bucketStart: row.bucket,
+          count: row.count,
+        });
+        grouped.set(row.issueId, buckets);
+      }
+
+      for (const issueId of issueIds) {
+        map.set(issueId, grouped.get(issueId) ?? []);
+      }
+      return map;
+    });
+  };
+
   const getIssueOccurrences = (
     issueId: number,
   ): Effect.Effect<ReadonlyArray<Occurrence>, IssueStoreError, never> => {
@@ -301,27 +516,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
           .orderBy(desc(pgSchema.occurrences.timestamp)),
       );
 
-      const result: Array<Occurrence> = [];
-      for (const row of rows) {
-        const attributes =
-          typeof row.attributes === 'object' && row.attributes !== null
-            ? (row.attributes as Record<string, unknown>)
-            : {};
-        result.push(
-          mapOccurrenceRow({
-            id: row.id,
-            issueId: row.issueId,
-            traceId: row.traceId,
-            spanId: row.spanId,
-            serviceName: row.serviceName,
-            timestamp: row.timestamp,
-            exceptionMessage: row.exceptionMessage,
-            exceptionStacktrace: row.exceptionStacktrace ?? null,
-            attributes,
-          }),
-        );
-      }
-      return result;
+      return mapOccurrenceRows(rows);
     });
   };
 
@@ -370,8 +565,13 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     resolveIssue,
     unresolveIssue,
     listIssues,
+    listIssuesWithSummary,
     getIssue,
+    getIssueDetail,
     getIssueOccurrences,
+    getIssueOccurrencesPaginated,
+    getOccurrenceHistogram,
+    getOccurrenceHistograms,
     getIngestCursor,
     setIngestCursor,
   };

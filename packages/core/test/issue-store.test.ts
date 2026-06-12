@@ -137,7 +137,10 @@ describe('SqliteIssueStore', () => {
       }),
     );
     expect(reopened.status).toBe('unresolved');
-    expect(reopened.resolvedAt).toBeNull();
+    expect(reopened.resolvedAt).not.toBeNull();
+    expect(reopened.lastSeen.getTime()).toBeGreaterThan(
+      reopened.resolvedAt?.getTime() ?? 0,
+    );
     expect(reopened.occurrenceCount).toBe(3);
 
     const occurrences = await runStore(
@@ -281,6 +284,150 @@ describe('SqliteIssueStore', () => {
 
     expect(issue.occurrenceCount).toBe(2);
     expect(issue.lastSeen.getTime()).toBe(later);
+  });
+
+  test('listIssuesWithSummary filters by status and service with counts', async () => {
+    dbPath = tempDbPath();
+
+    await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        const base = {
+          exceptionType: 'ValidationError',
+          serviceName: 'api',
+          timestamp: Date.now(),
+          exceptionMessage: 'field email is required',
+          attributes: {},
+        };
+        yield* store.upsertOccurrence({
+          ...base,
+          fingerprint: 'fp-api',
+          title: 'ValidationError: field email is required',
+          service: 'api',
+          traceId: 'trace-api',
+          spanId: 'span-api',
+        });
+        yield* store.upsertOccurrence({
+          ...base,
+          fingerprint: 'fp-db',
+          title: 'DatabaseConnectionError: connection refused',
+          service: 'db',
+          exceptionType: 'DatabaseConnectionError',
+          exceptionMessage: 'connection refused',
+          traceId: 'trace-db',
+          spanId: 'span-db',
+        });
+        yield* store.resolveIssue(
+          (
+            yield* store.listIssues({ service: 'db' })
+          )[0].id,
+        );
+      }),
+    );
+
+    const unresolved = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.listIssuesWithSummary({ status: 'unresolved' });
+      }),
+    );
+
+    expect(unresolved.summary.totalCount).toBe(1);
+    expect(unresolved.summary.serviceCount).toBe(1);
+    expect(unresolved.issues[0].service).toBe('api');
+
+    const resolved = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.listIssuesWithSummary({ status: 'resolved' });
+      }),
+    );
+
+    expect(resolved.summary.totalCount).toBe(1);
+    expect(resolved.issues[0].service).toBe('db');
+  });
+
+  test('paginates occurrences and buckets histogram in SQL', async () => {
+    dbPath = tempDbPath();
+    const baseTime = Date.UTC(2026, 5, 12, 10, 0, 0);
+
+    const issueId = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        for (let index = 0; index < 55; index += 1) {
+          yield* store.upsertOccurrence({
+            fingerprint: 'fp-pagination',
+            title: 'TimeoutError: request timed out',
+            service: 'api',
+            exceptionType: 'TimeoutError',
+            traceId: `trace-${index}`,
+            spanId: `span-${index}`,
+            serviceName: 'api',
+            timestamp: baseTime + index * 60_000,
+            exceptionMessage: 'request timed out after 30000ms',
+            attributes: {},
+          });
+        }
+        const issues = yield* store.listIssues({});
+        return issues[0].id;
+      }),
+    );
+
+    const pageOne = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getIssueOccurrencesPaginated(issueId, 1);
+      }),
+    );
+    const pageTwo = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getIssueOccurrencesPaginated(issueId, 2);
+      }),
+    );
+
+    expect(pageOne.totalCount).toBe(55);
+    expect(pageOne.occurrences.length).toBe(50);
+    expect(pageTwo.occurrences.length).toBe(5);
+
+    const detail = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getIssueDetail(issueId);
+      }),
+    );
+    expect(detail.latestOccurrence?.traceId).toBe('trace-54');
+
+    const since = new Date(baseTime);
+    const histogram = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getOccurrenceHistogram(issueId, 'hour', since);
+      }),
+    );
+    expect(histogram.length).toBeGreaterThan(0);
+    const totalBucketed = histogram.reduce(
+      (sum, bucket) => sum + bucket.count,
+      0,
+    );
+    expect(totalBucketed).toBe(55);
+
+    const batch = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getOccurrenceHistograms([issueId], 'day', since);
+      }),
+    );
+    expect(batch.get(issueId)?.length).toBeGreaterThan(0);
   });
 
   test('tracks ingest cursor per service', async () => {

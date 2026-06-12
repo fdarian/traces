@@ -42,4 +42,36 @@ export interface UpsertOccurrenceInput {
 export interface ListIssuesFilter {
   readonly status?: IssueStatus;
   readonly service?: string;
+  readonly services?: ReadonlyArray<string>;
 }
+
+export interface ListIssuesSummary {
+  readonly totalCount: number;
+  readonly serviceCount: number;
+}
+
+export interface ListIssuesResult {
+  readonly issues: ReadonlyArray<Issue>;
+  readonly summary: ListIssuesSummary;
+}
+
+export interface IssueDetail {
+  readonly issue: Issue;
+  readonly latestOccurrence: Occurrence | null;
+}
+
+export type HistogramGranularity = 'hour' | 'day';
+
+export interface OccurrenceBucket {
+  readonly bucketStart: Date;
+  readonly count: number;
+}
+
+export interface PaginatedOccurrences {
+  readonly occurrences: ReadonlyArray<Occurrence>;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly totalCount: number;
+}
+
+export const OCCURRENCES_PAGE_SIZE = 50;
