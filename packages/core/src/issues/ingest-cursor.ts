@@ -1,4 +1,5 @@
 import type { TraceSummary } from '../model.js';
+import { maxTimestamp } from './store-helpers.js';
 
 export function oldestTraceStartMs(
   summaries: ReadonlyArray<TraceSummary>,
@@ -24,15 +25,23 @@ export function computeIngestCursorEnd(
   now: Date,
   traceLimit: number,
   overlapMs: number,
+  previousCursor: Date | null,
 ): Date {
+  let computed: Date;
   if (summaries.length === 0 || summaries.length < traceLimit) {
-    return now;
+    computed = now;
+  } else {
+    const oldestStartMs = oldestTraceStartMs(summaries);
+    if (oldestStartMs === null) {
+      computed = now;
+    } else {
+      computed = new Date(oldestStartMs - overlapMs);
+    }
   }
 
-  const oldestStartMs = oldestTraceStartMs(summaries);
-  if (oldestStartMs === null) {
-    return now;
+  if (previousCursor === null) {
+    return computed;
   }
 
-  return new Date(oldestStartMs - overlapMs);
+  return maxTimestamp(previousCursor, computed);
 }

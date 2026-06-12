@@ -166,6 +166,7 @@ const ingestService = (
       now,
       traceLimit,
       overlapMs,
+      cursor,
     );
     yield* store.setIngestCursor(service, cursorEnd);
   });
