@@ -34,3 +34,8 @@ export {
   normalizeTimestamp,
   normalizeTimestampToMs,
 } from './normalize.js';
+export type {
+  SerializableAttributeValue,
+  SerializableJson,
+} from './serialize.js';
+export { serializeAttribute, serializeValue } from './serialize.js';
