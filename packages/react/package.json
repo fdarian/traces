@@ -9,7 +9,8 @@
   "scripts": {
     "check:tsc": "tsc --noEmit",
     "check:lint": "biome check",
-    "test": "bun test"
+    "test": "bun test",
+    "build:css": "tailwindcss -i ./src/styles.src.css -o ./dist/theme.css"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -18,10 +19,12 @@
     "@traces/core": "workspace:*"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.1",
     "@types/bun": "latest",
     "@types/node": "latest",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.3.1",
     "typescript": "latest"
   }
 }
