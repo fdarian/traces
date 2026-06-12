@@ -12,4 +12,8 @@
     animation: none !important;
     transform: scaleX(1) !important;
   }
+
+  .span-detail-panel {
+    transition: none !important;
+  }
 }
