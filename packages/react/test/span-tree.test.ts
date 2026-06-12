@@ -1,8 +1,10 @@
-import type { Span } from '@traces/core';
 import { describe, expect, test } from 'bun:test';
+import type { Span } from '@traces/core';
 import {
   buildSpanTree,
+  collectAncestorSpanIds,
   collectDefaultCollapsed,
+  expandCollapsedAncestors,
   flattenSpanTree,
   ORPHAN_ROOT_ID,
   spanStartMs,
@@ -108,6 +110,52 @@ describe('buildSpanTree', () => {
     expect(tree[1].children[0].depth).toBe(1);
   });
 
+  test('groups self-parent spans under synthetic orphan root', () => {
+    const spans = [
+      makeSpan({
+        spanId: 'self',
+        parentSpanId: 'self',
+        name: 'self-parent',
+        startNano: '1000000000',
+        endNano: '2000000000',
+      }),
+    ];
+
+    const tree = buildSpanTree(spans);
+    expect(tree.length).toBe(1);
+    expect(tree[0].spanId).toBe(ORPHAN_ROOT_ID);
+    expect(tree[0].children.length).toBe(1);
+    expect(tree[0].children[0].spanId).toBe('self');
+  });
+
+  test('groups cyclic traces under synthetic orphan root without recursing infinitely', () => {
+    const spans = [
+      makeSpan({
+        spanId: 'a',
+        parentSpanId: 'b',
+        name: 'a',
+        startNano: '1000000000',
+        endNano: '2000000000',
+      }),
+      makeSpan({
+        spanId: 'b',
+        parentSpanId: 'a',
+        name: 'b',
+        startNano: '1500000000',
+        endNano: '2500000000',
+      }),
+    ];
+
+    const tree = buildSpanTree(spans);
+    expect(tree.length).toBe(1);
+    expect(tree[0].spanId).toBe(ORPHAN_ROOT_ID);
+    expect(tree[0].children.length).toBe(2);
+    expect(tree[0].children.map((child) => child.spanId).sort()).toEqual([
+      'a',
+      'b',
+    ]);
+  });
+
   test('computes depth for nested spans', () => {
     const spans = [
       makeSpan({
@@ -187,6 +235,41 @@ describe('flattenSpanTree', () => {
     expect(rows.length).toBe(2);
     expect(rows[1].spanId).toBe('child');
     expect(rows[1].depth).toBe(1);
+  });
+});
+
+describe('deep-link ancestor expansion', () => {
+  test('reveals target span hidden under collapsed ancestors', () => {
+    const spans = [
+      makeSpan({
+        spanId: 'root',
+        name: 'root',
+        startNano: '1000000000',
+        endNano: '9000000000',
+      }),
+      makeSpan({
+        spanId: 'child',
+        parentSpanId: 'root',
+        name: 'child',
+        startNano: '2000000000',
+        endNano: '8000000000',
+      }),
+      makeSpan({
+        spanId: 'target',
+        parentSpanId: 'child',
+        name: 'target',
+        startNano: '3000000000',
+        endNano: '4000000000',
+      }),
+    ];
+    const tree = buildSpanTree(spans);
+    const collapsed = new Set(['root', 'child']);
+    const ancestors = collectAncestorSpanIds('target', spans);
+    const expanded = expandCollapsedAncestors(collapsed, ancestors);
+    const rows = flattenSpanTree(tree, expanded);
+
+    expect(ancestors).toEqual(['child', 'root']);
+    expect(rows.some((row) => row.spanId === 'target')).toBe(true);
   });
 });
 
