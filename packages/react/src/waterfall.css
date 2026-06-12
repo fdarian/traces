@@ -1,0 +1,15 @@
+@keyframes waterfall-bar-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waterfall-bar-animated {
+    animation: none !important;
+    transform: scaleX(1) !important;
+  }
+}
