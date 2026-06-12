@@ -9,13 +9,20 @@
   "scripts": {
     "check:tsc": "tsc --noEmit",
     "check:lint": "biome check",
-    "test": "bun test"
+    "test": "bun test",
+    "db:generate:sqlite": "drizzle-kit generate --config drizzle.config.sqlite.ts",
+    "db:generate:pg": "drizzle-kit generate --config drizzle.config.pg.ts"
   },
   "dependencies": {
+    "@effect/platform": "latest",
+    "drizzle-orm": "latest",
     "effect": "latest",
-    "@effect/platform": "latest"
+    "postgres": "latest"
   },
   "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "latest",
+    "drizzle-kit": "latest",
     "typescript": "latest"
   }
 }
