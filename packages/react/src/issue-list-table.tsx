@@ -145,9 +145,7 @@ function IssueRow(props: {
             {props.isResolving ? '…' : 'resolve'}
           </button>
         )}
-        {issue.status === 'resolved' && (
-          <StatusBadge status="resolved" />
-        )}
+        {issue.status === 'resolved' && <StatusBadge status="resolved" />}
       </div>
     </div>
   );

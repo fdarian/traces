@@ -319,9 +319,7 @@ describe('SqliteIssueStore', () => {
           spanId: 'span-db',
         });
         yield* store.resolveIssue(
-          (
-            yield* store.listIssues({ service: 'db' })
-          )[0].id,
+          (yield* store.listIssues({ service: 'db' }))[0].id,
         );
       }),
     );

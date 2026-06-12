@@ -44,10 +44,11 @@ export function Sparkline(props: {
 
   const max = Math.max(...props.counts, 1);
   const points: Array<string> = [];
-  const step = props.counts.length <= 1 ? width : width / (props.counts.length - 1);
+  const step =
+    props.counts.length <= 1 ? width : width / (props.counts.length - 1);
 
   for (let index = 0; index < props.counts.length; index += 1) {
-    const count = props.counts[index];
+    const count = props.counts[index] ?? 0;
     const x = props.counts.length <= 1 ? width / 2 : index * step;
     const y = height - (count / max) * (height - 2) - 1;
     points.push(`${x},${y}`);

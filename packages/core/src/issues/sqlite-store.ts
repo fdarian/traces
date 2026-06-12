@@ -233,7 +233,9 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
     });
   };
 
-  const mapIssueRows = (rows: ReadonlyArray<(typeof sqliteSchema.issues)['$inferSelect']>): Array<Issue> => {
+  const mapIssueRows = (
+    rows: ReadonlyArray<(typeof sqliteSchema.issues)['$inferSelect']>,
+  ): Array<Issue> => {
     const result: Array<Issue> = [];
     for (const row of rows) {
       result.push(
@@ -376,8 +378,11 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
           .all(),
       );
       const latestRow = latestRows[0];
-      const latestOccurrence =
-        latestRow === undefined ? null : mapOccurrenceRows([latestRow])[0];
+      let latestOccurrence: Occurrence | null = null;
+      if (latestRow !== undefined) {
+        const mapped = mapOccurrenceRows([latestRow]);
+        latestOccurrence = mapped[0] ?? null;
+      }
       return { issue, latestOccurrence };
     });
   };

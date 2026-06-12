@@ -1,4 +1,4 @@
-import { and, eq, inArray, type Column, type SQL } from 'drizzle-orm';
+import { and, type Column, eq, inArray, type SQL } from 'drizzle-orm';
 import { Schema } from 'effect';
 import { IssueStoreError } from './errors.js';
 import type { ListIssuesFilter } from './model.js';
@@ -26,10 +26,7 @@ export function issueListFilterConditions<
   }
   if (filter.service !== undefined) {
     conditions.push(eq(columns.service, filter.service));
-  } else if (
-    filter.services !== undefined &&
-    filter.services.length > 0
-  ) {
+  } else if (filter.services !== undefined && filter.services.length > 0) {
     conditions.push(inArray(columns.service, [...filter.services]));
   }
   return conditions;

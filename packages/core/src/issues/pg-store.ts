@@ -370,8 +370,11 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
           .limit(1),
       );
       const latestRow = latestRows[0];
-      const latestOccurrence =
-        latestRow === undefined ? null : mapOccurrenceRows([latestRow])[0];
+      let latestOccurrence: Occurrence | null = null;
+      if (latestRow !== undefined) {
+        const mapped = mapOccurrenceRows([latestRow]);
+        latestOccurrence = mapped[0] ?? null;
+      }
       return { issue, latestOccurrence };
     });
   };
