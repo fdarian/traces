@@ -2,7 +2,7 @@ import { normalizeExceptionMessage } from './normalize-message.js';
 
 const FRAME_LINE_PATTERN = /^\s*at\s+(.+)$/;
 const PAREN_FRAME_PATTERN = /\(([^)]+)\)/;
-const BARE_FRAME_PATTERN = /^at\s+(\S.+:\d+:\d+)$/;
+const BARE_LOCATION_PATTERN = /^\S.+:\d+:\d+$/;
 
 function isInAppFrame(location: string): boolean {
   if (location.includes('node_modules')) {
@@ -39,11 +39,8 @@ export function parseTopInAppStackFrame(stacktrace: string): string | null {
     let location: string | null = null;
     if (parenMatch !== null) {
       location = parenMatch[1] ?? null;
-    } else {
-      const bareMatch = line.match(BARE_FRAME_PATTERN);
-      if (bareMatch !== null) {
-        location = bareMatch[1] ?? null;
-      }
+    } else if (BARE_LOCATION_PATTERN.test(frameBody.trim())) {
+      location = frameBody.trim();
     }
 
     if (location === null) {

@@ -89,6 +89,12 @@ describe('parseTopInAppStackFrame', () => {
   test('returns null for empty stacktrace', () => {
     expect(parseTopInAppStackFrame('')).toBeNull();
   });
+
+  test('parses indented bare at frame without parentheses', () => {
+    const stacktrace = 'Error: boom\n    at /app/foo.ts:1:2';
+    const frame = parseTopInAppStackFrame(stacktrace);
+    expect(frame).toBe('/app/foo.ts:<NUM>:<NUM>');
+  });
 });
 
 describe('fingerprintFromException', () => {
