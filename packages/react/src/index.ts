@@ -8,6 +8,7 @@ export type { StackFrame } from './stacktrace-block.js';
 export { parseStackFrames, StacktraceBlock } from './stacktrace-block.js';
 export type { Status } from './status-badge.js';
 export { StatusBadge } from './status-badge.js';
+export { TraceDetailView } from './trace-detail-view.js';
 export { TraceListTable } from './trace-list-table.js';
 export { TraceWaterfall } from './trace-waterfall.js';
 export type { FlatSpanRow, SpanTreeNode } from './utils/span-tree.js';
