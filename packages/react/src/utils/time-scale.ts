@@ -40,9 +40,7 @@ function niceStep(raw: number): number {
   return nice * magnitude;
 }
 
-export function computeTraceTimeBounds(
-  spans: ReadonlyArray<Span>,
-): TimeBounds {
+export function computeTraceTimeBounds(spans: ReadonlyArray<Span>): TimeBounds {
   if (spans.length === 0) {
     return { startMs: 0, endMs: 1 };
   }

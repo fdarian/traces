@@ -1,5 +1,5 @@
-import type { Span } from '@traces/core';
 import { describe, expect, test } from 'bun:test';
+import type { Span } from '@traces/core';
 import {
   clampZoomWindow,
   computeTraceTimeBounds,
