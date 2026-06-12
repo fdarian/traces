@@ -106,6 +106,10 @@ function ServiceRow(props: {
       <span className="w-20 shrink-0 text-right font-data text-data text-text-primary">
         {health.p99 !== null ? <Duration ms={health.p99} /> : '—'}
       </span>
+
+      <span className="text-label text-text-tertiary">
+        from last {health.traceCount} traces
+      </span>
     </button>
   );
 }

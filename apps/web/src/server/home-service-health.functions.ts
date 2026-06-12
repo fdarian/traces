@@ -47,17 +47,21 @@ export const homeServiceHealth = createServerFn({ method: 'GET' })
       const backend = yield* TraceBackend;
       const services = yield* backend.listServices;
 
-      const results: Array<SerializableServiceHealth> = [];
-      for (const service of services) {
-        const traces = yield* backend.searchTraces({
-          service,
-          startTimeMin: data.startTimeMin,
-          startTimeMax: data.startTimeMax,
-          limit,
-        });
-        const health = computeServiceHealth(service, traces);
-        results.push(serializeServiceHealth(health));
-      }
+      const results = yield* Effect.forEach(
+        services,
+        (service) =>
+          Effect.gen(function* () {
+            const traces = yield* backend.searchTraces({
+              service,
+              startTimeMin: data.startTimeMin,
+              startTimeMax: data.startTimeMax,
+              limit,
+            });
+            const health = computeServiceHealth(service, traces);
+            return serializeServiceHealth(health);
+          }),
+        { concurrency: 4 },
+      );
 
       return results;
     });

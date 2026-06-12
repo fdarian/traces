@@ -17,6 +17,17 @@ export interface HomeErrorRateResult {
   readonly sampledTraceCount: number;
 }
 
+function computeErrorRate(traces: ReadonlyArray<{ errorSpanCount?: number }>): {
+  readonly errorRate: number;
+  readonly sampledTraceCount: number;
+} {
+  const errorCount = traces.filter(
+    (t) => t.errorSpanCount !== undefined && t.errorSpanCount > 0,
+  ).length;
+  const errorRate = traces.length > 0 ? (errorCount / traces.length) * 100 : 0;
+  return { errorRate, sampledTraceCount: traces.length };
+}
+
 export const homeErrorRate = createServerFn({ method: 'GET' })
   .validator(S.standardSchemaV1(HomeErrorRateInputSchema))
   .handler(async (ctx) => {
@@ -25,23 +36,35 @@ export const homeErrorRate = createServerFn({ method: 'GET' })
 
     const effect = Effect.gen(function* () {
       const backend = yield* TraceBackend;
-      const traces = yield* backend.searchTraces({
+
+      const startTime = new Date(data.startTimeMin);
+      const endTime = new Date(data.startTimeMax);
+      const windowMs = endTime.getTime() - startTime.getTime();
+      const prevStartTime = new Date(startTime.getTime() - windowMs);
+      const prevEndTime = startTime;
+
+      const currentTraces = yield* backend.searchTraces({
         service: data.service,
         startTimeMin: data.startTimeMin,
         startTimeMax: data.startTimeMax,
         limit,
       });
 
-      const errorCount = traces.filter(
-        (t) => t.errorSpanCount !== undefined && t.errorSpanCount > 0,
-      ).length;
-      const errorRate =
-        traces.length > 0 ? (errorCount / traces.length) * 100 : 0;
+      const prevTraces = yield* backend.searchTraces({
+        service: data.service,
+        startTimeMin: prevStartTime.toISOString(),
+        startTimeMax: prevEndTime.toISOString(),
+        limit,
+      });
+
+      const current = computeErrorRate(currentTraces);
+      const prev = computeErrorRate(prevTraces);
+      const errorRateDelta = current.errorRate - prev.errorRate;
 
       return {
-        errorRate,
-        errorRateDelta: 0,
-        sampledTraceCount: traces.length,
+        errorRate: current.errorRate,
+        errorRateDelta,
+        sampledTraceCount: current.sampledTraceCount,
       };
     });
 
