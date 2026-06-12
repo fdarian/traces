@@ -78,6 +78,7 @@
       "name": "@traces/react",
       "version": "0.0.0",
       "dependencies": {
+        "@traces/core": "workspace:*",
         "effect": "latest",
         "lucide-react": "latest",
         "react": "^19.0.0",
