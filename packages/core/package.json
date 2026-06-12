@@ -1,0 +1,19 @@
+{
+  "name": "@traces/core",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check:tsc": "tsc --noEmit",
+    "check:lint": "biome check"
+  },
+  "dependencies": {
+    "effect": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest"
+  }
+}
