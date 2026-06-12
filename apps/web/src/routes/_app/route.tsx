@@ -32,7 +32,7 @@ const navItems = [
 ];
 
 function AppLayout() {
-  const { services, error } = Route.useLoaderData();
+  const loaderData = Route.useLoaderData();
 
   return (
     <div className="flex min-h-screen">
@@ -65,16 +65,19 @@ function AppLayout() {
       <div className="ml-52 flex min-h-screen flex-1 flex-col">
         {/* sticky top bar */}
         <div className="sticky top-0 z-10 flex h-10 items-center gap-3 border-b border-border-default bg-bg-base px-4">
-          <GlobalFilters services={services} error={error} />
+          <GlobalFilters
+            services={loaderData.services}
+            error={loaderData.error}
+          />
         </div>
 
         {/* content */}
         <main className="flex-1">
-          {error !== null ? (
+          {loaderData.error !== null ? (
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-12">
               <p className="text-body text-status-error">jaeger unreachable</p>
               <p className="font-data text-data text-text-tertiary">
-                {error.message}
+                {loaderData.error.message}
               </p>
             </div>
           ) : (
