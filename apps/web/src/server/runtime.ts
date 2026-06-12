@@ -1,16 +1,24 @@
 import { FetchHttpClient } from '@effect/platform';
-import { JaegerBackendLayer, type TraceBackend } from '@traces/core';
+import {
+  IngesterLayer,
+  type IssueStore,
+  IssueStoreLayer,
+  JaegerBackendLayer,
+  type TraceBackend,
+} from '@traces/core';
 import { Effect, Exit, Layer, ManagedRuntime } from 'effect';
 
+type RuntimeServices = TraceBackend | IssueStore;
+
 const MainLayer = Layer.provide(
-  JaegerBackendLayer,
+  Layer.mergeAll(JaegerBackendLayer, IssueStoreLayer, IngesterLayer),
   FetchHttpClient.layer,
-) as Layer.Layer<TraceBackend>;
+) as Layer.Layer<RuntimeServices>;
 
 const runtime = ManagedRuntime.make(MainLayer);
 
 export const RuntimeServer = {
-  runPromise: async <A, E>(effect: Effect.Effect<A, E, TraceBackend>) => {
+  runPromise: async <A, E>(effect: Effect.Effect<A, E, RuntimeServices>) => {
     const exit = await runtime.runPromiseExit(effect);
     if (Exit.isFailure(exit)) {
       const cause = Exit.causeOption(exit);
@@ -18,7 +26,7 @@ export const RuntimeServer = {
     }
     return exit.value;
   },
-  runSync: <A, E>(effect: Effect.Effect<A, E, TraceBackend>) => {
+  runSync: <A, E>(effect: Effect.Effect<A, E, RuntimeServices>) => {
     const exit = runtime.runSync(Effect.exit(effect));
     if (Exit.isFailure(exit)) {
       const cause = Exit.causeOption(exit);

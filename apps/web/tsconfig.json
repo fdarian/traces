@@ -2,6 +2,7 @@
   "extends": "../../packages/config/tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
+    "types": ["bun", "node"],
     "paths": {
       "#/*": ["./src/*"]
     }
