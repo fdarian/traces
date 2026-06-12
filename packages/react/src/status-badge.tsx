@@ -38,11 +38,11 @@ export function StatusBadge(props: {
   const config = statusConfig[props.status];
   return (
     <span
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.05em]"
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-label font-medium uppercase tracking-wide"
       style={{ backgroundColor: config.bg, color: config.dot }}
     >
       <span
-        className="inline-block h-[4px] w-[4px] rounded-full"
+        className="inline-block h-1 w-1 rounded-full"
         style={{ backgroundColor: config.dot }}
       />
       {props.label ?? config.label}

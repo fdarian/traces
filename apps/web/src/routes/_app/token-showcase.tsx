@@ -64,19 +64,15 @@ function TokenShowcase() {
       {/* Typography */}
       <Section title="typography">
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] uppercase tracking-[0.05em] text-[var(--text-tertiary)]">
+          <p className="text-label uppercase tracking-wide text-text-tertiary">
             11px uppercase label
           </p>
-          <p className="font-data text-[12px] text-[var(--text-primary)]">
+          <p className="font-data text-data text-text-primary">
             12px data — 1,234,567.89
           </p>
-          <p className="text-[13px] text-[var(--text-primary)]">
-            13px body default
-          </p>
-          <p className="text-[14px] text-[var(--text-primary)]">
-            14px section heading
-          </p>
-          <p className="text-[18px] font-semibold text-[var(--text-primary)]">
+          <p className="text-body text-text-primary">13px body default</p>
+          <p className="text-heading text-text-primary">14px section heading</p>
+          <p className="text-title font-semibold text-text-primary">
             18px page title
           </p>
         </div>
@@ -86,31 +82,23 @@ function TokenShowcase() {
       <Section title="primitives">
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[var(--text-secondary)]">
-              Duration:
-            </span>
+            <span className="text-body text-text-secondary">Duration:</span>
             <Duration ms={142} />
             <Duration ms={1250} />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[var(--text-secondary)]">
-              ServiceBadge:
-            </span>
+            <span className="text-body text-text-secondary">ServiceBadge:</span>
             <ServiceBadge name="web" />
             <ServiceBadge name="api" />
             <ServiceBadge name="payments" />
             <ServiceBadge name="db" />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[var(--text-secondary)]">
-              SkeletonRow:
-            </span>
+            <span className="text-body text-text-secondary">SkeletonRow:</span>
           </div>
           <SkeletonRow className="w-64" />
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[var(--text-secondary)]">
-              EmptyState:
-            </span>
+            <span className="text-body text-text-secondary">EmptyState:</span>
           </div>
           <EmptyState message="no traces in this range" />
         </div>
@@ -125,7 +113,7 @@ function Section(props: {
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">
+      <h2 className="text-heading font-semibold text-text-primary">
         {props.title}
       </h2>
       {props.children}
@@ -140,19 +128,17 @@ function SurfaceSwatch(props: {
   return (
     <div className="flex flex-col items-center gap-1">
       <div
-        className="h-12 w-12 rounded border border-[var(--border-default)]"
+        className="h-12 w-12 rounded border border-border-default"
         style={{ backgroundColor: props.color }}
       />
-      <span className="text-[11px] text-[var(--text-tertiary)]">
-        {props.name}
-      </span>
+      <span className="text-label text-text-tertiary">{props.name}</span>
     </div>
   );
 }
 
 function TextSample(props: { readonly color: string; readonly label: string }) {
   return (
-    <span className="text-[13px]" style={{ color: props.color }}>
+    <span className="text-body" style={{ color: props.color }}>
       {props.label}
     </span>
   );

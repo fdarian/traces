@@ -13,11 +13,9 @@ export function EmptyState(props: {
         backgroundSize: '16px 16px',
       }}
     >
-      <p className="text-[13px] text-[var(--text-secondary)]">
-        {props.message}
-      </p>
+      <p className="text-body text-text-secondary">{props.message}</p>
       {props.action !== undefined && (
-        <div className="text-[13px] text-[var(--accent)]">{props.action}</div>
+        <div className="text-body text-accent">{props.action}</div>
       )}
     </div>
   );

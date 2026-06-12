@@ -5,7 +5,7 @@ export function SkeletonRow(props: {
   const height = props.height ?? 32;
   return (
     <div
-      className={`relative overflow-hidden bg-[var(--bg-subtle)] ${props.className ?? ''}`}
+      className={`relative overflow-hidden bg-bg-subtle ${props.className ?? ''}`}
       style={{ height }}
     >
       <div

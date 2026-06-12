@@ -18,7 +18,7 @@ export function ServiceBadge(props: { readonly name: string }) {
   const color = serviceColor(props.name);
   return (
     <span
-      className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.05em]"
+      className="inline-flex items-center rounded px-1.5 py-0.5 text-label font-medium uppercase tracking-wide"
       style={{
         backgroundColor: color.replace('oklch(0.72 0.12', 'oklch(0.72 0.06'),
         color,

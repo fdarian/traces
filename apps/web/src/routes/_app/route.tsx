@@ -37,9 +37,9 @@ function AppLayout() {
   return (
     <div className="flex min-h-screen">
       {/* left nav */}
-      <nav className="fixed left-0 top-0 h-full w-[208px] border-r border-[var(--border-default)] bg-[var(--bg-base)]">
+      <nav className="fixed left-0 top-0 h-full w-52 border-r border-border-default bg-bg-base">
         <div className="flex h-10 items-center px-4">
-          <span className="text-[13px] font-semibold text-[var(--text-primary)]">
+          <span className="text-body font-semibold text-text-primary">
             traces
           </span>
         </div>
@@ -51,7 +51,7 @@ function AppLayout() {
                 key={item.to}
                 to={item.to}
                 activeOptions={{ exact: item.to === '/' }}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-[13px] text-[var(--text-secondary)] transition-colors duration-120 ease-out hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)] [&.active]:bg-[var(--accent-subtle)] [&.active]:text-[var(--accent)]"
+                className="flex items-center gap-2 rounded px-2 py-1.5 text-body text-text-secondary transition-colors duration-120 ease-out hover:bg-bg-raised hover:text-text-primary [&.active]:bg-accent-subtle [&.active]:text-accent"
               >
                 <Icon size={14} strokeWidth={1.5} />
                 <span>{item.label}</span>
@@ -62,9 +62,9 @@ function AppLayout() {
       </nav>
 
       {/* main area */}
-      <div className="ml-[208px] flex min-h-screen flex-1 flex-col">
+      <div className="ml-52 flex min-h-screen flex-1 flex-col">
         {/* sticky top bar */}
-        <div className="sticky top-0 z-10 flex h-10 items-center gap-3 border-b border-[var(--border-default)] bg-[var(--bg-base)] px-4">
+        <div className="sticky top-0 z-10 flex h-10 items-center gap-3 border-b border-border-default bg-bg-base px-4">
           <GlobalFilters services={services} error={error} />
         </div>
 
@@ -72,10 +72,8 @@ function AppLayout() {
         <main className="flex-1">
           {error !== null ? (
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-12">
-              <p className="text-[13px] text-[var(--status-error)]">
-                jaeger unreachable
-              </p>
-              <p className="font-data text-[12px] text-[var(--text-tertiary)]">
+              <p className="text-body text-status-error">jaeger unreachable</p>
+              <p className="font-data text-data text-text-tertiary">
                 {error.message}
               </p>
             </div>
@@ -126,7 +124,7 @@ function GlobalFilters(props: {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[11px] uppercase tracking-[0.05em] text-[var(--text-tertiary)]">
+      <span className="text-label uppercase tracking-wide text-text-tertiary">
         filters
       </span>
 
@@ -140,10 +138,10 @@ function GlobalFilters(props: {
                 key={service}
                 type="button"
                 onClick={() => handleServiceToggle(service)}
-                className={`rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.05em] transition-colors duration-120 ease-out ${
+                className={`rounded px-1.5 py-0.5 text-label font-medium uppercase tracking-wide transition-colors duration-120 ease-out ${
                   active
-                    ? 'bg-[var(--accent-subtle)] text-[var(--accent)]'
-                    : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
+                    ? 'bg-accent-subtle text-accent'
+                    : 'text-text-tertiary hover:text-text-secondary'
                 }`}
               >
                 {service}
@@ -162,10 +160,10 @@ function GlobalFilters(props: {
               key={preset}
               type="button"
               onClick={() => handleRangeChange(preset)}
-              className={`rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.05em] transition-colors duration-120 ease-out ${
+              className={`rounded px-1.5 py-0.5 text-label font-medium uppercase tracking-wide transition-colors duration-120 ease-out ${
                 active
-                  ? 'bg-[var(--accent-subtle)] text-[var(--accent)]'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
+                  ? 'bg-accent-subtle text-accent'
+                  : 'text-text-tertiary hover:text-text-secondary'
               }`}
             >
               {preset}

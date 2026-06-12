@@ -5,9 +5,9 @@ export function Duration(props: { readonly ms: number }) {
       : { number: Math.round(props.ms).toString(), unit: 'ms' };
 
   return (
-    <span className="font-data text-[12px]">
-      <span className="text-[var(--text-primary)]">{value.number}</span>
-      <span className="text-[var(--text-tertiary)]">{value.unit}</span>
+    <span className="font-data text-data">
+      <span className="text-text-primary">{value.number}</span>
+      <span className="text-text-tertiary">{value.unit}</span>
     </span>
   );
 }
