@@ -112,7 +112,16 @@ export function HomeTrendChart(props: {
 
 function formatBucketLabel(timestamp: number): string {
   const date = new Date(timestamp);
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+
+  if (hours === 0 && minutes === 0) {
+    return `${month}-${day}`;
+  }
+
+  const hoursStr = hours.toString().padStart(2, '0');
+  const minutesStr = minutes.toString().padStart(2, '0');
+  return `${hoursStr}:${minutesStr}`;
 }

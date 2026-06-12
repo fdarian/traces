@@ -2,6 +2,9 @@ export function percentile(
   sortedDurations: ReadonlyArray<number>,
   p: number,
 ): number | null {
+  if (p < 0 || p > 100) {
+    return null;
+  }
   if (sortedDurations.length === 0) {
     return null;
   }

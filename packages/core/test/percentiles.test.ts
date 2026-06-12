@@ -6,6 +6,11 @@ describe('percentile', () => {
     expect(percentile([], 50)).toBeNull();
   });
 
+  test('returns null for out of bounds p', () => {
+    expect(percentile([1, 2, 3], -1)).toBeNull();
+    expect(percentile([1, 2, 3], 101)).toBeNull();
+  });
+
   test('returns the only value for single element', () => {
     expect(percentile([42], 50)).toBe(42);
   });
