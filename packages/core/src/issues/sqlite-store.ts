@@ -249,7 +249,7 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
           firstSeen: row.firstSeen,
           lastSeen: row.lastSeen,
           occurrenceCount: row.occurrenceCount,
-          resolvedAt: row.resolvedAt ?? null,
+          resolvedAt: row.resolvedAt,
         }),
       );
     }
@@ -295,9 +295,14 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
       });
 
       const summaryRow = summaryRows[0];
+      if (summaryRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('summary query returned no rows'),
+        );
+      }
       const summary = {
-        totalCount: summaryRow?.totalCount ?? 0,
-        serviceCount: summaryRow?.serviceCount ?? 0,
+        totalCount: summaryRow.totalCount,
+        serviceCount: summaryRow.serviceCount,
       };
 
       return {
@@ -332,7 +337,7 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
         firstSeen: row.firstSeen,
         lastSeen: row.lastSeen,
         occurrenceCount: row.occurrenceCount,
-        resolvedAt: row.resolvedAt ?? null,
+        resolvedAt: row.resolvedAt,
       });
     });
   };
@@ -355,7 +360,7 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
           serviceName: row.serviceName,
           timestamp: row.timestamp,
           exceptionMessage: row.exceptionMessage,
-          exceptionStacktrace: row.exceptionStacktrace ?? null,
+          exceptionStacktrace: row.exceptionStacktrace,
           attributes,
         }),
       );
@@ -381,7 +386,13 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
       let latestOccurrence: Occurrence | null = null;
       if (latestRow !== undefined) {
         const mapped = mapOccurrenceRows([latestRow]);
-        latestOccurrence = mapped[0] ?? null;
+        const occurrence = mapped[0];
+        if (occurrence === undefined) {
+          return yield* Effect.fail(
+            issueStoreDefect('occurrence mapping returned empty array'),
+          );
+        }
+        latestOccurrence = occurrence;
       }
       return { issue, latestOccurrence };
     });
@@ -402,7 +413,13 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
           .where(eq(sqliteSchema.occurrences.issueId, issueId))
           .all(),
       );
-      const totalCount = countRows[0]?.totalCount ?? 0;
+      const countRow = countRows[0];
+      if (countRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('count query returned no rows'),
+        );
+      }
+      const totalCount = countRow.totalCount;
 
       const rows = yield* wrapStoreError(() =>
         db
