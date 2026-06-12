@@ -8,10 +8,13 @@
   },
   "scripts": {
     "check:tsc": "tsc --noEmit",
-    "check:lint": "biome check"
+    "check:lint": "biome check",
+    "test": "bun test"
   },
   "dependencies": {
-    "effect": "latest"
+    "effect": "latest",
+    "@effect/platform": "latest",
+    "valibot": "latest"
   },
   "devDependencies": {
     "typescript": "latest"
