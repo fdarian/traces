@@ -56,8 +56,9 @@ export const occurrences = pgTable(
   (table) => [
     index('occurrences_issue_id_idx').on(table.issueId),
     index('occurrences_timestamp_idx').on(table.timestamp),
-    uniqueIndex('occurrences_issue_span_unique').on(
+    uniqueIndex('occurrences_issue_trace_span_unique').on(
       table.issueId,
+      table.traceId,
       table.spanId,
     ),
   ],

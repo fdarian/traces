@@ -150,7 +150,48 @@ describe('SqliteIssueStore', () => {
     expect(occurrences.length).toBe(3);
   });
 
-  test('dedupes occurrences by issueId and spanId', async () => {
+  test('stores same spanId on different traces as separate occurrences', async () => {
+    dbPath = tempDbPath();
+
+    await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        const shared = {
+          fingerprint: 'fp-span-reuse',
+          title: 'ValidationError: field email is required',
+          service: 'api',
+          exceptionType: 'ValidationError',
+          spanId: 'shared-span-id',
+          serviceName: 'api',
+          timestamp: Date.now(),
+          exceptionMessage: 'field email is required',
+          attributes: {},
+        };
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-one',
+        });
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-two',
+        });
+      }),
+    );
+
+    const issues = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.listIssues({});
+      }),
+    );
+
+    expect(issues.length).toBe(1);
+    expect(issues[0].occurrenceCount).toBe(2);
+  });
+
+  test('dedupes occurrences by issueId, traceId, and spanId', async () => {
     dbPath = tempDbPath();
 
     await runStore(

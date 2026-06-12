@@ -96,6 +96,7 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
             .onConflictDoNothing({
               target: [
                 sqliteSchema.occurrences.issueId,
+                sqliteSchema.occurrences.traceId,
                 sqliteSchema.occurrences.spanId,
               ],
             })

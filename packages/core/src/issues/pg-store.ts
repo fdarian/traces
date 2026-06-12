@@ -95,6 +95,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
               .onConflictDoNothing({
                 target: [
                   pgSchema.occurrences.issueId,
+                  pgSchema.occurrences.traceId,
                   pgSchema.occurrences.spanId,
                 ],
               })
