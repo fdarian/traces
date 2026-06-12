@@ -1,4 +1,10 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 export const issues = sqliteTable(
   'issues',
@@ -45,7 +51,10 @@ export const occurrences = sqliteTable(
   (table) => [
     index('occurrences_issue_id_idx').on(table.issueId),
     index('occurrences_timestamp_idx').on(table.timestamp),
-    index('occurrences_issue_span_idx').on(table.issueId, table.spanId),
+    uniqueIndex('occurrences_issue_span_unique').on(
+      table.issueId,
+      table.spanId,
+    ),
   ],
 );
 

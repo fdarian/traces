@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 export const issues = pgTable(
@@ -55,7 +56,10 @@ export const occurrences = pgTable(
   (table) => [
     index('occurrences_issue_id_idx').on(table.issueId),
     index('occurrences_timestamp_idx').on(table.timestamp),
-    index('occurrences_issue_span_idx').on(table.issueId, table.spanId),
+    uniqueIndex('occurrences_issue_span_unique').on(
+      table.issueId,
+      table.spanId,
+    ),
   ],
 );
 
