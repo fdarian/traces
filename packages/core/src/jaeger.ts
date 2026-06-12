@@ -173,7 +173,7 @@ export function mapTraceSummary(raw: OtelTraceSummary): TraceSummary {
     rootService: raw.rootServiceName,
     rootOperation: raw.rootOperationName,
     spanCount: raw.spanCount,
-    errorSpanCount: raw.errorSpanCount ?? 0,
+    errorSpanCount: raw.errorSpanCount,
     services: raw.services.map((s) => ({
       name: s.name,
       spanCount: s.spanCount,

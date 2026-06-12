@@ -143,7 +143,9 @@ function TracesPage() {
   const filteredTraces = useMemo(() => {
     let result = allTraces;
     if (local.status === 'errors-only') {
-      result = result.filter((t) => t.errorSpanCount > 0);
+      result = result.filter(
+        (t) => t.errorSpanCount === undefined || t.errorSpanCount > 0,
+      );
     }
     if (local.operation !== undefined) {
       result = result.filter((t) => t.rootOperation === local.operation);

@@ -120,7 +120,7 @@ export function TraceListTable(props: {
           </span>
 
           <div className="w-16 shrink-0 text-right">
-            {trace.errorSpanCount > 0 && (
+            {trace.errorSpanCount !== undefined && trace.errorSpanCount > 0 && (
               <StatusBadge
                 status="error"
                 label={String(trace.errorSpanCount)}

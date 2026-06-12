@@ -57,7 +57,7 @@ export interface TraceSummary {
   readonly rootService: string;
   readonly rootOperation: string;
   readonly spanCount: number;
-  readonly errorSpanCount: number;
+  readonly errorSpanCount?: number;
   readonly services: ReadonlyArray<TraceSummaryService>;
   readonly startTimeUnixNano: string;
   readonly durationMs: number;

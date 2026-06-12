@@ -92,6 +92,8 @@
         "react-dom": "^19.0.0",
       },
       "devDependencies": {
+        "@types/bun": "latest",
+        "@types/node": "latest",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
         "typescript": "latest",
