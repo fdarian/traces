@@ -1,4 +1,4 @@
-import { Effect, Exit, Layer, ManagedRuntime } from 'effect';
+import { type Effect, Exit, Layer, ManagedRuntime } from 'effect';
 
 const MainLayer = Layer.empty;
 
