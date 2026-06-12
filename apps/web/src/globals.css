@@ -5,50 +5,108 @@
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
 
-  --color-background: oklch(0.14 0.01 270);
-  --color-foreground: oklch(0.91 0.01 270);
-  --color-primary: oklch(0.65 0.15 260);
-  --color-card: oklch(0.17 0.01 270);
-  --color-card-foreground: oklch(0.91 0.01 270);
-  --color-popover: oklch(0.17 0.01 270);
-  --color-popover-foreground: oklch(0.91 0.01 270);
-  --color-secondary: oklch(0.22 0.01 270);
-  --color-secondary-foreground: oklch(0.91 0.01 270);
-  --color-muted: oklch(0.22 0.01 270);
-  --color-muted-foreground: oklch(0.62 0.01 270);
-  --color-accent: oklch(0.65 0.15 260);
-  --color-accent-foreground: oklch(0.14 0.01 270);
-  --color-destructive: oklch(0.55 0.18 25);
-  --color-destructive-foreground: oklch(0.91 0.01 270);
-  --color-border: oklch(0.22 0.01 270);
-  --color-input: oklch(0.22 0.01 270);
-  --color-ring: oklch(0.65 0.15 260);
+  /* surfaces */
+  --color-bg-base: var(--bg-base);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-inset: var(--bg-inset);
+
+  /* borders */
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+
+  /* text */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+
+  /* accent */
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+
+  /* status */
+  --color-status-error: var(--status-error);
+  --color-status-error-bg: var(--status-error-bg);
+  --color-status-warn: var(--status-warn);
+  --color-status-warn-bg: var(--status-warn-bg);
+  --color-status-ok: var(--status-ok);
+  --color-status-ok-bg: var(--status-ok-bg);
+  --color-status-neutral: var(--status-neutral);
+
+  /* shadcn compatibility */
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--bg-base);
+  --color-card: var(--bg-subtle);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--bg-raised);
+  --color-popover-foreground: var(--text-primary);
+  --color-secondary: var(--bg-subtle);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--bg-subtle);
+  --color-muted-foreground: var(--text-secondary);
+  --color-destructive: var(--status-error);
+  --color-destructive-foreground: var(--text-primary);
+  --color-border: var(--border-default);
+  --color-input: var(--border-default);
+  --color-ring: var(--accent);
   --radius: 0.375rem;
 }
 
-.dark {
-  --color-background: oklch(0.14 0.01 270);
-  --color-foreground: oklch(0.91 0.01 270);
-  --color-primary: oklch(0.65 0.15 260);
-  --color-card: oklch(0.17 0.01 270);
-  --color-card-foreground: oklch(0.91 0.01 270);
-  --color-popover: oklch(0.17 0.01 270);
-  --color-popover-foreground: oklch(0.91 0.01 270);
-  --color-secondary: oklch(0.22 0.01 270);
-  --color-secondary-foreground: oklch(0.91 0.01 270);
-  --color-muted: oklch(0.22 0.01 270);
-  --color-muted-foreground: oklch(0.62 0.01 270);
-  --color-accent: oklch(0.65 0.15 260);
-  --color-accent-foreground: oklch(0.14 0.01 270);
-  --color-destructive: oklch(0.55 0.18 25);
-  --color-destructive-foreground: oklch(0.91 0.01 270);
-  --color-border: oklch(0.22 0.01 270);
-  --color-input: oklch(0.22 0.01 270);
-  --color-ring: oklch(0.65 0.15 260);
+:root {
+  /* surfaces */
+  --bg-base: #0b0d10;
+  --bg-subtle: #11141a;
+  --bg-raised: #171b22;
+  --bg-inset: #07080a;
+
+  /* borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  /* text */
+  --text-primary: #e6e9ef;
+  --text-secondary: #9ba3b0;
+  --text-tertiary: #5c6470;
+
+  /* accent */
+  --accent: #4d9fff;
+  --accent-subtle: rgba(77, 159, 255, 0.12);
+
+  /* status */
+  --status-error: #ff5c5c;
+  --status-error-bg: rgba(255, 92, 92, 0.10);
+  --status-warn: #ffb224;
+  --status-warn-bg: rgba(255, 178, 36, 0.10);
+  --status-ok: #3dd68c;
+  --status-ok-bg: rgba(61, 214, 140, 0.10);
+  --status-neutral: #5c6470;
+}
+
+.font-data {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.6s ease-in-out infinite;
 }
 
 body {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
   font-family: var(--font-sans);
 }
