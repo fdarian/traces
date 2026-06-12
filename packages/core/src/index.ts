@@ -9,6 +9,38 @@ export {
   JaegerUnreachable,
   TraceNotFound,
 } from './errors.js';
+export {
+  IssueNotFound,
+  IssueStoreError,
+} from './issues/errors.js';
+export {
+  buildIssueTitle,
+  fingerprintFromErrorSpan,
+  fingerprintFromException,
+  hashFingerprint,
+} from './issues/fingerprint.js';
+export {
+  IngesterLayer,
+  runIngester,
+  runIngestOnce,
+} from './issues/ingester.js';
+export { IssueStoreLayer } from './issues/issue-store-layer.js';
+export type {
+  Issue,
+  IssueStatus,
+  ListIssuesFilter,
+  Occurrence,
+  UpsertOccurrenceInput,
+} from './issues/model.js';
+export { normalizeExceptionMessage } from './issues/normalize-message.js';
+export { PgIssueStoreLayer } from './issues/pg-store.js';
+export { SqliteIssueStoreLayer } from './issues/sqlite-store.js';
+export { parseTopInAppStackFrame } from './issues/stack-frame.js';
+export type { IssueStore as IssueStoreInterface } from './issues/store.js';
+export {
+  IssueStore,
+  MAX_OCCURRENCES_PER_ISSUE,
+} from './issues/store.js';
 export { JaegerBackendLayer } from './jaeger.js';
 export type {
   AttributeValue,
