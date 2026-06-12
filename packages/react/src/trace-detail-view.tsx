@@ -1,4 +1,3 @@
-import type { Span, Trace } from '@traces/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CopyText } from './copy-text.js';
 import { Duration } from './duration.js';
@@ -6,6 +5,7 @@ import { ServiceBadge } from './service-badge.js';
 import { SpanDetailPanel } from './span-detail-panel.js';
 import { StatusBadge } from './status-badge.js';
 import { TraceWaterfall } from './trace-waterfall.js';
+import type { Span, Trace } from './types.js';
 import {
   buildSpanTree,
   collectAncestorSpanIds,

@@ -1,9 +1,9 @@
-import type { AttributeValue, Span, SpanEvent } from '@traces/core';
 import { useEffect, useMemo, useState } from 'react';
 import { CopyText } from './copy-text.js';
 import { Duration } from './duration.js';
 import { StacktraceBlock } from './stacktrace-block.js';
 import { StatusBadge } from './status-badge.js';
+import type { AttributeValue, Span, SpanEvent } from './types.js';
 import { eventOffsetMs } from './utils/span-events.js';
 
 type PanelTab = 'attributes' | 'events' | 'resource';

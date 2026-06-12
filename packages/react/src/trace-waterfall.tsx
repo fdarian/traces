@@ -1,10 +1,10 @@
 import './waterfall.css';
-import type { Span, Trace } from '@traces/core';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Duration } from './duration.js';
 import { ServiceBadge, serviceColorValue } from './service-badge.js';
 import { StatusBadge } from './status-badge.js';
+import type { Span, Trace } from './types.js';
 import {
   buildSpanTree,
   collectDefaultCollapsed,

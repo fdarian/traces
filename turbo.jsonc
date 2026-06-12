@@ -1,7 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "check:tsc": {},
+    "build": {
+      "outputs": ["dist/**"]
+    },
+    "check:tsc": {
+      "dependsOn": ["^build"]
+    },
     "check:lint": {},
     "check": { "dependsOn": ["check:tsc", "check:lint"] }
   }

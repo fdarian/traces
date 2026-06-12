@@ -1,18 +1,5 @@
 // components
 
-// types (re-exported from @traces/core)
-export type {
-  AttributeValue,
-  ExceptionInfo,
-  Span,
-  SpanEvent,
-  SpanResource,
-  SpanStatus,
-  StatusCode,
-  Trace,
-  TraceSummary,
-  TraceSummaryService,
-} from '@traces/core';
 export { CopyText } from './copy-text.js';
 export { Duration } from './duration.js';
 export { EmptyState } from './empty-state.js';
@@ -32,6 +19,19 @@ export { StatusBadge } from './status-badge.js';
 export { TraceDetailView } from './trace-detail-view.js';
 export { TraceListTable } from './trace-list-table.js';
 export { TraceWaterfall } from './trace-waterfall.js';
+// types
+export type {
+  AttributeValue,
+  ExceptionInfo,
+  Span,
+  SpanEvent,
+  SpanResource,
+  SpanStatus,
+  StatusCode,
+  Trace,
+  TraceSummary,
+  TraceSummaryService,
+} from './types.js';
 // utils
 export type { FlatSpanRow, SpanTreeNode } from './utils/span-tree.js';
 export {

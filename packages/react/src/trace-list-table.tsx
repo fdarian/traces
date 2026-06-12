@@ -1,10 +1,10 @@
-import type { TraceSummary } from '@traces/core';
 import { useMemo } from 'react';
 import { Duration } from './duration.js';
 import { EmptyState } from './empty-state.js';
 import { ServiceBadge } from './service-badge.js';
 import { SkeletonRow } from './skeleton-row.js';
 import { StatusBadge } from './status-badge.js';
+import type { TraceSummary } from './types.js';
 
 export function TraceListTable(props: {
   readonly traces: ReadonlyArray<TraceSummary>;

@@ -1,7 +1,7 @@
-import type { Span } from '@traces/core';
 import type { PointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { serviceColorValue } from './service-badge.js';
+import type { Span } from './types.js';
 import { spanStartMs } from './utils/span-tree.js';
 import { normalizeTimestampToMs } from './utils/time.js';
 import {
