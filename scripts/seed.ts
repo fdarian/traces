@@ -3,7 +3,9 @@ import {
   NodeTracerProvider,
 } from '@opentelemetry/sdk-trace-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { trace } from '@opentelemetry/api';
+import { trace, Span, TraceFlags } from '@opentelemetry/api';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 const SERVICE_NAMES = ['web', 'api', 'payments', 'db'];
 
@@ -45,34 +47,46 @@ function shouldError(errorRate: number) {
   return Math.random() < errorRate;
 }
 
-function createProvider(endpoint: string) {
+function createProviders(endpoint: string) {
   const exporter = new OTLPTraceExporter({ url: endpoint });
-  const provider = new NodeTracerProvider();
-  provider.addSpanProcessor(new BatchSpanProcessor(exporter));
-  provider.register();
-  return provider;
+  const providers: Record<string, NodeTracerProvider> = {};
+
+  for (const service of SERVICE_NAMES) {
+    const provider = new NodeTracerProvider({
+      resource: resourceFromAttributes({
+        [ATTR_SERVICE_NAME]: service,
+      }),
+      spanProcessors: [new BatchSpanProcessor(exporter)],
+    });
+    provider.register();
+    providers[service] = provider;
+  }
+
+  return providers;
 }
 
 function emitTrace(
-  tracer: trace.Tracer,
+  providers: Record<string, NodeTracerProvider>,
   errorRate: number,
   depth: number,
   parentService: string,
-  parentSpan?: ReturnType<typeof tracer.startSpan>,
+  parentSpan?: Span,
 ) {
   if (depth > 3) return;
 
   const service = depth === 0 ? 'web' : pick(SERVICE_NAMES.filter((s) => s !== parentService));
   const operation = pick(OPERATIONS[service]);
-  const span = tracer.startSpan(operation, {
-    startTime: Date.now(),
-  });
+  const provider = providers[service];
+  const tracer = provider.getTracer('seed-script');
 
-  if (parentSpan) {
-    span.setParent(parentSpan.spanContext());
-  }
+  const span = tracer.startSpan(
+    operation,
+    {
+      startTime: Date.now(),
+      ...(parentSpan && { parent: parentSpan.spanContext() }),
+    },
+  );
 
-  span.setAttribute('service.name', service);
   span.setAttribute('operation', operation);
   span.setAttribute('span.kind', depth === 0 ? 'server' : 'internal');
 
@@ -91,7 +105,7 @@ function emitTrace(
 
   const childCount = depth === 0 ? randomInt(1, 3) : randomInt(0, 2);
   for (let i = 0; i < childCount; i++) {
-    emitTrace(tracer, errorRate, depth + 1, service, span);
+    emitTrace(providers, errorRate, depth + 1, service, span);
   }
 
   span.end(Date.now() + duration);
@@ -102,15 +116,17 @@ async function main() {
 
   console.log(`Seeding ${traceCount} traces to ${endpoint} (errorRate=${errorRate})`);
 
-  const provider = createProvider(endpoint);
-  const tracer = trace.getTracer('seed-script');
+  const providers = createProviders(endpoint);
 
   for (let i = 0; i < traceCount; i++) {
-    emitTrace(tracer, errorRate, 0, 'web');
+    emitTrace(providers, errorRate, 0, 'web');
   }
 
   await new Promise((resolve) => setTimeout(resolve, 3000));
-  await provider.shutdown();
+
+  for (const provider of Object.values(providers)) {
+    await provider.shutdown();
+  }
 
   console.log('Seed complete.');
 }
