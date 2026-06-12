@@ -1,9 +1,9 @@
 import type { Span } from '@traces/core';
-import { normalizeTimestampToMs } from '@traces/core';
 import type { PointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { serviceColorValue } from './service-badge.js';
 import { spanStartMs } from './utils/span-tree.js';
+import { normalizeTimestampToMs } from './utils/time.js';
 import {
   clampZoomWindow,
   computeTraceTimeBounds,

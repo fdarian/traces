@@ -1,6 +1,5 @@
 import './waterfall.css';
 import type { Span, Trace } from '@traces/core';
-import { normalizeTimestampToMs } from '@traces/core';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Duration } from './duration.js';
@@ -14,6 +13,7 @@ import {
   ORPHAN_ROOT_ID,
   spanStartMs,
 } from './utils/span-tree.js';
+import { normalizeTimestampToMs } from './utils/time.js';
 import {
   computeTraceTimeBounds,
   generateTimeTicks,

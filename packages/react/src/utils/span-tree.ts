@@ -1,5 +1,5 @@
 import type { Span } from '@traces/core';
-import { normalizeTimestampToMs } from '@traces/core';
+import { normalizeTimestampToMs } from './time.js';
 
 export const ORPHAN_ROOT_ID = '__orphaned__';
 
