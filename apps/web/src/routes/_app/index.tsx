@@ -1,6 +1,11 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
+import {
+  Await,
+  createFileRoute,
+  defer,
+  useRouter,
+} from '@tanstack/react-router';
 import * as S from 'effect/Schema';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import {
   computeTimeRange,
   GlobalFilterSchema,
@@ -17,6 +22,7 @@ import { HomeServiceHealth } from './home/-home-service-health.js';
 import { HomeStatRow } from './home/-home-stat-row.js';
 import { HomeTopIssues } from './home/-home-top-issues.js';
 import { HomeTrendChart } from './home/-home-trend-chart.js';
+import { SectionErrorBoundary } from './home/-section-error-boundary.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -34,6 +40,7 @@ export const Route = createFileRoute('/_app/')({
     const services =
       global.service.length > 0 ? [...global.service] : undefined;
     const since = new Date(Date.now() - 24 * HOUR_MS);
+    const service = global.service[0];
 
     const [stats, trend, topIssues] = await Promise.all([
       homeStats({
@@ -59,12 +66,44 @@ export const Route = createFileRoute('/_app/')({
       }),
     ]);
 
+    const errorRatePromise =
+      service !== undefined
+        ? homeErrorRate({
+            data: {
+              service,
+              startTimeMin: timeRange.startTimeMin,
+              startTimeMax: timeRange.startTimeMax,
+            },
+          })
+        : Promise.resolve(null);
+
+    const serviceHealthPromise = homeServiceHealth({
+      data: {
+        startTimeMin: timeRange.startTimeMin,
+        startTimeMax: timeRange.startTimeMax,
+      },
+    });
+
+    const recentTracesPromise =
+      service !== undefined
+        ? homeRecentErrorTraces({
+            data: {
+              service,
+              startTimeMin: timeRange.startTimeMin,
+              startTimeMax: timeRange.startTimeMax,
+            },
+          })
+        : Promise.resolve([]);
+
     return {
       stats,
       trend,
       topIssues,
       timeRange,
       services: global.service,
+      errorRate: defer(errorRatePromise),
+      serviceHealth: defer(serviceHealthPromise),
+      recentTraces: defer(recentTracesPromise),
     };
   },
 });
@@ -102,6 +141,34 @@ function HomePending() {
           </div>
         ))}
       </div>
+      <div className="rounded border border-border-subtle bg-bg-subtle">
+        <div className="flex h-8 items-center border-b border-border-default px-3 text-label uppercase tracking-wide text-text-tertiary">
+          service health
+        </div>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div
+            key={index}
+            className="flex h-8 items-center gap-3 border-b border-border-subtle px-3"
+          >
+            <div className="h-3 w-20 animate-shimmer rounded bg-bg-raised" />
+            <div className="h-3 w-12 animate-shimmer rounded bg-bg-raised" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded border border-border-subtle bg-bg-subtle">
+        <div className="flex h-8 items-center border-b border-border-default px-3 text-label uppercase tracking-wide text-text-tertiary">
+          recent error traces
+        </div>
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="flex h-8 items-center gap-3 border-b border-border-subtle px-3"
+          >
+            <div className="h-3 w-32 animate-shimmer rounded bg-bg-raised" />
+            <div className="h-3 w-16 animate-shimmer rounded bg-bg-raised" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -111,135 +178,6 @@ function HomePage() {
   const loaderData = Route.useLoaderData();
   const search = Route.useSearch();
   const global = normalizeGlobalFilters(search);
-
-  const [errorRate, setErrorRate] = useState<{
-    errorRate: number;
-    errorRateDelta: number;
-    sampledTraceCount: number;
-  } | null>(null);
-  const [errorRateLoading, setErrorRateLoading] = useState(true);
-
-  const [serviceHealth, setServiceHealth] = useState<
-    ReadonlyArray<{
-      service: string;
-      traceCount: number;
-      errorRate: number;
-      p50: number | null;
-      p95: number | null;
-      p99: number | null;
-    }>
-  >([]);
-  const [serviceHealthLoading, setServiceHealthLoading] = useState(true);
-
-  const [recentTraces, setRecentTraces] = useState<
-    ReadonlyArray<{
-      traceId: string;
-      rootService: string;
-      rootOperation: string;
-      spanCount: number;
-      errorSpanCount: number | undefined;
-      durationMs: number;
-      startTimeUnixNano: string;
-    }>
-  >([]);
-  const [recentTracesLoading, setRecentTracesLoading] = useState(true);
-
-  useEffect(() => {
-    setErrorRateLoading(true);
-    setServiceHealthLoading(true);
-    setRecentTracesLoading(true);
-
-    const timeRange = loaderData.timeRange;
-    const service = loaderData.services[0];
-
-    let cancelled = false;
-
-    async function loadErrorRate() {
-      if (service === undefined) {
-        setErrorRate(null);
-        setErrorRateLoading(false);
-        return;
-      }
-      try {
-        const result = await homeErrorRate({
-          data: {
-            service,
-            startTimeMin: timeRange.startTimeMin,
-            startTimeMax: timeRange.startTimeMax,
-          },
-        });
-        if (!cancelled) {
-          setErrorRate(result);
-        }
-      } catch {
-        if (!cancelled) {
-          setErrorRate(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setErrorRateLoading(false);
-        }
-      }
-    }
-
-    async function loadServiceHealth() {
-      try {
-        const result = await homeServiceHealth({
-          data: {
-            startTimeMin: timeRange.startTimeMin,
-            startTimeMax: timeRange.startTimeMax,
-          },
-        });
-        if (!cancelled) {
-          setServiceHealth(result);
-        }
-      } catch {
-        if (!cancelled) {
-          setServiceHealth([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setServiceHealthLoading(false);
-        }
-      }
-    }
-
-    async function loadRecentTraces() {
-      if (service === undefined) {
-        setRecentTraces([]);
-        setRecentTracesLoading(false);
-        return;
-      }
-      try {
-        const result = await homeRecentErrorTraces({
-          data: {
-            service,
-            startTimeMin: timeRange.startTimeMin,
-            startTimeMax: timeRange.startTimeMax,
-          },
-        });
-        if (!cancelled) {
-          setRecentTraces(result);
-        }
-      } catch {
-        if (!cancelled) {
-          setRecentTraces([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setRecentTracesLoading(false);
-        }
-      }
-    }
-
-    void loadErrorRate();
-    void loadServiceHealth();
-    void loadRecentTraces();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loaderData.timeRange, loaderData.services]);
 
   const handleServiceClick = useCallback(
     (service: string) => {
@@ -261,11 +199,70 @@ function HomePage() {
 
   return (
     <div className="flex flex-col gap-6 px-4 py-6">
-      <HomeStatRow
-        stats={loaderData.stats}
-        errorRate={errorRateLoading ? null : errorRate}
-        isLoading={false}
-      />
+      <SectionErrorBoundary
+        fallback={
+          <div className="rounded border border-border-subtle bg-bg-subtle px-3 py-6">
+            <p className="text-body text-status-error">failed to load stats</p>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-4 gap-3">
+          <StatCell
+            label="error occurrences"
+            value={loaderData.stats.occurrenceCount}
+            delta={loaderData.stats.occurrenceDelta}
+            format="count"
+          />
+          <StatCell
+            label="active issues"
+            value={loaderData.stats.activeIssueCount}
+            delta={loaderData.stats.activeIssueDelta}
+            format="count"
+          />
+          <StatCell
+            label="services reporting"
+            value={loaderData.stats.serviceCount}
+            delta={loaderData.stats.serviceDelta}
+            format="count"
+          />
+          <SectionErrorBoundary
+            fallback={
+              <div className="flex h-20 flex-col justify-center gap-1 rounded border border-border-subtle bg-bg-subtle px-3">
+                <span className="text-label uppercase tracking-wide text-text-tertiary">
+                  error rate
+                </span>
+                <span className="font-data text-data text-status-error">
+                  failed to load
+                </span>
+              </div>
+            }
+          >
+            <Await
+              promise={loaderData.errorRate}
+              fallback={
+                <div className="flex h-20 flex-col justify-center gap-1 rounded border border-border-subtle bg-bg-subtle px-3">
+                  <span className="text-label uppercase tracking-wide text-text-tertiary">
+                    error rate
+                  </span>
+                  <div className="h-6 w-16 animate-shimmer rounded bg-bg-raised" />
+                </div>
+              }
+            >
+              {(errorRate) => (
+                <StatCell
+                  label="error rate"
+                  value={errorRate !== null ? errorRate.errorRate : null}
+                  delta={errorRate !== null ? errorRate.errorRateDelta : null}
+                  format="percent"
+                  sampleSize={
+                    errorRate !== null ? errorRate.sampledTraceCount : null
+                  }
+                />
+              )}
+            </Await>
+          </SectionErrorBoundary>
+        </div>
+      </SectionErrorBoundary>
 
       <HomeTrendChart buckets={loaderData.trend} isLoading={false} />
 
@@ -277,17 +274,140 @@ function HomePage() {
         getIssuesHref={() => '/issues'}
       />
 
-      <HomeServiceHealth
-        health={serviceHealth}
-        isLoading={serviceHealthLoading}
-        onServiceClick={handleServiceClick}
-      />
+      <SectionErrorBoundary
+        fallback={
+          <div className="rounded border border-border-subtle bg-bg-subtle px-3 py-6">
+            <p className="text-body text-status-error">
+              failed to load service health
+            </p>
+          </div>
+        }
+      >
+        <Await
+          promise={loaderData.serviceHealth}
+          fallback={
+            <div className="rounded border border-border-subtle bg-bg-subtle">
+              <div className="flex h-8 items-center border-b border-border-default px-3 text-label uppercase tracking-wide text-text-tertiary">
+                service health
+              </div>
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="flex h-8 items-center gap-3 border-b border-border-subtle px-3"
+                >
+                  <div className="h-3 w-20 animate-shimmer rounded bg-bg-raised" />
+                  <div className="h-3 w-12 animate-shimmer rounded bg-bg-raised" />
+                </div>
+              ))}
+            </div>
+          }
+        >
+          {(health) => (
+            <HomeServiceHealth
+              health={health}
+              isLoading={false}
+              onServiceClick={handleServiceClick}
+            />
+          )}
+        </Await>
+      </SectionErrorBoundary>
 
-      <HomeRecentTraces
-        traces={recentTraces}
-        isLoading={recentTracesLoading}
-        getTraceHref={(traceId) => `/traces/${traceId}`}
-      />
+      <SectionErrorBoundary
+        fallback={
+          <div className="rounded border border-border-subtle bg-bg-subtle px-3 py-6">
+            <p className="text-body text-status-error">
+              failed to load recent traces
+            </p>
+          </div>
+        }
+      >
+        <Await
+          promise={loaderData.recentTraces}
+          fallback={
+            <div className="rounded border border-border-subtle bg-bg-subtle">
+              <div className="flex h-8 items-center border-b border-border-default px-3 text-label uppercase tracking-wide text-text-tertiary">
+                recent error traces
+              </div>
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="flex h-8 items-center gap-3 border-b border-border-subtle px-3"
+                >
+                  <div className="h-3 w-32 animate-shimmer rounded bg-bg-raised" />
+                  <div className="h-3 w-16 animate-shimmer rounded bg-bg-raised" />
+                </div>
+              ))}
+            </div>
+          }
+        >
+          {(traces) => (
+            <HomeRecentTraces
+              traces={traces}
+              isLoading={false}
+              getTraceHref={(traceId) => `/traces/${traceId}`}
+            />
+          )}
+        </Await>
+      </SectionErrorBoundary>
+    </div>
+  );
+}
+
+function StatCell(props: {
+  readonly label: string;
+  readonly value: number | null;
+  readonly delta: number | null;
+  readonly format: 'count' | 'percent';
+  readonly sampleSize?: number | null;
+}) {
+  const value = props.value;
+  const delta = props.delta;
+
+  const formattedValue = (() => {
+    if (value === null) return '—';
+    if (props.format === 'percent') {
+      return `${value.toFixed(1)}%`;
+    }
+    return value.toString();
+  })();
+
+  const deltaClass = (() => {
+    if (delta === null) return 'text-text-tertiary';
+    if (delta > 0) return 'text-status-error';
+    if (delta < 0) return 'text-status-ok';
+    return 'text-text-tertiary';
+  })();
+
+  const formattedDelta = (() => {
+    if (delta === null) return '';
+    if (delta === 0) return '+0';
+    const sign = delta > 0 ? '+' : '';
+    if (props.format === 'percent') {
+      return `${sign}${delta.toFixed(1)}%`;
+    }
+    return `${sign}${delta}`;
+  })();
+
+  return (
+    <div className="flex h-20 flex-col justify-center gap-1 rounded border border-border-subtle bg-bg-subtle px-3">
+      <span className="text-label uppercase tracking-wide text-text-tertiary">
+        {props.label}
+      </span>
+      <div className="flex items-baseline gap-2">
+        <span className="font-data text-title text-text-primary tabular-nums">
+          {formattedValue}
+        </span>
+        {delta !== null && (
+          <span className={`font-data text-data ${deltaClass}`}>
+            {formattedDelta}
+          </span>
+        )}
+      </div>
+      {props.sampleSize !== undefined && props.sampleSize !== null && (
+        <span className="text-label text-text-tertiary">
+          from last {props.sampleSize} traces
+        </span>
+      )}
     </div>
   );
 }
