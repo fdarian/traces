@@ -3,8 +3,9 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "paths": {
-      "#/*": ["./src/*"]
+      "#/*": ["./src/*"],
+      "collections/*": ["./.source/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", ".source"]
 }

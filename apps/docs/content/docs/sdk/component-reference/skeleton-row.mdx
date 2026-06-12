@@ -1,0 +1,25 @@
+---
+title: SkeletonRow
+description: Shimmer skeleton row for table loading states.
+---
+
+## Import
+
+```ts
+import { SkeletonRow } from '@traces/react'
+```
+
+## Props
+
+Check the component source for the current prop signature — it accepts column count and optional width hints.
+
+## Usage
+
+```tsx
+// render 5 skeleton rows while loading
+{isLoading && Array.from({ length: 5 }, (_, i) => (
+  <SkeletonRow key={i} columns={4} />
+))}
+```
+
+Uses a CSS gradient sweep animation (`shimmer` keyframe from `@traces/react/theme.css`) on `--bg-subtle` to match the exact row geometry of the target table.

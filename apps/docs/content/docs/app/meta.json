@@ -1,0 +1,4 @@
+{
+  "title": "App",
+  "pages": ["quickstart", "configuration", "concepts", "self-hosting"]
+}

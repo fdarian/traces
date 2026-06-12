@@ -1,0 +1,54 @@
+---
+title: Self-hosting
+description: Deploy the traces dashboard to your own infrastructure.
+---
+
+## Build
+
+```bash
+cd apps/web
+bun run build
+```
+
+Output is in `apps/web/.next/`.
+
+## Docker
+
+A `Dockerfile` is included in `apps/web/`. Build and run:
+
+```bash
+docker build -t traces-web -f apps/web/Dockerfile .
+docker run -p 3000:3000 \
+  -e JAEGER_URL=http://your-jaeger:16686 \
+  traces-web
+```
+
+## Environment variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `JAEGER_URL` | yes | — | Jaeger query API base URL |
+| `DATABASE_URL` | no | SQLite file | Postgres connection string |
+| `DEFAULT_TIME_RANGE_MINUTES` | no | `60` | Default query window |
+
+## Database migrations
+
+Run migrations before the first start:
+
+```bash
+bun db:migrate
+```
+
+To use Postgres, set `DATABASE_URL` before running migrations.
+
+## Reverse proxy
+
+The app runs on port 3000. Put it behind nginx or Caddy:
+
+```nginx
+location / {
+    proxy_pass http://localhost:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```

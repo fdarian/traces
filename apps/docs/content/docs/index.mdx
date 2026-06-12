@@ -1,0 +1,28 @@
+---
+title: Introduction
+description: traces — a lightweight observability dashboard for Jaeger v2 with a publishable React SDK.
+---
+
+## What is traces?
+
+**traces** is a lightweight observability dashboard. Point it at an existing Jaeger v2 instance and get:
+
+- a home overview with error rates and request volume
+- a trace explorer with waterfall view
+- an error aggregation view grouped by exception type
+- per-service filtering across all views
+
+The UI components ship as a publishable React SDK (`@traces/react`) so you can embed them in your own app.
+
+## Two things in one
+
+| | |
+|---|---|
+| **App** (`apps/web`) | Self-hosted Next.js dashboard. Bring a Jaeger v2 URL, get a full observability UI. |
+| **SDK** (`@traces/react`) | Publishable component library. Use the waterfall, trace list, issue list, and more in any React app. |
+
+## Quick links
+
+- [App quickstart](/docs/app/quickstart) — run the dashboard in minutes
+- [SDK getting started](/docs/sdk/getting-started) — install `@traces/react` in your app
+- [Component reference](/docs/sdk/component-reference/trace-waterfall) — all SDK components

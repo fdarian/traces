@@ -1,0 +1,32 @@
+---
+title: Concepts
+description: Key concepts — traces, spans, issues, and how the app models them.
+---
+
+## Traces and spans
+
+A **trace** is a directed acyclic graph of **spans** that represents a single request as it propagates through your services. Each span records:
+
+- service name and operation name
+- start time, end time, and duration
+- status (ok / error / unset)
+- attributes (key-value pairs from instrumentation)
+- events (point-in-time annotations, including exception events)
+
+traces follows the [OpenTelemetry data model](https://opentelemetry.io/docs/concepts/signals/traces/).
+
+## Jaeger backend
+
+The app talks to Jaeger v2's HTTP query API. The `TraceBackend` interface in `@traces/core` abstracts the transport, so the same components work whether data comes from Jaeger, a mock, or a future backend.
+
+One known Jaeger limitation: the in-memory backend has a bug (#8553) that makes server-side error-tag filtering unreliable. The app works around this by fetching all spans and applying error detection client-side: a span is an error if `status.code === 'error'`.
+
+## Issues
+
+An **issue** is a group of error spans that share the same `exception.type` and service. The app aggregates them into an issue store (SQLite or Postgres via Drizzle) so you can track occurrence counts over time, mark issues resolved, and detect regressions.
+
+Issues are not surfaced by Jaeger — they are computed from spans by the app's background aggregation.
+
+## Service colors
+
+Service names are mapped to one of 12 pre-picked hues using a deterministic hash (`oklch(0.72 0.12 <hue>)` family). The same service is always the same color across every view and session.

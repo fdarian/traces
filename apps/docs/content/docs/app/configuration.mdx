@@ -1,0 +1,50 @@
+---
+title: Configuration
+description: Environment variables and runtime options for the traces app.
+---
+
+## Environment variables
+
+Create a `.env.local` file in `apps/web/`:
+
+```bash
+# Required: Jaeger v2 query API base URL
+JAEGER_URL=http://localhost:16686
+
+# Optional: default time range shown on home and trace list (minutes)
+DEFAULT_TIME_RANGE_MINUTES=60
+```
+
+## Jaeger URL
+
+The app talks to Jaeger's HTTP query API (`/api/traces`, `/api/services`, etc.). Point `JAEGER_URL` at the Jaeger host without a trailing slash.
+
+For a remote Jaeger instance:
+
+```bash
+JAEGER_URL=https://jaeger.internal.example.com
+```
+
+## Database
+
+The issue store uses SQLite by default. To switch to Postgres:
+
+```bash
+DATABASE_URL=postgresql://user:pass@localhost:5432/traces
+```
+
+The Drizzle config reads `DATABASE_URL` — if set, it uses the Postgres adapter; otherwise it falls back to SQLite.
+
+## Docker Compose
+
+The included `docker-compose.yml` starts Jaeger v2 all-in-one:
+
+```yaml
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # query UI / API
+      - "4318:4318"    # OTLP HTTP
+      - "4317:4317"    # OTLP gRPC
+```

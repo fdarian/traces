@@ -1,0 +1,30 @@
+---
+title: StacktraceBlock
+description: Styled stacktrace renderer with in-app vs library frame distinction.
+---
+
+## Import
+
+```ts
+import { StacktraceBlock } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `type` | `string` | Exception type, e.g. `"DatabaseConnectionError"` |
+| `message` | `string` | Exception message |
+| `stacktrace` | `string` | Raw stacktrace string |
+
+## Usage
+
+```tsx
+<StacktraceBlock
+  type="DatabaseConnectionError"
+  message="connection refused to postgres:5432"
+  stacktrace={span.events[0].attributes.find(a => a.key === 'exception.stacktrace')?.value as string}
+/>
+```
+
+In-app frames (paths under `/app/src/`) render at full opacity; library frames (`node_modules`) at 60%.

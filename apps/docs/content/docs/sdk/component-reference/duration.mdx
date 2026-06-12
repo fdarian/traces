@@ -1,0 +1,25 @@
+---
+title: Duration
+description: Renders a duration in milliseconds with number in primary text and unit in tertiary.
+---
+
+## Import
+
+```ts
+import { Duration } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `ms` | `number` | Duration in milliseconds |
+
+## Usage
+
+```tsx
+<Duration ms={142} />   // renders: 142ms
+<Duration ms={1240} />  // renders: 1.24s
+```
+
+The number renders in `--text-primary` and the unit (`ms` or `s`) in `--text-tertiary`, using Geist Mono with `tabular-nums`.

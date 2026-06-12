@@ -1,0 +1,33 @@
+---
+title: ServiceBadge
+description: Colored badge showing a service name with a deterministic hue.
+---
+
+## Import
+
+```ts
+import { ServiceBadge, serviceColorValue } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `name` | `string` | Service name |
+
+## Usage
+
+```tsx
+<ServiceBadge name="web" />
+<ServiceBadge name="payments" />
+```
+
+The color is derived from a deterministic hash of the service name — the same service always renders the same color, across renders and sessions.
+
+### `serviceColorValue(name)`
+
+Returns the raw CSS color string for a service name, useful when you need the color outside a React component:
+
+```ts
+const color = serviceColorValue('web') // e.g. "oklch(0.72 0.12 240)"
+```

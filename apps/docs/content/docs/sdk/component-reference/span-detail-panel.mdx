@@ -1,0 +1,26 @@
+---
+title: SpanDetailPanel
+description: Slide-in panel showing span attributes, events, and resource attributes.
+---
+
+<SpanDetailExample />
+
+## Import
+
+```ts
+import { SpanDetailPanel } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `span` | `Span \| null` | The span to display. `null` hides content but keeps the panel open during close animation. |
+| `open` | `boolean` | Controls panel visibility |
+| `onClose` | `() => void` | Called when the close button is clicked |
+
+## Tabs
+
+- **Attributes** — filterable table of span attributes
+- **Events** — timeline of span events; exception events show inline stacktrace
+- **Resource** — service resource attributes

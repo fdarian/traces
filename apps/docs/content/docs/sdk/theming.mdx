@@ -1,0 +1,75 @@
+---
+title: Theming
+description: Customize the @traces/react color tokens to match your brand.
+---
+
+## Token contract
+
+All visual values are CSS custom properties. Import `@traces/react/theme.css` to get the defaults, then override any token on `:root` or a scoped container.
+
+### Surface tokens
+
+```css
+--bg-base:    #0B0D10;  /* app background */
+--bg-subtle:  #11141A;  /* panels, table headers */
+--bg-raised:  #171B22;  /* popovers, hover rows */
+--bg-inset:   #07080A;  /* code blocks, waterfall track */
+```
+
+### Border tokens
+
+```css
+--border-subtle:  rgba(255,255,255,0.06);
+--border-default: rgba(255,255,255,0.10);
+--border-strong:  rgba(255,255,255,0.16);
+```
+
+### Text tokens
+
+```css
+--text-primary:   #E6E9EF;
+--text-secondary: #9BA3B0;
+--text-tertiary:  #5C6470;
+```
+
+### Accent token
+
+```css
+--accent:        #4D9FFF;
+--accent-subtle: rgba(77,159,255,0.12);
+```
+
+### Status tokens
+
+```css
+--status-error:  #FF5C5C;  --status-error-bg:  rgba(255,92,92,0.10);
+--status-warn:   #FFB224;  --status-warn-bg:   rgba(255,178,36,0.10);
+--status-ok:     #3DD68C;  --status-ok-bg:     rgba(61,214,140,0.10);
+--status-neutral:#5C6470;
+```
+
+## Overriding tokens
+
+```css
+/* your-app.css */
+@import '@traces/react/theme.css';
+
+:root {
+  /* swap accent to purple */
+  --accent: #9B72FF;
+  --accent-subtle: rgba(155, 114, 255, 0.12);
+}
+```
+
+## Fonts
+
+The theme sets `font-family` variables but does not bundle font files. You must supply Geist:
+
+```css
+@import '@fontsource-variable/geist/index.css';
+@import '@fontsource-variable/geist-mono/index.css';
+```
+
+## Dark-only for MVP
+
+The current token set is dark-only. Light mode support is planned for a future release.

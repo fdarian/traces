@@ -1,0 +1,29 @@
+---
+title: Sparkline
+description: Minimal polyline chart for occurrence counts over time.
+---
+
+## Import
+
+```ts
+import { Sparkline, fillHistogramCounts } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `counts` | `number[]` | required | Count values to plot |
+| `color` | `string` | `var(--accent)` | Line and fill color |
+| `size` | `'sm' \| 'lg'` | `'sm'` | `sm` = 72×16px, `lg` = 160×32px |
+
+## Usage
+
+```tsx
+// normalize to 12 buckets before rendering
+const counts = fillHistogramCounts(rawCounts, 12)
+
+<Sparkline counts={counts} color="var(--status-error)" size="lg" />
+```
+
+`fillHistogramCounts(counts, targetLength)` pads or downsamples to the target bucket count.

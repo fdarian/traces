@@ -1,0 +1,25 @@
+---
+title: TraceListTable
+description: Sortable table of trace summaries with inline duration bars and service badges.
+---
+
+<TraceListExample />
+
+## Import
+
+```ts
+import { TraceListTable } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `traces` | `TraceSummary[]` | required | Array of trace summaries |
+| `sort` | `'start' \| 'duration'` | required | Current sort column |
+| `onSortChange` | `(sort) => void` | required | Called when header is clicked |
+| `isLoading` | `boolean` | required | Shows skeleton rows when true |
+| `hasMore` | `boolean` | required | Shows "load more" footer when true |
+| `onLoadMore` | `() => void` | required | Called when "load more" is clicked |
+| `error` | `Error \| null` | required | Shows error state when non-null |
+| `getTraceHref` | `(traceId: string) => string` | required | Builds the href for each row link |

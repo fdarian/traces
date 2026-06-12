@@ -1,0 +1,48 @@
+---
+title: Quickstart
+description: Run the traces dashboard against a local Jaeger v2 in under five minutes.
+---
+
+## Prerequisites
+
+- [Bun](https://bun.sh) v1.1+
+- [Docker](https://docs.docker.com/get-docker/)
+
+## 1. Clone the repo
+
+```bash
+git clone https://github.com/your-org/traces.git
+cd traces
+bun install
+```
+
+## 2. Start Jaeger
+
+```bash
+docker compose up -d
+```
+
+This starts Jaeger v2 all-in-one with an in-memory backend, exposed at `http://localhost:16686` (UI) and `http://localhost:4318` (OTLP HTTP).
+
+## 3. Seed sample traces
+
+```bash
+bun run scripts/seed.ts
+```
+
+Generates realistic multi-service traces so there is something to explore immediately.
+
+## 4. Start the app
+
+```bash
+cd apps/web
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## What you get
+
+- **Home** — request rate and error rate sparklines per service
+- **Traces** — sortable table of recent traces, click to open waterfall
+- **Issues** — grouped error list with occurrence counts and sparklines

@@ -1,0 +1,27 @@
+---
+title: IssueDetail
+description: Full-page detail view for a single error issue with sparkline, stacktrace, and occurrences table.
+---
+
+<IssueDetailExample />
+
+## Import
+
+```ts
+import { IssueDetail } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `issue` | `IssueDetailData` | Issue data |
+| `occurrences` | `IssueOccurrenceRow[]` | Paginated list of occurrences |
+| `page` | `number` | Current page (1-indexed) |
+| `totalPages` | `number` | Total page count |
+| `isLoadingOccurrences` | `boolean` | Shows skeleton in occurrences table |
+| `onPageChange` | `(page: number) => void` | Called on pagination |
+| `onResolve` | `() => void` | Called when resolve button is clicked |
+| `onUnresolve` | `() => void` | Called when unresolve button is clicked |
+| `isResolving` | `boolean` | Shows loading state on resolve button |
+| `getTraceHref` | `(traceId: string, spanId: string) => string` | Builds trace link for each occurrence |

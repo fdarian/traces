@@ -1,0 +1,41 @@
+---
+title: IssueListTable
+description: Table of grouped error issues with occurrence counts, sparklines, and inline resolve actions.
+---
+
+<IssueListExample />
+
+## Import
+
+```ts
+import { IssueListTable } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `issues` | `IssueListRow[]` | Array of issue rows |
+| `isLoading` | `boolean` | Shows skeleton rows |
+| `error` | `Error \| null` | Shows error state |
+| `getIssueHref` | `(issueId: number) => string` | Builds the href for each row |
+| `onResolve` | `(issueId: number) => void` | Called when resolve button is clicked |
+| `resolvingIssueId` | `number \| null` | Issue currently being resolved (shows spinner) |
+
+## IssueListRow type
+
+```ts
+type IssueListRow = {
+  id: number
+  exceptionType: string
+  title: string
+  service: string
+  occurrenceCount: number
+  firstSeen: number       // ms timestamp
+  lastSeen: number        // ms timestamp
+  status: 'unresolved' | 'resolved'
+  resolvedAt: number | null
+  sparklineCounts: number[]
+  regressed: boolean
+}
+```

@@ -1,0 +1,25 @@
+---
+title: StatusBadge
+description: Dot + uppercase label badge for span status and issue state.
+---
+
+## Import
+
+```ts
+import { StatusBadge } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `status` | `Status` | One of `'ok' \| 'error' \| 'warn' \| 'unset' \| 'resolved'` |
+| `label` | `string` | Text to display next to the dot |
+
+## Usage
+
+```tsx
+<StatusBadge status="error" label="ERROR" />
+<StatusBadge status="ok" label="OK" />
+<StatusBadge status="resolved" label="resolved" />
+```

@@ -1,0 +1,40 @@
+---
+title: TraceDetailView
+description: Full trace detail page — header summary, waterfall, and span detail panel.
+---
+
+<TraceDetailExample />
+
+## Import
+
+```ts
+import { TraceDetailView } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `trace` | `Trace` | required | The trace to display |
+| `selectedSpanId` | `string \| null` | required | Currently selected span |
+| `onSelectSpan` | `(id: string \| null) => void` | required | Called when selection changes |
+| `deepLinkSpanId` | `string \| null` | — | Span to select and scroll to on mount (from URL param) |
+
+## Usage
+
+```tsx
+import { TraceDetailView } from '@traces/react'
+
+function TracePage({ trace }) {
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
+
+  return (
+    <TraceDetailView
+      trace={trace}
+      selectedSpanId={selectedSpanId}
+      onSelectSpan={setSelectedSpanId}
+      deepLinkSpanId={searchParams.get('span')}
+    />
+  )
+}
+```

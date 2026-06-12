@@ -1,0 +1,70 @@
+---
+title: Utils Reference
+description: Utility functions exported from @traces/react.
+---
+
+## Span tree
+
+### `buildSpanTree(spans)`
+
+Builds a tree of `SpanTreeNode` from a flat array of spans. Handles orphan spans by attaching them under a synthetic root node (`ORPHAN_ROOT_ID`).
+
+### `flattenSpanTree(tree, collapsed?)`
+
+Flattens the tree to a `FlatSpanRow[]` for virtualized rendering. Pass a `Set<string>` of collapsed span IDs to hide subtrees.
+
+### `collectDefaultCollapsed(tree, threshold?)`
+
+Returns the set of span IDs that should be collapsed by default. Collapses all subtrees when total span count exceeds `threshold` (default: 500).
+
+### `spanStartMs(span)`
+
+Returns the span's start time in milliseconds from `startTimeUnixNano`.
+
+## Time scale
+
+### `computeTraceTimeBounds(spans)`
+
+Returns `{ startMs, endMs }` covering all spans in the trace.
+
+### `generateTimeTicks(bounds, width, minTickPx?)`
+
+Returns `TimeTick[]` — evenly spaced tick marks suitable for a waterfall axis.
+
+### `timeToX(timeMs, bounds, width)`
+
+Maps a timestamp to a pixel x-position within `[0, width]`.
+
+### `xToTime(x, bounds, width)`
+
+Inverse of `timeToX`.
+
+### `clampZoomWindow(zoom, bounds)`
+
+Clamps a `ZoomWindow` to stay within the trace time bounds.
+
+### `formatTickLabel(ms)`
+
+Formats a relative millisecond value as a human-readable label (e.g. `"142ms"`, `"1.2s"`).
+
+## Misc
+
+### `relativeTime(timestampMs)`
+
+Returns a short human-readable relative time string, e.g. `"2h ago"`, `"just now"`.
+
+### `normalizeTimestampToMs(nanoString)`
+
+Converts a nanosecond Unix timestamp string to milliseconds.
+
+### `parseStackFrames(stacktrace)`
+
+Parses a raw stacktrace string into `StackFrame[]` with `file`, `fn`, `line`, and `isAppFrame` fields.
+
+### `fillHistogramCounts(counts, targetLength)`
+
+Pads or downsamples a counts array to `targetLength` for sparkline rendering.
+
+### `serviceColorValue(name)`
+
+Returns the deterministic CSS color string for a service name.

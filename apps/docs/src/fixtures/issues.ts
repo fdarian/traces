@@ -1,0 +1,60 @@
+import type { IssueDetailData, IssueListRow } from '@traces/react';
+
+export const sampleIssueRows: IssueListRow[] = [
+  {
+    id: 1,
+    exceptionType: 'DatabaseConnectionError',
+    title: 'connection refused to postgres:5432',
+    service: 'web',
+    occurrenceCount: 47,
+    firstSeen: Date.now() - 1000 * 60 * 60 * 24 * 3,
+    lastSeen: Date.now() - 1000 * 60 * 5,
+    status: 'unresolved',
+    resolvedAt: null,
+    sparklineCounts: [2, 5, 3, 8, 12, 7, 4, 6, 9, 11, 3, 2],
+    regressed: false,
+  },
+  {
+    id: 2,
+    exceptionType: 'TypeError',
+    title: "Cannot read properties of undefined (reading 'id')",
+    service: 'api',
+    occurrenceCount: 12,
+    firstSeen: Date.now() - 1000 * 60 * 60 * 24,
+    lastSeen: Date.now() - 1000 * 60 * 30,
+    status: 'unresolved',
+    resolvedAt: null,
+    sparklineCounts: [0, 1, 0, 2, 3, 1, 2, 1, 0, 1, 1, 0],
+    regressed: false,
+  },
+  {
+    id: 3,
+    exceptionType: 'TimeoutError',
+    title: 'upstream request timed out after 5000ms',
+    service: 'payments',
+    occurrenceCount: 3,
+    firstSeen: Date.now() - 1000 * 60 * 60 * 2,
+    lastSeen: Date.now() - 1000 * 60 * 60,
+    status: 'resolved',
+    resolvedAt: Date.now() - 1000 * 60 * 45,
+    sparklineCounts: [0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0],
+    regressed: false,
+  },
+];
+
+export const sampleIssueDetail: IssueDetailData = {
+  id: 1,
+  exceptionType: 'DatabaseConnectionError',
+  title: 'connection refused to postgres:5432',
+  service: 'web',
+  status: 'unresolved',
+  firstSeen: Date.now() - 1000 * 60 * 60 * 24 * 3,
+  lastSeen: Date.now() - 1000 * 60 * 5,
+  occurrenceCount: 47,
+  resolvedAt: null,
+  regressed: false,
+  sparklineCounts: [2, 5, 3, 8, 12, 7, 4, 6, 9, 11, 3, 2],
+  latestMessage: 'connection refused to postgres:5432',
+  latestStacktrace:
+    'DatabaseConnectionError: connection refused to postgres:5432\n    at Pool.connect (/app/node_modules/pg/lib/pool.js:63:11)\n    at db.query (/app/src/db.ts:42:10)\n    at UserRepository.findById (/app/src/users/repository.ts:28:5)\n    at handler (/app/src/routes/users.ts:18:5)',
+};

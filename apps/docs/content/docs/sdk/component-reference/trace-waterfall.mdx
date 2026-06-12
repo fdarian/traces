@@ -1,0 +1,34 @@
+---
+title: TraceWaterfall
+description: Time-aligned waterfall chart of spans in a trace. The signature visual component.
+---
+
+<WaterfallExample />
+
+## Import
+
+```ts
+import { TraceWaterfall } from '@traces/react'
+```
+
+## Props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `trace` | `Trace` | required | The trace to render |
+| `selectedSpanId` | `string \| null` | `null` | Currently selected span ID |
+| `onSelectSpan` | `(id: string \| null) => void` | — | Called when a span is selected |
+| `collapsed` | `ReadonlySet<string>` | auto | Set of collapsed span IDs |
+| `onCollapsedChange` | `(collapsed: ReadonlySet<string>) => void` | — | Called when collapsed state changes |
+| `zoom` | `ZoomWindow` | full range | Current zoom window |
+| `onZoomChange` | `(zoom: ZoomWindow) => void` | — | Called when zoom changes via minimap |
+| `animateBars` | `boolean` | `false` | Animate bars `scaleX` 0→1 on mount |
+| `scrollToSpanId` | `string \| null` | — | Scroll the given span into view |
+
+## Behavior
+
+- Rows are virtualized above 200 spans
+- Subtrees collapse automatically when span count exceeds 500
+- Minimap strip at top — brush to zoom
+- Selected span is highlighted with `--accent` 1px outline
+- Error spans are outlined and tinted `--status-error`
