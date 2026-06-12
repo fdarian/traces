@@ -1,68 +1,167 @@
 ---
 title: Getting Started
-description: Install @traces/react and render your first component.
+description: Install @traces/react and render your first trace component.
 ---
+
+Here's what you'll have after following this guide:
+
+<WaterfallExample />
 
 ## Install
 
 ```bash
-npm install @traces/react lucide-react
-# or
 bun add @traces/react lucide-react
+# npm
+npm install @traces/react lucide-react
+# pnpm
+pnpm add @traces/react lucide-react
 ```
 
-`lucide-react` is a peer dependency required by several components.
+`lucide-react` is a peer dependency. `react` and `react-dom` >=19 are required.
 
-## Fonts
+## Import the stylesheet
 
-The SDK uses Geist Sans and Geist Mono. Install them:
-
-```bash
-npm install @fontsource-variable/geist @fontsource-variable/geist-mono
-```
-
-Import in your app's global CSS or entry point:
-
-```css
-@import '@fontsource-variable/geist/index.css';
-@import '@fontsource-variable/geist-mono/index.css';
-```
-
-## Theme
-
-Import the compiled theme CSS — this provides all CSS variable tokens and Tailwind utility classes used by the components:
-
-```css
-@import '@traces/react/theme.css';
-```
-
-Or in JavaScript:
+`@traces/react/theme.css` ships the CSS custom property tokens, all component utility classes, `.font-data`, shimmer keyframes, and waterfall animation. Import it once at your app's entry point:
 
 ```ts
 import '@traces/react/theme.css'
 ```
 
-## Your first component
+Or from CSS:
+
+```css
+@import '@traces/react/theme.css';
+```
+
+The package exports `.` (JS) and `./theme.css` — both are stable public surface.
+
+## Supply Geist fonts
+
+`theme.css` sets `font-family` vars but bundles no font files. You must provide Geist yourself:
+
+```bash
+bun add @fontsource-variable/geist @fontsource-variable/geist-mono
+```
+
+Import before `theme.css`:
+
+```ts
+import '@fontsource-variable/geist/index.css'
+import '@fontsource-variable/geist-mono/index.css'
+import '@traces/react/theme.css'
+```
+
+## Render your first component
+
+All components are fully controlled and presentational — you own the data, they own the render.
 
 ```tsx
 import { TraceWaterfall } from '@traces/react'
 import type { Trace } from '@traces/react'
 
-const trace: Trace = { /* ... */ }
+// Trace shape: { traceId: string; spans: ReadonlyArray<Span> }
+// Each Span: { traceId, spanId, parentSpanId?, name, kind,
+//   startTimeUnixNano, endTimeUnixNano, durationMs,
+//   status: { code: 'ok'|'error'|'unset'; message? },
+//   attributes, events, resource: { serviceName, attributes } }
 
-export function MyWaterfall() {
+const trace: Trace = await fetchTrace('abc123')
+
+export function TracePage() {
   return <TraceWaterfall trace={trace} animateBars />
 }
 ```
 
-## Navigation
+`TraceWaterfall` is fully uncontrolled when you omit state props — it manages selection, collapse, and zoom internally.
 
-All components that link to other pages use callback props (`getTraceHref`, `getIssueHref`, etc.) instead of hard-coded routes. Wire them to your router:
+## Controlled usage
+
+Pass state props to take control:
 
 ```tsx
-// React Router
-getTraceHref={(traceId) => `/traces/${traceId}`}
+import { useState } from 'react'
+import { TraceWaterfall } from '@traces/react'
+import type { Trace, ZoomWindow } from '@traces/react'
 
-// Next.js
-getTraceHref={(traceId) => `/traces/${traceId}`}
+export function TracePage({ trace }: { trace: Trace }) {
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
+
+  return (
+    <TraceWaterfall
+      trace={trace}
+      selectedSpanId={selectedSpanId}
+      onSelectSpan={setSelectedSpanId}
+      animateBars
+    />
+  )
+}
 ```
+
+## Navigation callbacks
+
+Components that navigate use callback props instead of a hard-coded router. Wire them to whatever router you use:
+
+```tsx
+<TraceListTable
+  traces={traces}
+  // ...
+  getTraceHref={(traceId) => `/traces/${traceId}`}
+/>
+
+<IssueListTable
+  issues={issues}
+  // ...
+  getIssueHref={(issueId) => `/issues/${issueId}`}
+  onResolve={(issueId) => resolveIssue(issueId)}
+  resolvingIssueId={resolvingId}
+/>
+```
+
+No router coupling — the package imports no routing library.
+
+## Key data shapes
+
+The types you'll construct most often:
+
+```ts
+import type {
+  Trace, Span, SpanStatus, TraceSummary,
+  IssueListRow, IssueDetailData, IssueOccurrenceRow
+} from '@traces/react'
+
+// Trace / Span — for waterfall and detail views
+type Trace = { traceId: string; spans: ReadonlyArray<Span> }
+type Span = {
+  traceId: string; spanId: string; parentSpanId?: string
+  name: string; kind: string
+  startTimeUnixNano: string  // nanosecond decimal string
+  endTimeUnixNano: string
+  durationMs: number
+  status: { code: 'ok' | 'error' | 'unset'; message?: string }
+  attributes: ReadonlyArray<{ key: string; value: unknown }>
+  events: ReadonlyArray<SpanEvent>
+  resource: { serviceName: string; attributes: ReadonlyArray<AttributeValue> }
+}
+
+// TraceSummary — for list views
+type TraceSummary = {
+  traceId: string; rootService: string; rootOperation: string
+  spanCount: number; errorSpanCount?: number
+  services: ReadonlyArray<{ name: string; spanCount: number }>
+  startTimeUnixNano: string; durationMs: number
+}
+
+// Issues
+type IssueListRow = {
+  id: number; exceptionType: string; title: string; service: string
+  occurrenceCount: number; firstSeen: number; lastSeen: number
+  status: 'unresolved' | 'resolved'; resolvedAt: number | null
+  sparklineCounts: ReadonlyArray<number>; regressed: boolean
+}
+```
+
+## Next steps
+
+- [Component reference](/docs/sdk/component-reference/trace-waterfall) — full props for every component
+- [Theming](/docs/sdk/theming) — override CSS tokens to match your brand
+- [Utils reference](/docs/sdk/utils-reference) — span-tree, time-scale, and formatter utilities

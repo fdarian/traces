@@ -1,70 +1,291 @@
 ---
 title: Utils Reference
-description: Utility functions exported from @traces/react.
+description: Utility functions and constants exported from @traces/react — span-tree, time-scale, formatters, and color.
+---
+
+All utils are pure functions. Import individually:
+
+```ts
+import { buildSpanTree, flattenSpanTree, timeToX, relativeTime } from '@traces/react'
+```
+
 ---
 
 ## Span tree
 
-### `buildSpanTree(spans)`
+### `buildSpanTree`
 
-Builds a tree of `SpanTreeNode` from a flat array of spans. Handles orphan spans by attaching them under a synthetic root node (`ORPHAN_ROOT_ID`).
+```ts
+buildSpanTree(spans: ReadonlyArray<Span>): ReadonlyArray<SpanTreeNode>
+```
 
-### `flattenSpanTree(tree, collapsed?)`
+Converts a flat span array into a depth-first forest. Resolves parent-child relationships by `parentSpanId`. Orphans (missing parent, self-referential, or cyclic spans) are grouped under a synthetic `ORPHAN_ROOT_ID` root node. Roots and children are sorted by start time.
 
-Flattens the tree to a `FlatSpanRow[]` for virtualized rendering. Pass a `Set<string>` of collapsed span IDs to hide subtrees.
+```ts
+import { buildSpanTree } from '@traces/react'
 
-### `collectDefaultCollapsed(tree, threshold?)`
+const roots = buildSpanTree(trace.spans)
+```
 
-Returns the set of span IDs that should be collapsed by default. Collapses all subtrees when total span count exceeds `threshold` (default: 500).
+### `flattenSpanTree`
 
-### `spanStartMs(span)`
+```ts
+flattenSpanTree(
+  roots: ReadonlyArray<SpanTreeNode>,
+  collapsed: ReadonlySet<string>,
+): ReadonlyArray<FlatSpanRow>
+```
 
-Returns the span's start time in milliseconds from `startTimeUnixNano`.
+Depth-first flatten of the tree into a `FlatSpanRow[]` suitable for virtualized rendering. Children of any span ID in `collapsed` are skipped entirely.
+
+```ts
+import { buildSpanTree, flattenSpanTree } from '@traces/react'
+
+const roots = buildSpanTree(trace.spans)
+const rows = flattenSpanTree(roots, new Set())
+// rows[i].depth, .hasChildren, .descendantCount, .span, .isOrphanRoot
+```
+
+### `collectDefaultCollapsed`
+
+```ts
+collectDefaultCollapsed(
+  roots: ReadonlyArray<SpanTreeNode>,
+  spanCount: number,
+  threshold: number,
+): ReadonlySet<string>
+```
+
+Returns the set of span IDs to collapse by default. Returns an empty set if `spanCount <= threshold`; otherwise collapses every node that has children. `TraceWaterfall` calls this internally with a threshold of 500.
+
+### `spanStartMs`
+
+```ts
+spanStartMs(span: Span): number
+```
+
+Returns `span.startTimeUnixNano` converted to milliseconds. Convenience wrapper around `normalizeTimestampToMs`.
+
+### `ORPHAN_ROOT_ID`
+
+```ts
+const ORPHAN_ROOT_ID: string // '__orphaned__'
+```
+
+Synthetic `spanId` used for the orphan group node produced by `buildSpanTree`. Check `row.isOrphanRoot` instead of comparing string values where possible.
+
+### Types
+
+```ts
+interface SpanTreeNode {
+  readonly spanId: string
+  readonly span: Span | null       // null only on the orphan root node
+  readonly children: ReadonlyArray<SpanTreeNode>
+  readonly depth: number
+  readonly descendantCount: number
+  readonly isOrphanRoot: boolean
+}
+
+interface FlatSpanRow {
+  readonly spanId: string
+  readonly span: Span | null
+  readonly depth: number
+  readonly hasChildren: boolean
+  readonly descendantCount: number
+  readonly isOrphanRoot: boolean
+  readonly node: SpanTreeNode
+}
+```
+
+---
 
 ## Time scale
 
-### `computeTraceTimeBounds(spans)`
+These utils back the waterfall axis and zoom — useful if you're building a custom visualization on top of the exported types.
 
-Returns `{ startMs, endMs }` covering all spans in the trace.
+### `computeTraceTimeBounds`
 
-### `generateTimeTicks(bounds, width, minTickPx?)`
+```ts
+computeTraceTimeBounds(spans: ReadonlyArray<Span>): TimeBounds
+```
 
-Returns `TimeTick[]` — evenly spaced tick marks suitable for a waterfall axis.
+Returns `{ startMs, endMs }` covering the earliest start and latest end across all spans.
 
-### `timeToX(timeMs, bounds, width)`
+### `timeToX`
 
-Maps a timestamp to a pixel x-position within `[0, width]`.
+```ts
+timeToX(timeMs: number, zoom: ZoomWindow, widthPx: number): number
+```
 
-### `xToTime(x, bounds, width)`
+Maps a millisecond timestamp to a pixel x-position within `[0, widthPx]`, clamped. `zoom` is the currently visible time window.
 
-Inverse of `timeToX`.
+```ts
+import { computeTraceTimeBounds, timeToX } from '@traces/react'
 
-### `clampZoomWindow(zoom, bounds)`
+const bounds = computeTraceTimeBounds(trace.spans)
+const x = timeToX(spanStartMs, bounds, canvasWidth) // → pixel offset
+```
 
-Clamps a `ZoomWindow` to stay within the trace time bounds.
+### `xToTime`
 
-### `formatTickLabel(ms)`
+```ts
+xToTime(xPx: number, zoom: ZoomWindow, widthPx: number): number
+```
 
-Formats a relative millisecond value as a human-readable label (e.g. `"142ms"`, `"1.2s"`).
+Inverse of `timeToX` — maps a pixel x-position back to a millisecond timestamp.
 
-## Misc
+### `generateTimeTicks`
 
-### `relativeTime(timestampMs)`
+```ts
+generateTimeTicks(zoom: ZoomWindow, tickCount: number): ReadonlyArray<TimeTick>
+```
 
-Returns a short human-readable relative time string, e.g. `"2h ago"`, `"just now"`.
+Returns up to `tickCount` nicely-spaced axis ticks for the given zoom window. Each tick has a relative label (`"42ms"` or `"1.2s"`) and an `xRatio` in `[0, 1]` for positioning.
 
-### `normalizeTimestampToMs(nanoString)`
+```ts
+import { generateTimeTicks } from '@traces/react'
 
-Converts a nanosecond Unix timestamp string to milliseconds.
+const ticks = generateTimeTicks(zoom, 8)
+// ticks[i].ms, .label, .xRatio
+```
 
-### `parseStackFrames(stacktrace)`
+### `formatTickLabel`
 
-Parses a raw stacktrace string into `StackFrame[]` with `file`, `fn`, `line`, and `isAppFrame` fields.
+```ts
+formatTickLabel(ms: number, zoom: ZoomWindow): string
+```
 
-### `fillHistogramCounts(counts, targetLength)`
+Formats a millisecond timestamp as a relative offset from `zoom.startMs`: `"42ms"` under 1 second, `"1.2s"` above.
 
-Pads or downsamples a counts array to `targetLength` for sparkline rendering.
+### `clampZoomWindow`
 
-### `serviceColorValue(name)`
+```ts
+clampZoomWindow(zoom: ZoomWindow, bounds: TimeBounds, minWindowMs: number): ZoomWindow
+```
 
-Returns the deterministic CSS color string for a service name.
+Clamps a zoom window to stay within `bounds` and respect a minimum window size. Returns `bounds` if the window spans the full range.
+
+### Types
+
+```ts
+interface TimeBounds {
+  readonly startMs: number
+  readonly endMs: number
+}
+
+interface ZoomWindow {
+  readonly startMs: number
+  readonly endMs: number
+}
+
+interface TimeTick {
+  readonly ms: number
+  readonly label: string   // "42ms" | "1.2s"
+  readonly xRatio: number  // [0, 1] position within zoom window
+}
+```
+
+---
+
+## Formatters
+
+### `relativeTime`
+
+```ts
+relativeTime(ms: number): string
+```
+
+Compact relative time from a Unix millisecond timestamp. Output examples:
+
+```ts
+import { relativeTime } from '@traces/react'
+
+relativeTime(Date.now() - 30_000)    // "30s ago"
+relativeTime(Date.now() - 90_000)    // "1m ago"
+relativeTime(Date.now() - 7_200_000) // "2h ago"
+relativeTime(Date.now() - 604_800_000) // "7d ago"
+```
+
+### `normalizeTimestampToMs`
+
+```ts
+normalizeTimestampToMs(value: string | number): number
+```
+
+Converts a nanosecond Unix timestamp (as a decimal string like `"1717000000000000000"`) to milliseconds. BigInt-safe — handles values too large for JS `number` precision.
+
+### `parseStackFrames`
+
+```ts
+parseStackFrames(stacktrace: string): ReadonlyArray<StackFrame>
+```
+
+Parses Node.js, Java, and Python stacktrace strings into structured frames. Library frames (node_modules, java.*, etc.) have `isLibrary: true` and are rendered at 0.6 opacity by `StacktraceBlock`.
+
+```ts
+import { parseStackFrames } from '@traces/react'
+
+const frames = parseStackFrames(span.events[0].attributes[...].value)
+// frames[i].file, .fn, .line, .isLibrary
+```
+
+```ts
+interface StackFrame {
+  readonly file: string
+  readonly fn: string
+  readonly line: number | null
+  readonly isLibrary: boolean
+}
+```
+
+---
+
+## Color
+
+### `serviceColorValue`
+
+```ts
+serviceColorValue(name: string): string
+```
+
+Returns a deterministic `oklch(...)` color string for a service name. The same name always produces the same color; different names get perceptually distinct hues. Used by `ServiceBadge` internally.
+
+```ts
+import { serviceColorValue } from '@traces/react'
+
+const color = serviceColorValue('checkout-service')
+// → "oklch(0.72 0.14 187)"
+
+// use as a CSS value
+element.style.color = serviceColorValue(service)
+```
+
+---
+
+## Histogram
+
+### `fillHistogramCounts`
+
+```ts
+fillHistogramCounts(opts: {
+  buckets: ReadonlyArray<{ bucketStart: number; count: number }>
+  slotCount: number
+  slotMs: number
+  windowEnd: number
+}): ReadonlyArray<number>
+```
+
+Maps time-bucketed data to a fixed-length counts array for a sliding window. `slotCount` is the output array length (matches `Sparkline`'s `counts` length). `slotMs` is the duration each slot represents. `windowEnd` is the right edge of the window in milliseconds.
+
+```ts
+import { fillHistogramCounts, Sparkline } from '@traces/react'
+
+const counts = fillHistogramCounts({
+  buckets: histogramBuckets,  // from your backend
+  slotCount: 24,
+  slotMs: 3_600_000,          // 1h slots
+  windowEnd: Date.now(),
+})
+
+// <Sparkline counts={counts} color="var(--status-error)" />
+```

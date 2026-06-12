@@ -1,75 +1,116 @@
 ---
 title: Theming
-description: Customize the @traces/react color tokens to match your brand.
+description: CSS custom property token contract for @traces/react — override any token to match your brand.
 ---
 
-## Token contract
+All component styles resolve to CSS custom properties. Import `@traces/react/theme.css` once to get the dark defaults, then override any token on `:root` or a scoped container.
 
-All visual values are CSS custom properties. Import `@traces/react/theme.css` to get the defaults, then override any token on `:root` or a scoped container.
+## Import
 
-### Surface tokens
-
-```css
---bg-base:    #0B0D10;  /* app background */
---bg-subtle:  #11141A;  /* panels, table headers */
---bg-raised:  #171B22;  /* popovers, hover rows */
---bg-inset:   #07080A;  /* code blocks, waterfall track */
+```ts
+import '@traces/react/theme.css'
 ```
 
-### Border tokens
+The stylesheet is a standalone compiled artifact — it contains `:root` token defaults, all Tailwind-generated utility classes, the `.font-data` utility, shimmer keyframes, and waterfall bar animation. No secondary imports needed.
 
-```css
---border-subtle:  rgba(255,255,255,0.06);
---border-default: rgba(255,255,255,0.10);
---border-strong:  rgba(255,255,255,0.16);
-```
+## Token groups
 
-### Text tokens
+### Surfaces
 
-```css
---text-primary:   #E6E9EF;
---text-secondary: #9BA3B0;
---text-tertiary:  #5C6470;
-```
+Controls background layers — base canvas, subtle panels, raised cards, and inset wells.
 
-### Accent token
+| Token | Default | Usage |
+|---|---|---|
+| `--bg-base` | `#0b0d10` | app background |
+| `--bg-subtle` | `#11141a` | panels, table headers |
+| `--bg-raised` | `#171b22` | popovers, hover rows |
+| `--bg-inset` | `#07080a` | code blocks, waterfall track |
 
-```css
---accent:        #4D9FFF;
---accent-subtle: rgba(77,159,255,0.12);
-```
+### Borders
 
-### Status tokens
+| Token | Default | Usage |
+|---|---|---|
+| `--border-subtle` | `rgba(255,255,255,.06)` | dividers between sections |
+| `--border-default` | `rgba(255,255,255,.10)` | standard card/table borders |
+| `--border-strong` | `rgba(255,255,255,.16)` | focused/active borders |
 
-```css
---status-error:  #FF5C5C;  --status-error-bg:  rgba(255,92,92,0.10);
---status-warn:   #FFB224;  --status-warn-bg:   rgba(255,178,36,0.10);
---status-ok:     #3DD68C;  --status-ok-bg:     rgba(61,214,140,0.10);
---status-neutral:#5C6470;
-```
+### Text
+
+| Token | Default | Usage |
+|---|---|---|
+| `--text-primary` | `#e6e9ef` | primary content |
+| `--text-secondary` | `#9ba3b0` | labels, metadata |
+| `--text-tertiary` | `#5c6470` | de-emphasized units, timestamps |
+
+### Accent
+
+| Token | Default | Usage |
+|---|---|---|
+| `--accent` | `#4d9fff` | selected span outline, links, focus rings |
+| `--accent-subtle` | `rgba(77,159,255,.12)` | hover backgrounds, subtle highlights |
+
+### Status
+
+Each status has a foreground color and a background tint:
+
+| Token | Default |
+|---|---|
+| `--status-error` | `#ff5c5c` |
+| `--status-error-bg` | `rgba(255,92,92,.10)` |
+| `--status-warn` | `#ffb224` |
+| `--status-warn-bg` | `rgba(255,178,36,.10)` |
+| `--status-ok` | `#3dd68c` |
+| `--status-ok-bg` | `rgba(61,214,140,.10)` |
+| `--status-neutral` | `#5c6470` |
 
 ## Overriding tokens
+
+Override on `:root` to change the whole app, or scope to a container:
 
 ```css
 /* your-app.css */
 @import '@traces/react/theme.css';
 
 :root {
-  /* swap accent to purple */
-  --accent: #9B72FF;
-  --accent-subtle: rgba(155, 114, 255, 0.12);
+  /* re-tint accent to indigo */
+  --accent: #6366f1;
+  --accent-subtle: rgba(99, 102, 241, 0.12);
+}
+
+/* or scope to a container only */
+.traces-panel {
+  --bg-base: #0f1117;
+  --accent: #a78bfa;
 }
 ```
 
-## Fonts
+## Geist fonts
 
-The theme sets `font-family` variables but does not bundle font files. You must supply Geist:
+`theme.css` sets `font-family` CSS variables but bundles no font files. You must supply Geist:
 
-```css
-@import '@fontsource-variable/geist/index.css';
-@import '@fontsource-variable/geist-mono/index.css';
+```bash
+bun add @fontsource-variable/geist @fontsource-variable/geist-mono
 ```
 
-## Dark-only for MVP
+```ts
+// import before theme.css
+import '@fontsource-variable/geist/index.css'
+import '@fontsource-variable/geist-mono/index.css'
+import '@traces/react/theme.css'
+```
 
-The current token set is dark-only. Light mode support is planned for a future release.
+## `.font-data` utility
+
+`theme.css` ships a `.font-data` class that applies Geist Mono + `tabular-nums`. Components use this for durations, counts, and timestamps — apply it to any element where numeric alignment matters:
+
+```tsx
+<span className="font-data">142ms</span>
+```
+
+## Motion
+
+`theme.css` includes a `@keyframes trace-bar` animation (waterfall bar grow) and the shimmer keyframe used by `SkeletonRow`. Both respect `prefers-reduced-motion: reduce` — motion is disabled automatically for users who prefer it.
+
+## Dark-only
+
+The token set ships dark defaults only. Light mode is not yet supported.
