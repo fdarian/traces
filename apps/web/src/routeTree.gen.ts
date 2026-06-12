@@ -14,6 +14,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppTracesRouteImport } from './routes/_app/traces'
 import { Route as AppTokenShowcaseRouteImport } from './routes/_app/token-showcase'
 import { Route as AppIssuesRouteImport } from './routes/_app/issues'
+import { Route as AppTracesTraceIdRouteImport } from './routes/_app/traces.$traceId'
 
 const AppRouteRoute = AppRouteRouteImport.update({
   id: '/_app',
@@ -39,32 +40,45 @@ const AppIssuesRoute = AppIssuesRouteImport.update({
   path: '/issues',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppTracesTraceIdRoute = AppTracesTraceIdRouteImport.update({
+  id: '/$traceId',
+  path: '/$traceId',
+  getParentRoute: () => AppTracesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/issues': typeof AppIssuesRoute
   '/token-showcase': typeof AppTokenShowcaseRoute
-  '/traces': typeof AppTracesRoute
+  '/traces': typeof AppTracesRouteWithChildren
+  '/traces/$traceId': typeof AppTracesTraceIdRoute
 }
 export interface FileRoutesByTo {
   '/issues': typeof AppIssuesRoute
   '/token-showcase': typeof AppTokenShowcaseRoute
-  '/traces': typeof AppTracesRoute
+  '/traces': typeof AppTracesRouteWithChildren
   '/': typeof AppIndexRoute
+  '/traces/$traceId': typeof AppTracesTraceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteRouteWithChildren
   '/_app/issues': typeof AppIssuesRoute
   '/_app/token-showcase': typeof AppTokenShowcaseRoute
-  '/_app/traces': typeof AppTracesRoute
+  '/_app/traces': typeof AppTracesRouteWithChildren
   '/_app/': typeof AppIndexRoute
+  '/_app/traces/$traceId': typeof AppTracesTraceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/issues' | '/token-showcase' | '/traces'
+  fullPaths:
+    | '/'
+    | '/issues'
+    | '/token-showcase'
+    | '/traces'
+    | '/traces/$traceId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/issues' | '/token-showcase' | '/traces' | '/'
+  to: '/issues' | '/token-showcase' | '/traces' | '/' | '/traces/$traceId'
   id:
     | '__root__'
     | '/_app'
@@ -72,6 +86,7 @@ export interface FileRouteTypes {
     | '/_app/token-showcase'
     | '/_app/traces'
     | '/_app/'
+    | '/_app/traces/$traceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -115,20 +130,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIssuesRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/traces/$traceId': {
+      id: '/_app/traces/$traceId'
+      path: '/$traceId'
+      fullPath: '/traces/$traceId'
+      preLoaderRoute: typeof AppTracesTraceIdRouteImport
+      parentRoute: typeof AppTracesRoute
+    }
   }
 }
+
+interface AppTracesRouteChildren {
+  AppTracesTraceIdRoute: typeof AppTracesTraceIdRoute
+}
+
+const AppTracesRouteChildren: AppTracesRouteChildren = {
+  AppTracesTraceIdRoute: AppTracesTraceIdRoute,
+}
+
+const AppTracesRouteWithChildren = AppTracesRoute._addFileChildren(
+  AppTracesRouteChildren,
+)
 
 interface AppRouteRouteChildren {
   AppIssuesRoute: typeof AppIssuesRoute
   AppTokenShowcaseRoute: typeof AppTokenShowcaseRoute
-  AppTracesRoute: typeof AppTracesRoute
+  AppTracesRoute: typeof AppTracesRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppIssuesRoute: AppIssuesRoute,
   AppTokenShowcaseRoute: AppTokenShowcaseRoute,
-  AppTracesRoute: AppTracesRoute,
+  AppTracesRoute: AppTracesRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
 }
 
