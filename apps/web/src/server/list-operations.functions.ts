@@ -1,15 +1,13 @@
 import { createServerFn } from '@tanstack/react-start';
 import { TraceBackend } from '@traces/core';
 import { Effect } from 'effect';
+import * as S from 'effect/Schema';
 import { RuntimeServer } from '#/server/runtime';
 
+const ListOperationsInputSchema = S.String;
+
 export const listOperations = createServerFn({ method: 'GET' })
-  .validator((data: unknown) => {
-    if (typeof data !== 'string') {
-      throw new Error('Expected string');
-    }
-    return data;
-  })
+  .validator(S.standardSchemaV1(ListOperationsInputSchema))
   .handler(async ({ data }) => {
     const effect = Effect.gen(function* () {
       const backend = yield* TraceBackend;
