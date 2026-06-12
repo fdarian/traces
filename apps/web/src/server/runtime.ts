@@ -10,28 +10,48 @@ import { Effect, Exit, Layer, ManagedRuntime } from 'effect';
 
 type RuntimeServices = TraceBackend | IssueStore;
 
-const MainLayer = Layer.provide(
-  Layer.mergeAll(JaegerBackendLayer, IssueStoreLayer, IngesterLayer),
-  FetchHttpClient.layer,
-) as Layer.Layer<RuntimeServices>;
+const JaegerWithHttp = Layer.provide(JaegerBackendLayer, FetchHttpClient.layer);
+
+const IngesterWithDeps = Layer.provide(
+  IngesterLayer,
+  Layer.merge(JaegerWithHttp, IssueStoreLayer),
+);
+
+const MainLayer = Layer.mergeAll(
+  JaegerWithHttp,
+  IssueStoreLayer,
+  IngesterWithDeps,
+);
 
 const runtime = ManagedRuntime.make(MainLayer);
 
+const runToPromise = <A, E>(
+  effect: Effect.Effect<A, E, RuntimeServices>,
+): Promise<A> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const exit = yield* Effect.promise(() => runtime.runPromiseExit(effect));
+      if (Exit.isFailure(exit)) {
+        const cause = Exit.causeOption(exit);
+        return yield* Effect.fail(new Error(String(cause)));
+      }
+      return exit.value;
+    }),
+  );
+
 export const RuntimeServer = {
-  runPromise: async <A, E>(effect: Effect.Effect<A, E, RuntimeServices>) => {
-    const exit = await runtime.runPromiseExit(effect);
-    if (Exit.isFailure(exit)) {
-      const cause = Exit.causeOption(exit);
-      throw new Error(String(cause));
-    }
-    return exit.value;
-  },
-  runSync: <A, E>(effect: Effect.Effect<A, E, RuntimeServices>) => {
-    const exit = runtime.runSync(Effect.exit(effect));
-    if (Exit.isFailure(exit)) {
-      const cause = Exit.causeOption(exit);
-      throw new Error(String(cause));
-    }
-    return exit.value;
-  },
+  runPromise: runToPromise,
+  runSync: <A, E>(effect: Effect.Effect<A, E, RuntimeServices>) =>
+    Effect.runSync(
+      Effect.gen(function* () {
+        const exit = yield* Effect.sync(() =>
+          runtime.runSync(Effect.exit(effect)),
+        );
+        if (Exit.isFailure(exit)) {
+          const cause = Exit.causeOption(exit);
+          return yield* Effect.fail(new Error(String(cause)));
+        }
+        return exit.value;
+      }),
+    ),
 };
