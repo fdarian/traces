@@ -1,0 +1,49 @@
+import { createServerFn } from '@tanstack/react-start';
+import { TraceBackend } from '@traces/core';
+import { Effect } from 'effect';
+import * as S from 'effect/Schema';
+import { RuntimeServer } from '#/server/runtime';
+
+const HomeErrorRateInputSchema = S.Struct({
+  service: S.String,
+  startTimeMin: S.String,
+  startTimeMax: S.String,
+  limit: S.optional(S.Number),
+});
+
+export interface HomeErrorRateResult {
+  readonly errorRate: number;
+  readonly errorRateDelta: number;
+  readonly sampledTraceCount: number;
+}
+
+export const homeErrorRate = createServerFn({ method: 'GET' })
+  .validator(S.standardSchemaV1(HomeErrorRateInputSchema))
+  .handler(async (ctx) => {
+    const data = ctx.data;
+    const limit = data.limit ?? 200;
+
+    const effect = Effect.gen(function* () {
+      const backend = yield* TraceBackend;
+      const traces = yield* backend.searchTraces({
+        service: data.service,
+        startTimeMin: data.startTimeMin,
+        startTimeMax: data.startTimeMax,
+        limit,
+      });
+
+      const errorCount = traces.filter(
+        (t) => t.errorSpanCount !== undefined && t.errorSpanCount > 0,
+      ).length;
+      const errorRate =
+        traces.length > 0 ? (errorCount / traces.length) * 100 : 0;
+
+      return {
+        errorRate,
+        errorRateDelta: 0,
+        sampledTraceCount: traces.length,
+      };
+    });
+
+    return RuntimeServer.runPromise(effect);
+  });

@@ -594,9 +594,7 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
           ),
         );
 
-      const occurrenceRows = yield* wrapStoreError(() =>
-        occurrenceQuery.all(),
-      );
+      const occurrenceRows = yield* wrapStoreError(() => occurrenceQuery.all());
       const occurrenceRow = occurrenceRows[0];
       if (occurrenceRow === undefined) {
         return yield* Effect.fail(
@@ -683,7 +681,9 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
       const prevActiveIssueRow = prevActiveIssueRows[0];
       if (prevActiveIssueRow === undefined) {
         return yield* Effect.fail(
-          issueStoreDefect('previous active issue count query returned no rows'),
+          issueStoreDefect(
+            'previous active issue count query returned no rows',
+          ),
         );
       }
       const activeIssueDelta = activeIssueCount - prevActiveIssueRow.total;
@@ -830,7 +830,9 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
           .where(eq(sqliteSchema.issues.status, 'unresolved'))
           .$dynamic();
         if (whereClause !== undefined) {
-          query = query.where(and(whereClause, eq(sqliteSchema.issues.status, 'unresolved')));
+          query = query.where(
+            and(whereClause, eq(sqliteSchema.issues.status, 'unresolved')),
+          );
         }
         return query
           .orderBy(sql`${sqliteSchema.issues.occurrenceCount} desc`)

@@ -1,5 +1,5 @@
-import { computePercentiles } from './percentiles.js';
 import type { TraceSummary } from './model.js';
+import { computePercentiles } from './percentiles.js';
 
 export interface ServiceHealth {
   readonly service: string;

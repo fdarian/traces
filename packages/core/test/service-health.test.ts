@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { computeServiceHealth } from '#/service-health.js';
 import type { TraceSummary } from '#/model.js';
+import { computeServiceHealth } from '#/service-health.js';
 
 function makeTraceSummary(props: {
   durationMs: number;

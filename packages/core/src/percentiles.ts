@@ -1,9 +1,16 @@
-export function percentile(sortedDurations: ReadonlyArray<number>, p: number): number | null {
+export function percentile(
+  sortedDurations: ReadonlyArray<number>,
+  p: number,
+): number | null {
   if (sortedDurations.length === 0) {
     return null;
   }
   if (sortedDurations.length === 1) {
-    return sortedDurations[0];
+    const value = sortedDurations[0];
+    if (value === undefined) {
+      return null;
+    }
+    return value;
   }
 
   const index = (p / 100) * (sortedDurations.length - 1);
@@ -20,9 +27,7 @@ export function percentile(sortedDurations: ReadonlyArray<number>, p: number): n
   return lowerValue + (upperValue - lowerValue) * weight;
 }
 
-export function computePercentiles(
-  durations: ReadonlyArray<number>,
-): {
+export function computePercentiles(durations: ReadonlyArray<number>): {
   readonly p50: number | null;
   readonly p95: number | null;
   readonly p99: number | null;

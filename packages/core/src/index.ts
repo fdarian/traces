@@ -66,16 +66,6 @@ export type {
   TraceSummaryService,
 } from './model.js';
 export {
-  computePercentiles,
-  percentile,
-} from './percentiles.js';
-export {
-  computeServiceHealth,
-} from './service-health.js';
-export type {
-  ServiceHealth,
-} from './service-health.js';
-export {
   extractExceptionInfo,
   normalizeAttribute,
   normalizeAttributes,
@@ -87,8 +77,14 @@ export {
   normalizeTimestamp,
   normalizeTimestampToMs,
 } from './normalize.js';
+export {
+  computePercentiles,
+  percentile,
+} from './percentiles.js';
 export type {
   SerializableAttributeValue,
   SerializableJson,
 } from './serialize.js';
 export { serializeAttribute, serializeValue } from './serialize.js';
+export type { ServiceHealth } from './service-health.js';
+export { computeServiceHealth } from './service-health.js';

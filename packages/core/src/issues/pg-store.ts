@@ -655,7 +655,9 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
       const prevActiveIssueRow = prevActiveIssueRows[0];
       if (prevActiveIssueRow === undefined) {
         return yield* Effect.fail(
-          issueStoreDefect('previous active issue count query returned no rows'),
+          issueStoreDefect(
+            'previous active issue count query returned no rows',
+          ),
         );
       }
       const activeIssueDelta = activeIssueCount - prevActiveIssueRow.total;
