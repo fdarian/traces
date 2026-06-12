@@ -30,6 +30,63 @@ function sortSpansByStart(spans: Array<Span>): void {
   spans.sort((a, b) => spanStartMs(a) - spanStartMs(b));
 }
 
+function removeFromChildrenMap(
+  childrenMap: Map<string, Array<Span>>,
+  spanId: string,
+): void {
+  for (const [parentId, children] of childrenMap.entries()) {
+    const filtered = children.filter((child) => child.spanId !== spanId);
+    if (filtered.length !== children.length) {
+      if (filtered.length === 0) {
+        childrenMap.delete(parentId);
+      } else {
+        childrenMap.set(parentId, filtered);
+      }
+    }
+  }
+}
+
+export function collectAncestorSpanIds(
+  spanId: string,
+  spans: ReadonlyArray<Span>,
+): ReadonlyArray<string> {
+  const parentByChild = new Map<string, string>();
+  for (const span of spans) {
+    if (span.parentSpanId !== undefined && span.parentSpanId !== span.spanId) {
+      parentByChild.set(span.spanId, span.parentSpanId);
+    }
+  }
+
+  const ancestors: Array<string> = [];
+  const visited = new Set<string>();
+  let parentId = parentByChild.get(spanId);
+  while (parentId !== undefined) {
+    if (visited.has(parentId)) {
+      break;
+    }
+    visited.add(parentId);
+    ancestors.push(parentId);
+    parentId = parentByChild.get(parentId);
+  }
+
+  return ancestors;
+}
+
+export function expandCollapsedAncestors(
+  collapsed: ReadonlySet<string>,
+  ancestorIds: ReadonlyArray<string>,
+): ReadonlySet<string> {
+  if (ancestorIds.length === 0) {
+    return collapsed;
+  }
+
+  const next = new Set(collapsed);
+  for (const ancestorId of ancestorIds) {
+    next.delete(ancestorId);
+  }
+  return next;
+}
+
 export function buildSpanTree(
   spans: ReadonlyArray<Span>,
 ): ReadonlyArray<SpanTreeNode> {
@@ -41,13 +98,25 @@ export function buildSpanTree(
   const childrenMap = new Map<string, Array<Span>>();
   const roots: Array<Span> = [];
   const orphans: Array<Span> = [];
+  const orphanIds = new Set<string>();
+
+  const addOrphan = (span: Span) => {
+    if (!orphanIds.has(span.spanId)) {
+      orphanIds.add(span.spanId);
+      orphans.push(span);
+    }
+  };
 
   for (const span of spans) {
     const parentId = span.parentSpanId;
+    if (parentId === span.spanId) {
+      addOrphan(span);
+      continue;
+    }
     if (parentId === undefined) {
       roots.push(span);
     } else if (!spanMap.has(parentId)) {
-      orphans.push(span);
+      addOrphan(span);
     } else {
       const existing = childrenMap.get(parentId);
       if (existing === undefined) {
@@ -58,15 +127,63 @@ export function buildSpanTree(
     }
   }
 
+  const reachable = new Set<string>();
+  const visitReachable = (currentSpanId: string, visiting: Set<string>) => {
+    if (visiting.has(currentSpanId)) {
+      return;
+    }
+    if (reachable.has(currentSpanId)) {
+      return;
+    }
+    visiting.add(currentSpanId);
+    reachable.add(currentSpanId);
+    const children = childrenMap.get(currentSpanId) ?? [];
+    for (const child of children) {
+      visitReachable(child.spanId, visiting);
+    }
+    visiting.delete(currentSpanId);
+  };
+
+  for (const root of roots) {
+    visitReachable(root.spanId, new Set());
+  }
+
+  for (const span of spans) {
+    if (!reachable.has(span.spanId) && !orphanIds.has(span.spanId)) {
+      addOrphan(span);
+      removeFromChildrenMap(childrenMap, span.spanId);
+    }
+  }
+
   sortSpansByStart(roots);
   sortSpansByStart(orphans);
   for (const children of childrenMap.values()) {
     sortSpansByStart(children);
   }
 
-  const buildNode = (span: Span, depth: number): SpanTreeNode => {
+  const buildNode = (
+    span: Span,
+    depth: number,
+    visiting: Set<string>,
+  ): SpanTreeNode => {
+    if (visiting.has(span.spanId)) {
+      return {
+        spanId: span.spanId,
+        span,
+        children: [],
+        depth,
+        descendantCount: 0,
+        isOrphanRoot: false,
+      };
+    }
+
+    visiting.add(span.spanId);
     const children = childrenMap.get(span.spanId) ?? [];
-    const childNodes = children.map((child) => buildNode(child, depth + 1));
+    const childNodes = children.map((child) =>
+      buildNode(child, depth + 1, visiting),
+    );
+    visiting.delete(span.spanId);
+
     let descendantCount = 0;
     for (const child of childNodes) {
       descendantCount += 1 + child.descendantCount;
@@ -83,11 +200,13 @@ export function buildSpanTree(
 
   const result: Array<SpanTreeNode> = [];
   for (const root of roots) {
-    result.push(buildNode(root, 0));
+    result.push(buildNode(root, 0, new Set()));
   }
 
   if (orphans.length > 0) {
-    const orphanChildren = orphans.map((orphan) => buildNode(orphan, 1));
+    const orphanChildren = orphans.map((orphan) =>
+      buildNode(orphan, 1, new Set()),
+    );
     let descendantCount = 0;
     for (const child of orphanChildren) {
       descendantCount += 1 + child.descendantCount;
