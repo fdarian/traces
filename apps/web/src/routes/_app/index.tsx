@@ -12,11 +12,11 @@ import { homeServiceHealth } from '#/server/home-service-health.functions';
 import { homeStats } from '#/server/home-stats.functions';
 import { homeTopIssues } from '#/server/home-top-issues.functions';
 import { homeTrend } from '#/server/home-trend.functions';
-import { HomeRecentTraces } from './home/home-recent-traces.js';
-import { HomeServiceHealth } from './home/home-service-health.js';
-import { HomeStatRow } from './home/home-stat-row.js';
-import { HomeTopIssues } from './home/home-top-issues.js';
-import { HomeTrendChart } from './home/home-trend-chart.js';
+import { HomeRecentTraces } from './home/-home-recent-traces.js';
+import { HomeServiceHealth } from './home/-home-service-health.js';
+import { HomeStatRow } from './home/-home-stat-row.js';
+import { HomeTopIssues } from './home/-home-top-issues.js';
+import { HomeTrendChart } from './home/-home-trend-chart.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
