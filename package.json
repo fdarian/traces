@@ -1,7 +1,7 @@
 {
   "name": "traces",
   "private": true,
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": ["packages/*", "apps/*", "scripts"],
   "packageManager": "bun@1.3.14",
   "scripts": {
     "format": "biome check --write"

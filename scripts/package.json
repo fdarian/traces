@@ -8,7 +8,9 @@
   "dependencies": {
     "@opentelemetry/api": "latest",
     "@opentelemetry/sdk-trace-node": "latest",
-    "@opentelemetry/exporter-trace-otlp-http": "latest"
+    "@opentelemetry/exporter-trace-otlp-http": "latest",
+    "@opentelemetry/resources": "latest",
+    "@opentelemetry/semantic-conventions": "latest"
   },
   "devDependencies": {
     "typescript": "latest"
