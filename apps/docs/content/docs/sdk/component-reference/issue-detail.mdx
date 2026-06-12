@@ -1,6 +1,6 @@
 ---
 title: IssueDetail
-description: Full-page detail view for a single error issue with sparkline, stacktrace, and occurrences table.
+description: Full-page detail view for a single error issue — header with sparkline and resolve action, latest stacktrace, and a paginated occurrences table.
 ---
 
 <IssueDetailExample />
@@ -9,19 +9,76 @@ description: Full-page detail view for a single error issue with sparkline, stac
 
 ```ts
 import { IssueDetail } from '@traces/react'
+import type { IssueDetailData, IssueOccurrenceRow } from '@traces/react'
 ```
 
 ## Props
 
-| Prop | Type | Description |
-|---|---|---|
-| `issue` | `IssueDetailData` | Issue data |
-| `occurrences` | `IssueOccurrenceRow[]` | Paginated list of occurrences |
-| `page` | `number` | Current page (1-indexed) |
-| `totalPages` | `number` | Total page count |
-| `isLoadingOccurrences` | `boolean` | Shows skeleton in occurrences table |
-| `onPageChange` | `(page: number) => void` | Called on pagination |
-| `onResolve` | `() => void` | Called when resolve button is clicked |
-| `onUnresolve` | `() => void` | Called when unresolve button is clicked |
-| `isResolving` | `boolean` | Shows loading state on resolve button |
-| `getTraceHref` | `(traceId: string, spanId: string) => string` | Builds trace link for each occurrence |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `issue` | `IssueDetailData` | yes | — | Issue data for the header and stacktrace section |
+| `occurrences` | `ReadonlyArray<IssueOccurrenceRow>` | yes | — | Current page of occurrence rows |
+| `page` | `number` | yes | — | Current page number (1-based) |
+| `totalPages` | `number` | yes | — | Total page count for pagination |
+| `isLoadingOccurrences` | `boolean` | yes | — | Shows skeleton rows in the occurrences table when true |
+| `onPageChange` | `(page: number) => void` | yes | — | Called when the user navigates to a different page |
+| `onResolve` | `() => void` | yes | — | Called when the resolve button is clicked on an unresolved issue |
+| `onUnresolve` | `() => void` | yes | — | Called when the unresolve button is clicked on a resolved issue |
+| `isResolving` | `boolean` | yes | — | Shows loading state on the resolve/unresolve button |
+| `getTraceHref` | `(traceId: string, spanId: string) => string` | yes | — | Builds the trace link for each occurrence row |
+
+## Usage
+
+```tsx
+import { IssueDetail } from '@traces/react'
+
+<IssueDetail
+  issue={issue}
+  occurrences={occurrences}
+  page={page}
+  totalPages={totalPages}
+  isLoadingOccurrences={isLoadingOccurrences}
+  onPageChange={setPage}
+  onResolve={() => resolveIssue(issue.id)}
+  onUnresolve={() => unresolveIssue(issue.id)}
+  isResolving={isResolving}
+  getTraceHref={(traceId, spanId) => `/traces/${traceId}?span=${spanId}`}
+/>
+```
+
+## Data shapes
+
+```ts
+type IssueDetailData = {
+  id: number
+  exceptionType: string
+  title: string
+  service: string
+  status: 'unresolved' | 'resolved'
+  firstSeen: number          // Unix ms
+  lastSeen: number           // Unix ms
+  occurrenceCount: number
+  resolvedAt: number | null  // Unix ms
+  regressed: boolean
+  sparklineCounts: ReadonlyArray<number>
+  latestMessage: string      // most recent exception message
+  latestStacktrace: string   // raw stacktrace string, fed to StacktraceBlock
+}
+
+type IssueOccurrenceRow = {
+  id: number
+  timestamp: number          // Unix ms
+  exceptionMessage: string
+  traceId: string
+  spanId: string
+  serviceName: string
+}
+```
+
+## Behavior
+
+- header: exception type badge, message, `StatusBadge`, sparkline, occurrence count, first/last seen, resolve or unresolve button
+- latest stacktrace rendered via `StacktraceBlock` (parses frames; dims library frames)
+- occurrences table: timestamp, message, service, link to trace via `getTraceHref`
+- pagination controls shown when `totalPages > 1`
+- `isResolving` disables the action button and shows a loading indicator

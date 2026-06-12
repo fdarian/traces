@@ -1,7 +1,13 @@
 ---
 title: CopyText
-description: Monospace text with a copy-to-clipboard button.
+description: Monospace text with a copy-to-clipboard button — shows a "copied" confirmation on success.
 ---
+
+<CopyText value="abc123def45678901234567890abcdef" />
+
+With custom children:
+
+<CopyText value="abc123def45678901234567890abcdef">trace-id: abc123…</CopyText>
 
 ## Import
 
@@ -11,12 +17,28 @@ import { CopyText } from '@traces/react'
 
 ## Props
 
-Check the component source for the current prop signature — it accepts the text to display and copy.
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `value` | `string` | yes | — | The string to copy to the clipboard |
+| `className` | `string` | no | — | Additional CSS class on the root element |
+| `children` | `ReactNode` | no | `value` | Display content; if omitted, the raw `value` is rendered |
 
 ## Usage
 
 ```tsx
-<CopyText value="abc123def45678901234567890abcdef" />
+import { CopyText } from '@traces/react'
+
+// show the raw value
+<CopyText value={trace.traceId} />
+
+// custom display text
+<CopyText value={trace.traceId}>
+  {trace.traceId.slice(0, 8)}…
+</CopyText>
 ```
 
-Clicking the copy icon writes the value to the clipboard. The icon briefly changes to a checkmark as confirmation.
+## Behavior
+
+- clicking the copy icon writes `value` to the clipboard via the Clipboard API
+- the icon switches to a checkmark for ~1.5s as confirmation, then reverts
+- text renders with `.font-data` (Geist Mono + tabular-nums)

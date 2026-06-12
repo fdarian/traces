@@ -1,7 +1,13 @@
 ---
 title: ServiceBadge
-description: Colored badge showing a service name with a deterministic hue.
+description: Pill badge with a deterministic hue per service name.
 ---
+
+<ServiceBadge name="checkout-service" />
+<ServiceBadge name="payment-api" />
+<ServiceBadge name="inventory-db" />
+<ServiceBadge name="notification-worker" />
+<ServiceBadge name="web-frontend" />
 
 ## Import
 
@@ -11,23 +17,30 @@ import { ServiceBadge, serviceColorValue } from '@traces/react'
 
 ## Props
 
-| Prop | Type | Description |
-|---|---|---|
-| `name` | `string` | Service name |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `string` | yes | — | Service name |
 
 ## Usage
 
 ```tsx
-<ServiceBadge name="web" />
-<ServiceBadge name="payments" />
+import { ServiceBadge } from '@traces/react'
+
+<ServiceBadge name={trace.rootService} />
 ```
 
-The color is derived from a deterministic hash of the service name — the same service always renders the same color, across renders and sessions.
+The color is derived from a deterministic hash of the service name — the same name always renders the same hue, across renders, sessions, and instances.
 
-### `serviceColorValue(name)`
+## `serviceColorValue`
 
-Returns the raw CSS color string for a service name, useful when you need the color outside a React component:
+Returns the raw `oklch(...)` CSS color string for a service name. Use this when you need the color outside a React component:
 
 ```ts
-const color = serviceColorValue('web') // e.g. "oklch(0.72 0.12 240)"
+import { serviceColorValue } from '@traces/react'
+
+const color = serviceColorValue('checkout-service')
+// → "oklch(0.72 0.14 187)"
+
+// apply directly to a canvas or SVG element
+ctx.fillStyle = serviceColorValue(service.name)
 ```

@@ -1,7 +1,18 @@
 ---
 title: StacktraceBlock
-description: Styled stacktrace renderer with in-app vs library frame distinction.
+description: Styled stacktrace renderer — parses Node/Java/Python frames and dims library frames to 0.6 opacity.
 ---
+
+<StacktraceBlock
+  type="TypeError"
+  message="Cannot read properties of undefined (reading 'userId')"
+  stacktrace={`TypeError: Cannot read properties of undefined (reading 'userId')
+    at getUserCart (/app/src/services/cart.ts:42:18)
+    at async processCheckout (/app/src/routes/checkout.ts:91:22)
+    at async handler (/app/src/server/router.ts:14:5)
+    at Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)
+    at next (/app/node_modules/express/lib/router/route.js:137:13)`}
+/>
 
 ## Import
 
@@ -11,20 +22,32 @@ import { StacktraceBlock } from '@traces/react'
 
 ## Props
 
-| Prop | Type | Description |
-|---|---|---|
-| `type` | `string` | Exception type, e.g. `"DatabaseConnectionError"` |
-| `message` | `string` | Exception message |
-| `stacktrace` | `string` | Raw stacktrace string |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `type` | `string` | yes | — | Exception type, e.g. `"TypeError"` |
+| `message` | `string` | yes | — | Exception message |
+| `stacktrace` | `string` | yes | — | Raw stacktrace string (Node, Java, or Python format) |
 
 ## Usage
 
 ```tsx
+import { StacktraceBlock } from '@traces/react'
+
+// typically pulled from an exception span event attribute
+const exceptionAttr = span.events
+  .find((e) => e.name === 'exception')
+  ?.attributes
+
 <StacktraceBlock
-  type="DatabaseConnectionError"
-  message="connection refused to postgres:5432"
-  stacktrace={span.events[0].attributes.find(a => a.key === 'exception.stacktrace')?.value as string}
+  type={exceptionAttr?.find((a) => a.key === 'exception.type')?.value as string}
+  message={exceptionAttr?.find((a) => a.key === 'exception.message')?.value as string}
+  stacktrace={exceptionAttr?.find((a) => a.key === 'exception.stacktrace')?.value as string}
 />
 ```
 
-In-app frames (paths under `/app/src/`) render at full opacity; library frames (`node_modules`) at 60%.
+## Behavior
+
+- parses Node.js (`at fn (file:line:col)`), Java (`at pkg.Class.method(File.java:line)`), and Python (`File "path", line n, in fn`) stacktrace formats via `parseStackFrames`
+- app frames (your code) render at full opacity; library frames (`node_modules`, `java.*`, etc.) render at 0.6 opacity
+- uses `.font-data` (Geist Mono + tabular-nums) for frame text
+- `type` and `message` render in the header above the frame list

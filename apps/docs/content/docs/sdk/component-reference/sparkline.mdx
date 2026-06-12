@@ -1,7 +1,19 @@
 ---
 title: Sparkline
-description: Minimal polyline chart for occurrence counts over time.
+description: Minimal SVG polyline chart for occurrence counts over a time window.
 ---
+
+sm (default), error color:
+
+<Sparkline counts={[0, 1, 0, 3, 2, 5, 1, 4, 0, 2, 8, 3]} color="var(--status-error)" size="sm" />
+
+lg, accent color:
+
+<Sparkline counts={[0, 1, 0, 3, 2, 5, 1, 4, 0, 2, 8, 3]} color="var(--accent)" size="lg" />
+
+lg, ok color:
+
+<Sparkline counts={[2, 4, 3, 5, 6, 4, 7, 5, 8, 6, 9, 7]} color="var(--status-ok)" size="lg" />
 
 ## Import
 
@@ -11,19 +23,42 @@ import { Sparkline, fillHistogramCounts } from '@traces/react'
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `counts` | `number[]` | required | Count values to plot |
-| `color` | `string` | `var(--accent)` | Line and fill color |
-| `size` | `'sm' \| 'lg'` | `'sm'` | `sm` = 72×16px, `lg` = 160×32px |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `counts` | `ReadonlyArray<number>` | yes | — | Count values to plot — one value per slot |
+| `color` | `string` | no | `"var(--accent)"` | CSS color for the line and area fill |
+| `size` | `'sm' \| 'lg'` | no | `'sm'` | `sm` = 72×16px, `lg` = 160×32px |
 
 ## Usage
 
 ```tsx
-// normalize to 12 buckets before rendering
-const counts = fillHistogramCounts(rawCounts, 12)
+import { Sparkline, fillHistogramCounts } from '@traces/react'
 
-<Sparkline counts={counts} color="var(--status-error)" size="lg" />
+// map time-bucketed backend data to a fixed slot count
+const counts = fillHistogramCounts({
+  buckets: histogramBuckets,
+  slotCount: 24,
+  slotMs: 3_600_000,   // 1h per slot
+  windowEnd: Date.now(),
+})
+
+<Sparkline counts={counts} color="var(--status-error)" size="sm" />
 ```
 
-`fillHistogramCounts(counts, targetLength)` pads or downsamples to the target bucket count.
+## With `fillHistogramCounts`
+
+`fillHistogramCounts` maps sparse time-bucketed data from your backend to a fixed-length array. Use it whenever your bucket sizes or window alignment don't directly match the sparkline slot count:
+
+```ts
+import { fillHistogramCounts } from '@traces/react'
+
+const counts = fillHistogramCounts({
+  buckets: [
+    { bucketStart: 1717000000000, count: 3 },
+    { bucketStart: 1717003600000, count: 7 },
+  ],
+  slotCount: 24,        // output array length
+  slotMs: 3_600_000,    // 1h per slot
+  windowEnd: Date.now(),
+})
+```

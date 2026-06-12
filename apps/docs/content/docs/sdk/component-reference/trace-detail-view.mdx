@@ -1,6 +1,6 @@
 ---
 title: TraceDetailView
-description: Full trace detail page — header summary, waterfall, and span detail panel.
+description: Composite full-page trace detail — header summary, TraceWaterfall, and SlideIn SpanDetailPanel with keyboard navigation wired together.
 ---
 
 <TraceDetailExample />
@@ -9,20 +9,22 @@ description: Full trace detail page — header summary, waterfall, and span deta
 
 ```ts
 import { TraceDetailView } from '@traces/react'
+import type { Trace } from '@traces/react'
 ```
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `trace` | `Trace` | required | The trace to display |
-| `selectedSpanId` | `string \| null` | required | Currently selected span |
-| `onSelectSpan` | `(id: string \| null) => void` | required | Called when selection changes |
-| `deepLinkSpanId` | `string \| null` | — | Span to select and scroll to on mount (from URL param) |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `trace` | `Trace` | yes | — | The trace to display |
+| `selectedSpanId` | `string \| null` | yes | — | Currently selected span; controls `SpanDetailPanel` open state |
+| `onSelectSpan` | `(id: string \| null) => void` | yes | — | Called when selection changes (span click, keyboard, panel close) |
+| `deepLinkSpanId` | `string \| null` | no | — | Select and scroll to this span on mount — pass from URL param |
 
 ## Usage
 
 ```tsx
+import { useState } from 'react'
 import { TraceDetailView } from '@traces/react'
 
 function TracePage({ trace }) {
@@ -33,8 +35,15 @@ function TracePage({ trace }) {
       trace={trace}
       selectedSpanId={selectedSpanId}
       onSelectSpan={setSelectedSpanId}
-      deepLinkSpanId={searchParams.get('span')}
+      deepLinkSpanId={new URLSearchParams(location.search).get('span')}
     />
   )
 }
 ```
+
+## Behavior
+
+- composes `TraceWaterfall` + `SpanDetailPanel` — manages the panel open/close state from `selectedSpanId`
+- keyboard navigation is active on the waterfall: `↑`/`↓` move, `←`/`→` collapse/expand, `Esc` deselects and closes the panel
+- `deepLinkSpanId` triggers `scrollToSpanId` on the waterfall so the target row is visible without user interaction
+- header shows trace ID, root service, total span count, error count, and overall duration

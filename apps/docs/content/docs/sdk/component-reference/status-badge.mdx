@@ -3,23 +3,49 @@ title: StatusBadge
 description: Dot + uppercase label badge for span status and issue state.
 ---
 
+<StatusBadge status="error" />
+<StatusBadge status="warn" />
+<StatusBadge status="ok" />
+<StatusBadge status="resolved" />
+<StatusBadge status="neutral" />
+
+With custom labels:
+
+<StatusBadge status="error" label="failed" />
+<StatusBadge status="ok" label="healthy" />
+
 ## Import
 
 ```ts
 import { StatusBadge } from '@traces/react'
+import type { Status } from '@traces/react'
 ```
 
 ## Props
 
-| Prop | Type | Description |
-|---|---|---|
-| `status` | `Status` | One of `'ok' \| 'error' \| 'warn' \| 'unset' \| 'resolved'` |
-| `label` | `string` | Text to display next to the dot |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `status` | `Status` | yes | — | One of `'error' \| 'warn' \| 'ok' \| 'resolved' \| 'neutral'` |
+| `label` | `string` | no | status name | Text shown next to the dot |
 
 ## Usage
 
 ```tsx
-<StatusBadge status="error" label="ERROR" />
-<StatusBadge status="ok" label="OK" />
-<StatusBadge status="resolved" label="resolved" />
+import { StatusBadge } from '@traces/react'
+
+// span status
+<StatusBadge status={span.status.code === 'error' ? 'error' : 'ok'} />
+
+// issue state
+<StatusBadge status={issue.status === 'resolved' ? 'resolved' : 'error'} label={issue.status} />
 ```
+
+## Status values
+
+| Value | Color token | Typical use |
+|---|---|---|
+| `'error'` | `--status-error` | span error, active issue |
+| `'warn'` | `--status-warn` | degraded / warning |
+| `'ok'` | `--status-ok` | healthy span |
+| `'resolved'` | `--status-ok` | resolved issue |
+| `'neutral'` | `--status-neutral` | unset / unknown |

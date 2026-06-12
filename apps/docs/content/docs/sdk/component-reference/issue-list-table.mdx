@@ -1,6 +1,6 @@
 ---
 title: IssueListTable
-description: Table of grouped error issues with occurrence counts, sparklines, and inline resolve actions.
+description: Table of grouped error issues with occurrence counts, 24h sparklines, service badges, and inline resolve actions.
 ---
 
 <IssueListExample />
@@ -9,33 +9,57 @@ description: Table of grouped error issues with occurrence counts, sparklines, a
 
 ```ts
 import { IssueListTable } from '@traces/react'
+import type { IssueListRow } from '@traces/react'
 ```
 
 ## Props
 
-| Prop | Type | Description |
-|---|---|---|
-| `issues` | `IssueListRow[]` | Array of issue rows |
-| `isLoading` | `boolean` | Shows skeleton rows |
-| `error` | `Error \| null` | Shows error state |
-| `getIssueHref` | `(issueId: number) => string` | Builds the href for each row |
-| `onResolve` | `(issueId: number) => void` | Called when resolve button is clicked |
-| `resolvingIssueId` | `number \| null` | Issue currently being resolved (shows spinner) |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `issues` | `ReadonlyArray<IssueListRow>` | yes | — | Issue rows to render |
+| `isLoading` | `boolean` | yes | — | Shows skeleton rows when true and `issues` is empty |
+| `error` | `Error \| null` | yes | — | Renders an error state when non-null |
+| `getIssueHref` | `(issueId: number) => string` | yes | — | Builds the href for each issue row link |
+| `onResolve` | `(issueId: number) => void` | yes | — | Called when the resolve button is clicked on an unresolved issue |
+| `resolvingIssueId` | `number \| null` | yes | — | Disables and shows loading state on the resolve button for this issue ID |
 
-## IssueListRow type
+## Usage
+
+```tsx
+import { IssueListTable } from '@traces/react'
+
+<IssueListTable
+  issues={issues}
+  isLoading={isLoading}
+  error={error}
+  getIssueHref={(id) => `/issues/${id}`}
+  onResolve={(id) => resolveIssue(id)}
+  resolvingIssueId={resolvingId}
+/>
+```
+
+## IssueListRow shape
 
 ```ts
 type IssueListRow = {
   id: number
-  exceptionType: string
-  title: string
+  exceptionType: string        // e.g. "TypeError"
+  title: string                // full "ExceptionType: message" string
   service: string
   occurrenceCount: number
-  firstSeen: number       // ms timestamp
-  lastSeen: number        // ms timestamp
+  firstSeen: number            // Unix ms
+  lastSeen: number             // Unix ms
   status: 'unresolved' | 'resolved'
-  resolvedAt: number | null
-  sparklineCounts: number[]
-  regressed: boolean
+  resolvedAt: number | null    // Unix ms
+  sparklineCounts: ReadonlyArray<number>  // 24h histogram, feeds Sparkline
+  regressed: boolean           // true if resolved then re-occurred
 }
 ```
+
+## Behavior
+
+- each row is a link built from `getIssueHref`
+- columns: exception type + message, service badge, occurrence count, 24h sparkline, first seen, last seen, resolve action
+- the resolve button appears on hover for unresolved issues; replaced by `StatusBadge` "resolved" when resolved
+- `regressed` issues show a warning label next to the message
+- shows `EmptyState` when no issues match; skeleton rows while loading with no data

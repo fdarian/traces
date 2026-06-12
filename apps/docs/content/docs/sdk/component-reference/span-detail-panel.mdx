@@ -1,6 +1,6 @@
 ---
 title: SpanDetailPanel
-description: Slide-in panel showing span attributes, events, and resource attributes.
+description: Slide-in panel showing span attributes, events, and resource attributes — controlled, never self-closes.
 ---
 
 <SpanDetailExample />
@@ -9,18 +9,41 @@ description: Slide-in panel showing span attributes, events, and resource attrib
 
 ```ts
 import { SpanDetailPanel } from '@traces/react'
+import type { Span } from '@traces/react'
 ```
 
 ## Props
 
-| Prop | Type | Description |
-|---|---|---|
-| `span` | `Span \| null` | The span to display. `null` hides content but keeps the panel open during close animation. |
-| `open` | `boolean` | Controls panel visibility |
-| `onClose` | `() => void` | Called when the close button is clicked |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `span` | `Span \| null` | yes | — | The span to display; `null` hides content but keeps the panel mounted for close animation |
+| `open` | `boolean` | yes | — | Controls panel visibility |
+| `onClose` | `() => void` | yes | — | Called when the close button is clicked — caller must set `open` to false |
+
+## Usage
+
+```tsx
+import { useState } from 'react'
+import { SpanDetailPanel } from '@traces/react'
+import type { Span } from '@traces/react'
+
+const [selectedSpan, setSelectedSpan] = useState<Span | null>(null)
+
+<SpanDetailPanel
+  span={selectedSpan}
+  open={selectedSpan !== null}
+  onClose={() => setSelectedSpan(null)}
+/>
+```
 
 ## Tabs
 
-- **Attributes** — filterable table of span attributes
-- **Events** — timeline of span events; exception events show inline stacktrace
+- **Attributes** — filterable key-value table of span attributes
+- **Events** — timeline of span events; exception events show an inline stacktrace via `StacktraceBlock`
 - **Resource** — service resource attributes
+
+## Behavior
+
+- the panel never self-closes — `onClose` fires and the caller must update state
+- pass `span={null}` with `open={true}` to keep the panel visible (no content) while switching spans
+- slides in from the right; respects `prefers-reduced-motion`

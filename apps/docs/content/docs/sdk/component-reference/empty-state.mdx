@@ -1,7 +1,9 @@
 ---
 title: EmptyState
-description: Dot-grid empty state with a message and optional action.
+description: Dot-grid empty placeholder with a message and optional action slot.
 ---
+
+<EmptyState message="no traces in this range" />
 
 ## Import
 
@@ -11,12 +13,30 @@ import { EmptyState } from '@traces/react'
 
 ## Props
 
-Check the component source for the current prop signature — it accepts a message string and an optional action element.
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `message` | `string` | yes | — | Primary message shown in the center |
+| `action` | `ReactNode` | no | — | Optional action element (e.g. a button or link) rendered below the message |
 
 ## Usage
 
 ```tsx
+import { EmptyState } from '@traces/react'
+
+// basic
 <EmptyState message="no traces in this range" />
+
+// with action
+<EmptyState
+  message="no issues found"
+  action={
+    <button onClick={resetFilter}>clear filter</button>
+  }
+/>
 ```
 
-Renders a faint 16px dot-grid background (`radial-gradient`), the message in `--text-secondary`, and an optional accent-colored action.
+## Behavior
+
+- renders a faint 16px dot-grid background via `radial-gradient`
+- message in `--text-secondary`
+- `action` renders below the message; style it yourself (e.g. give it the `--accent` color)

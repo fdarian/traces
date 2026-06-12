@@ -1,6 +1,6 @@
 ---
 title: TraceListTable
-description: Sortable table of trace summaries with inline duration bars and service badges.
+description: Sortable, paginated table of trace summaries with service badges, duration, error indicators, and load-more.
 ---
 
 <TraceListExample />
@@ -9,17 +9,58 @@ description: Sortable table of trace summaries with inline duration bars and ser
 
 ```ts
 import { TraceListTable } from '@traces/react'
+import type { TraceSummary } from '@traces/react'
 ```
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `traces` | `TraceSummary[]` | required | Array of trace summaries |
-| `sort` | `'start' \| 'duration'` | required | Current sort column |
-| `onSortChange` | `(sort) => void` | required | Called when header is clicked |
-| `isLoading` | `boolean` | required | Shows skeleton rows when true |
-| `hasMore` | `boolean` | required | Shows "load more" footer when true |
-| `onLoadMore` | `() => void` | required | Called when "load more" is clicked |
-| `error` | `Error \| null` | required | Shows error state when non-null |
-| `getTraceHref` | `(traceId: string) => string` | required | Builds the href for each row link |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `traces` | `ReadonlyArray<TraceSummary>` | yes | — | Trace rows to render |
+| `sort` | `'start' \| 'duration'` | yes | — | Active sort column |
+| `onSortChange` | `(s: 'start' \| 'duration') => void` | yes | — | Called when a sortable column header is clicked |
+| `isLoading` | `boolean` | yes | — | Shows skeleton rows when true and `traces` is empty |
+| `hasMore` | `boolean` | yes | — | Shows "load more" button at bottom when true |
+| `onLoadMore` | `() => void` | yes | — | Called when "load more" is clicked |
+| `error` | `Error \| null` | yes | — | Renders an error message when non-null |
+| `getTraceHref` | `(traceId: string) => string` | yes | — | Builds the href for each trace row link |
+
+## Usage
+
+```tsx
+import { TraceListTable } from '@traces/react'
+
+<TraceListTable
+  traces={traces}
+  sort="start"
+  onSortChange={setSort}
+  isLoading={isLoading}
+  hasMore={hasNextPage}
+  onLoadMore={fetchNextPage}
+  error={error}
+  getTraceHref={(traceId) => `/traces/${traceId}`}
+/>
+```
+
+## TraceSummary shape
+
+```ts
+type TraceSummary = {
+  traceId: string
+  rootService: string
+  rootOperation: string
+  spanCount: number
+  errorSpanCount?: number
+  services: ReadonlyArray<{ name: string; spanCount: number }>
+  startTimeUnixNano: string  // nanosecond decimal string
+  durationMs: number
+}
+```
+
+## Behavior
+
+- each row is a link built from `getTraceHref` — no internal router dependency
+- columns: root operation, services (as `ServiceBadge` chips), span count, duration, start time
+- clicking a column header calls `onSortChange`; active sort column is highlighted
+- shows skeleton rows (`SkeletonRow`) while loading with no data
+- `hasMore` appends a "load more" row at the bottom

@@ -1,6 +1,6 @@
 ---
 title: TraceWaterfall
-description: Time-aligned waterfall chart of spans in a trace. The signature visual component.
+description: Time-aligned span waterfall — the signature visualization. Virtualizes large traces, supports zoom, keyboard navigation, and controlled or uncontrolled state.
 ---
 
 <WaterfallExample />
@@ -9,26 +9,59 @@ description: Time-aligned waterfall chart of spans in a trace. The signature vis
 
 ```ts
 import { TraceWaterfall } from '@traces/react'
+import type { Trace, ZoomWindow } from '@traces/react'
 ```
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `trace` | `Trace` | required | The trace to render |
-| `selectedSpanId` | `string \| null` | `null` | Currently selected span ID |
-| `onSelectSpan` | `(id: string \| null) => void` | — | Called when a span is selected |
-| `collapsed` | `ReadonlySet<string>` | auto | Set of collapsed span IDs |
-| `onCollapsedChange` | `(collapsed: ReadonlySet<string>) => void` | — | Called when collapsed state changes |
-| `zoom` | `ZoomWindow` | full range | Current zoom window |
-| `onZoomChange` | `(zoom: ZoomWindow) => void` | — | Called when zoom changes via minimap |
-| `animateBars` | `boolean` | `false` | Animate bars `scaleX` 0→1 on mount |
-| `scrollToSpanId` | `string \| null` | — | Scroll the given span into view |
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `trace` | `Trace` | yes | — | The trace to render |
+| `selectedSpanId` | `string \| null` | no | — | Controlled: currently selected span ID |
+| `onSelectSpan` | `(id: string \| null) => void` | no | — | Controlled: called when a span is selected/deselected |
+| `collapsed` | `ReadonlySet<string>` | no | auto | Controlled: set of collapsed span IDs |
+| `onCollapsedChange` | `(set: ReadonlySet<string>) => void` | no | — | Controlled: called when collapse state changes |
+| `zoom` | `ZoomWindow` | no | full range | Controlled: visible time window |
+| `onZoomChange` | `(z: ZoomWindow) => void` | no | — | Controlled: called when minimap brush changes |
+| `animateBars` | `boolean` | no | `false` | Animate span bars scaleX 0→1 on mount |
+| `scrollToSpanId` | `string \| null` | no | — | Scroll the given span into view |
+
+Omit all state props for uncontrolled mode — the component manages selection, collapse, and zoom internally.
+
+## Usage
+
+### Uncontrolled (minimal)
+
+```tsx
+import { TraceWaterfall } from '@traces/react'
+
+<TraceWaterfall trace={trace} animateBars />
+```
+
+### Controlled selection
+
+```tsx
+import { useState } from 'react'
+import { TraceWaterfall } from '@traces/react'
+
+const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
+
+<TraceWaterfall
+  trace={trace}
+  selectedSpanId={selectedSpanId}
+  onSelectSpan={setSelectedSpanId}
+/>
+```
+
+### Deep-link to a span
+
+Use `scrollToSpanId` to scroll a specific span into view on mount (e.g. from a URL param). Combine with `TraceDetailView` which wires this automatically via `deepLinkSpanId`.
 
 ## Behavior
 
-- Rows are virtualized above 200 spans
-- Subtrees collapse automatically when span count exceeds 500
-- Minimap strip at top — brush to zoom
-- Selected span is highlighted with `--accent` 1px outline
-- Error spans are outlined and tinted `--status-error`
+- rows are virtualized above 200 visible spans — safe for large traces
+- subtrees auto-collapse when span count exceeds 500
+- minimap strip at top — click or brush to zoom the visible window
+- keyboard navigation when a row is focused: `↑`/`↓` move selection, `←`/`→` collapse/expand, `Esc` deselects
+- selected span highlighted with `--accent` 1px outline; error spans tinted `--status-error`
+- orphaned spans (missing parent) grouped under a synthetic "orphaned" root node
