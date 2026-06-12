@@ -48,6 +48,6 @@ const exceptionAttr = span.events
 ## Behavior
 
 - parses Node.js (`at fn (file:line:col)`), Java (`at pkg.Class.method(File.java:line)`), and Python (`File "path", line n, in fn`) stacktrace formats via `parseStackFrames`
-- app frames (your code) render at full opacity; library frames (`node_modules`, `java.*`, etc.) render at 0.6 opacity
+- app frames (your code) render at full opacity; library frames (path contains `node_modules`, `vendor/`, `/site-packages/`, `venv/`, `.venv/`, `dist/`, or `webpack/`) render at 0.6 opacity
 - uses `.font-data` (Geist Mono + tabular-nums) for frame text
 - `type` and `message` render in the header above the frame list

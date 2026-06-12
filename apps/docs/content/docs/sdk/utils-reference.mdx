@@ -220,21 +220,22 @@ Converts a nanosecond Unix timestamp (as a decimal string like `"171700000000000
 parseStackFrames(stacktrace: string): ReadonlyArray<StackFrame>
 ```
 
-Parses Node.js, Java, and Python stacktrace strings into structured frames. Library frames (node_modules, java.*, etc.) have `isLibrary: true` and are rendered at 0.6 opacity by `StacktraceBlock`.
+Parses Node.js, Java, and Python stacktrace strings into structured frames. Library frames (path contains `node_modules`, `vendor/`, `/site-packages/`, `venv/`, `.venv/`, `dist/`, or `webpack/`) have `isLibrary: true` and are rendered at 0.6 opacity by `StacktraceBlock`.
 
 ```ts
 import { parseStackFrames } from '@traces/react'
 
 const frames = parseStackFrames(span.events[0].attributes[...].value)
-// frames[i].file, .fn, .line, .isLibrary
+// frames[i].raw, .path, .functionName, .lineNumber, .isLibrary
 ```
 
 ```ts
 interface StackFrame {
-  readonly file: string
-  readonly fn: string
-  readonly line: number | null
-  readonly isLibrary: boolean
+  readonly raw: string          // the original unparsed frame line
+  readonly path: string         // file path
+  readonly functionName: string // function / method name
+  readonly lineNumber: string   // line:col (string, not number)
+  readonly isLibrary: boolean   // true if the frame is a library/vendor frame
 }
 ```
 

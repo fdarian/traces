@@ -11,7 +11,7 @@ All configuration is read at startup via Effect `Config`. No restart-on-change; 
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `JAEGER_URL` | string | `http://localhost:16686` | base URL for all Jaeger v3 API calls — no trailing slash |
+| `JAEGER_URL` | string | `http://localhost:16686` | base URL for all Jaeger v2 API calls (Jaeger's v3 HTTP API paths) — no trailing slash |
 
 `JAEGER_URL` must point at the Jaeger HTTP query endpoint. all API calls are proxied through the app server, so Jaeger does not need to be reachable from the browser.
 
@@ -41,7 +41,7 @@ The background ingester polls Jaeger on a fixed interval and copies error spans 
 | `INGEST_OVERLAP_MS` | number | `60000` (1 m) | how far before the cursor each poll reaches back, to catch late-arriving spans |
 | `INGEST_INITIAL_LOOKBACK_MS` | number | `3600000` (1 h) | how far back the first poll reaches for a service that has no cursor yet |
 
-`INGEST_TRACE_LIMIT` caps how many traces are fetched in a single Jaeger request. when the response hits the limit, the ingester halves the next window to avoid missing spans — see [concepts → ingester polling](/docs/app/concepts#ingester-polling--cursors) for details.
+`INGEST_TRACE_LIMIT` caps how many traces are fetched in a single Jaeger request. when the response hits the limit, the ingester halves the next window to avoid missing spans — see [concepts → ingester polling](/docs/app/concepts#ingester-polling-and-cursors) for details.
 
 ## Seed script variables
 
