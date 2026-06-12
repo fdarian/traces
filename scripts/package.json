@@ -1,0 +1,16 @@
+{
+  "name": "@traces/scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "bun run seed.ts"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "latest",
+    "@opentelemetry/sdk-trace-node": "latest",
+    "@opentelemetry/exporter-trace-otlp-http": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest"
+  }
+}
