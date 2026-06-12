@@ -1,8 +1,12 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
+import {
+  createFileRoute,
+  type ErrorComponentProps,
+  useRouter,
+} from '@tanstack/react-router';
 import type { TraceSummary } from '@traces/core';
 import { SkeletonRow, TraceListTable } from '@traces/react';
 import * as S from 'effect/Schema';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   computeTimeRange,
   normalizeGlobalFilters,
@@ -18,13 +22,14 @@ export const Route = createFileRoute('/_app/traces')({
   validateSearch: S.standardSchemaV1(TraceFilterSchema),
   component: TracesPage,
   pendingComponent: TracesPending,
+  errorComponent: TracesError,
   loader: async (ctx) => {
     const search = ctx.location.search as Record<string, unknown>;
     const global = normalizeGlobalFilters(search);
     const local = normalizeTraceFilters(search);
     const service = global.service[0];
     const timeRange = computeTimeRange(global.range);
-    const limit = local.status === 'errors-only' ? 200 : 50;
+    const limit = pageLimit(local.status);
     if (service === undefined) {
       return {
         traces: [] as ReadonlyArray<TraceSummary>,
@@ -32,33 +37,20 @@ export const Route = createFileRoute('/_app/traces')({
         startTimeMin: timeRange.startTimeMin,
         startTimeMax: timeRange.startTimeMax,
         query: null as TraceQueryInput | null,
-        error: null as Error | null,
       };
     }
     const query = buildTraceQuery(service, timeRange, local, limit);
-    try {
-      const [traces, operations] = await Promise.all([
-        searchTraces({ data: query }),
-        listOperations({ data: service }),
-      ]);
-      return {
-        traces,
-        operations,
-        startTimeMin: timeRange.startTimeMin,
-        startTimeMax: timeRange.startTimeMax,
-        query,
-        error: null,
-      };
-    } catch (err) {
-      return {
-        traces: [] as ReadonlyArray<TraceSummary>,
-        operations: [] as ReadonlyArray<string>,
-        startTimeMin: timeRange.startTimeMin,
-        startTimeMax: timeRange.startTimeMax,
-        query: null as TraceQueryInput | null,
-        error: err instanceof Error ? err : new Error(String(err)),
-      };
-    }
+    const [traces, operations] = await Promise.all([
+      searchTraces({ data: query }),
+      listOperations({ data: service }),
+    ]);
+    return {
+      traces,
+      operations,
+      startTimeMin: timeRange.startTimeMin,
+      startTimeMax: timeRange.startTimeMax,
+      query,
+    };
   },
 });
 
@@ -72,6 +64,10 @@ type TraceQueryInput = {
   attributes?: Record<string, string>;
   limit: number;
 };
+
+function pageLimit(status: 'all' | 'errors-only'): number {
+  return status === 'errors-only' ? 200 : 50;
+}
 
 function buildTraceQuery(
   service: string,
@@ -89,6 +85,17 @@ function buildTraceQuery(
     attributes: parseAttributes(local.attributes),
     limit,
   };
+}
+
+function TracesError(props: ErrorComponentProps) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 px-4 py-12">
+      <p className="text-body text-status-error">failed to load traces</p>
+      <p className="font-data text-data text-text-tertiary">
+        {props.error.message}
+      </p>
+    </div>
+  );
 }
 
 function TracesPending() {
@@ -119,18 +126,19 @@ function TracesPage() {
 
   const global = normalizeGlobalFilters(search);
   const local = normalizeTraceFilters(search);
+  const limit = pageLimit(local.status);
 
   const [allTraces, setAllTraces] = useState(loaderData.traces);
   const [sort, setSort] = useState<'start' | 'duration'>('start');
   const [isLoading, setIsLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(loaderData.traces.length >= limit);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     setAllTraces(loaderData.traces);
-    setHasMore(loaderData.traces.length > 0);
-    setError(loaderData.error);
-  }, [loaderData.traces, loaderData.error]);
+    setHasMore(loaderData.traces.length >= pageLimit(local.status));
+    setError(null);
+  }, [loaderData.traces, local.status]);
 
   const filteredTraces = useMemo(() => {
     let result = allTraces;
@@ -143,9 +151,10 @@ function TracesPage() {
     return result;
   }, [allTraces, local.status, local.operation]);
 
-  const handleLoadMore = async () => {
+  const handleLoadMore = useCallback(async () => {
     if (loaderData.query === null) return;
     if (allTraces.length === 0) return;
+    if (isLoading) return;
     setIsLoading(true);
     try {
       const oldest = allTraces.reduce((min, t) => {
@@ -162,19 +171,41 @@ function TracesPage() {
         startTimeMax: newStartTimeMax,
       };
       const result = await searchTraces({ data: newQuery });
+      if (result.length < loaderData.query.limit) {
+        setHasMore(false);
+      }
       const existingIds = new Set(allTraces.map((t) => t.traceId));
       const newTraces = result.filter((t) => !existingIds.has(t.traceId));
-      if (newTraces.length === 0) {
-        setHasMore(false);
-      } else {
+      if (newTraces.length > 0) {
         setAllTraces((prev) => [...prev, ...newTraces]);
+      } else if (result.length === 0) {
+        setHasMore(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [loaderData.query, allTraces, isLoading]);
+
+  useEffect(() => {
+    if (
+      filteredTraces.length === 0 &&
+      allTraces.length > 0 &&
+      hasMore &&
+      isLoading === false &&
+      loaderData.query !== null
+    ) {
+      void handleLoadMore();
+    }
+  }, [
+    filteredTraces.length,
+    allTraces.length,
+    hasMore,
+    isLoading,
+    loaderData.query,
+    handleLoadMore,
+  ]);
 
   const updateSearch = (patch: Partial<typeof TraceFilterSchema.Type>) => {
     router.navigate({
