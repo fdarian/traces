@@ -26,6 +26,7 @@
   /* accent */
   --color-accent: var(--accent);
   --color-accent-subtle: var(--accent-subtle);
+  --color-accent-foreground: var(--accent-foreground);
 
   /* status */
   --color-status-error: var(--status-error);
@@ -79,6 +80,7 @@
   /* accent — DESIGN.md blue */
   --accent: #4d9fff;
   --accent-subtle: rgba(77, 159, 255, 0.12);
+  --accent-foreground: var(--bg-base);
 
   /* status */
   --status-error: #ff5c5c;
