@@ -27,7 +27,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "shadcn": "^4.11.0",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "youch": "^4.1.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
