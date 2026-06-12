@@ -1,131 +1,128 @@
-import * as v from 'valibot';
+import * as S from 'effect/Schema';
 
-export const OtelAttributeValueSchema = v.union([
-  v.object({ stringValue: v.string() }),
-  v.object({ intValue: v.union([v.string(), v.number()]) }),
-  v.object({ boolValue: v.boolean() }),
-  v.object({ doubleValue: v.number() }),
-  v.object({ arrayValue: v.any() }),
-  v.object({ kvlistValue: v.any() }),
-]);
+export const OtelAttributeValueSchema = S.Union(
+  S.Struct({ stringValue: S.String }),
+  S.Struct({ intValue: S.Union(S.String, S.Number) }),
+  S.Struct({ boolValue: S.Boolean }),
+  S.Struct({ doubleValue: S.Number }),
+  S.Struct({ arrayValue: S.Unknown }),
+  S.Struct({ kvlistValue: S.Unknown }),
+);
 
-export type OtelAttributeValue = v.InferOutput<typeof OtelAttributeValueSchema>;
+export type OtelAttributeValue = typeof OtelAttributeValueSchema.Type;
 
-export const OtelAttributeSchema = v.object({
-  key: v.string(),
+export const OtelAttributeSchema = S.Struct({
+  key: S.String,
   value: OtelAttributeValueSchema,
 });
 
-export type OtelAttribute = v.InferOutput<typeof OtelAttributeSchema>;
+export type OtelAttribute = typeof OtelAttributeSchema.Type;
 
-export const OtelEventSchema = v.object({
-  timeUnixNano: v.union([v.string(), v.number()]),
-  name: v.string(),
-  attributes: v.optional(v.array(OtelAttributeSchema)),
+export const OtelEventSchema = S.Struct({
+  timeUnixNano: S.Union(S.String, S.Number),
+  name: S.String,
+  attributes: S.optional(S.Array(OtelAttributeSchema)),
 });
 
-export type OtelEvent = v.InferOutput<typeof OtelEventSchema>;
+export type OtelEvent = typeof OtelEventSchema.Type;
 
-export const OtelStatusSchema = v.object({
-  code: v.optional(v.union([v.string(), v.number()])),
-  message: v.optional(v.string()),
+export const OtelStatusSchema = S.Struct({
+  code: S.optional(S.Union(S.String, S.Number)),
+  message: S.optional(S.String),
 });
 
-export type OtelStatus = v.InferOutput<typeof OtelStatusSchema>;
+export type OtelStatus = typeof OtelStatusSchema.Type;
 
-export const OtelSpanSchema = v.object({
-  traceId: v.string(),
-  spanId: v.string(),
-  parentSpanId: v.optional(v.string()),
-  name: v.string(),
-  kind: v.optional(v.union([v.string(), v.number()])),
-  startTimeUnixNano: v.union([v.string(), v.number()]),
-  endTimeUnixNano: v.union([v.string(), v.number()]),
-  attributes: v.optional(v.array(OtelAttributeSchema)),
-  events: v.optional(v.array(OtelEventSchema)),
-  status: v.optional(OtelStatusSchema),
+export const OtelSpanSchema = S.Struct({
+  traceId: S.String,
+  spanId: S.String,
+  parentSpanId: S.optional(S.String),
+  name: S.String,
+  kind: S.optional(S.Union(S.String, S.Number)),
+  startTimeUnixNano: S.Union(S.String, S.Number),
+  endTimeUnixNano: S.Union(S.String, S.Number),
+  attributes: S.optional(S.Array(OtelAttributeSchema)),
+  events: S.optional(S.Array(OtelEventSchema)),
+  status: S.optional(OtelStatusSchema),
 });
 
-export type OtelSpan = v.InferOutput<typeof OtelSpanSchema>;
+export type OtelSpan = typeof OtelSpanSchema.Type;
 
-export const OtelResourceSchema = v.object({
-  attributes: v.optional(v.array(OtelAttributeSchema)),
+export const OtelResourceSchema = S.Struct({
+  attributes: S.optional(S.Array(OtelAttributeSchema)),
 });
 
-export type OtelResource = v.InferOutput<typeof OtelResourceSchema>;
+export type OtelResource = typeof OtelResourceSchema.Type;
 
-export const OtelScopeSchema = v.object({
-  name: v.optional(v.string()),
-  version: v.optional(v.string()),
+export const OtelScopeSchema = S.Struct({
+  name: S.optional(S.String),
+  version: S.optional(S.String),
 });
 
-export type OtelScope = v.InferOutput<typeof OtelScopeSchema>;
+export type OtelScope = typeof OtelScopeSchema.Type;
 
-export const OtelScopeSpanSchema = v.object({
-  scope: v.optional(OtelScopeSchema),
-  spans: v.array(OtelSpanSchema),
+export const OtelScopeSpanSchema = S.Struct({
+  scope: S.optional(OtelScopeSchema),
+  spans: S.Array(OtelSpanSchema),
 });
 
-export type OtelScopeSpan = v.InferOutput<typeof OtelScopeSpanSchema>;
+export type OtelScopeSpan = typeof OtelScopeSpanSchema.Type;
 
-export const OtelResourceSpanSchema = v.object({
-  resource: v.optional(OtelResourceSchema),
-  scopeSpans: v.array(OtelScopeSpanSchema),
+export const OtelResourceSpanSchema = S.Struct({
+  resource: S.optional(OtelResourceSchema),
+  scopeSpans: S.Array(OtelScopeSpanSchema),
 });
 
-export type OtelResourceSpan = v.InferOutput<typeof OtelResourceSpanSchema>;
+export type OtelResourceSpan = typeof OtelResourceSpanSchema.Type;
 
-export const OtelTracesResultSchema = v.object({
-  result: v.object({
-    resourceSpans: v.optional(v.array(OtelResourceSpanSchema)),
+export const OtelTracesResultSchema = S.Struct({
+  result: S.Struct({
+    resourceSpans: S.optional(S.Array(OtelResourceSpanSchema)),
   }),
 });
 
-export type OtelTracesResult = v.InferOutput<typeof OtelTracesResultSchema>;
+export type OtelTracesResult = typeof OtelTracesResultSchema.Type;
 
-export const OtelServicesResultSchema = v.object({
-  services: v.array(v.string()),
+export const OtelServicesResultSchema = S.Struct({
+  services: S.Array(S.String),
 });
 
-export type OtelServicesResult = v.InferOutput<typeof OtelServicesResultSchema>;
+export type OtelServicesResult = typeof OtelServicesResultSchema.Type;
 
-export const OtelOperationSchema = v.object({
-  name: v.string(),
-  spanKind: v.optional(v.string()),
+export const OtelOperationSchema = S.Struct({
+  name: S.String,
+  spanKind: S.optional(S.String),
 });
 
-export type OtelOperation = v.InferOutput<typeof OtelOperationSchema>;
+export type OtelOperation = typeof OtelOperationSchema.Type;
 
-export const OtelOperationsResultSchema = v.object({
-  operations: v.array(OtelOperationSchema),
+export const OtelOperationsResultSchema = S.Struct({
+  operations: S.Array(OtelOperationSchema),
 });
 
-export type OtelOperationsResult = v.InferOutput<
-  typeof OtelOperationsResultSchema
->;
+export type OtelOperationsResult = typeof OtelOperationsResultSchema.Type;
 
-export const OtelTraceSummarySchema = v.object({
-  traceId: v.string(),
-  rootServiceName: v.string(),
-  rootOperationName: v.string(),
-  spanCount: v.number(),
-  errorSpanCount: v.optional(v.number()),
-  services: v.array(
-    v.object({
-      name: v.string(),
-      spanCount: v.number(),
+export const OtelTraceSummarySchema = S.Struct({
+  traceId: S.String,
+  rootServiceName: S.String,
+  rootOperationName: S.String,
+  spanCount: S.Number,
+  errorSpanCount: S.optional(S.Number),
+  services: S.Array(
+    S.Struct({
+      name: S.String,
+      spanCount: S.Number,
     }),
   ),
-  minStartTimeUnixNano: v.union([v.string(), v.number()]),
-  maxEndTimeUnixNano: v.union([v.string(), v.number()]),
+  minStartTimeUnixNano: S.Union(S.String, S.Number),
+  maxEndTimeUnixNano: S.Union(S.String, S.Number),
 });
 
-export type OtelTraceSummary = v.InferOutput<typeof OtelTraceSummarySchema>;
+export type OtelTraceSummary = typeof OtelTraceSummarySchema.Type;
 
-export const OtelTraceSummariesResultSchema = v.object({
-  summaries: v.optional(v.array(OtelTraceSummarySchema)),
+export const OtelTraceSummariesResultSchema = S.Struct({
+  summaries: S.optional(S.Array(OtelTraceSummarySchema)),
 });
 
-export type OtelTraceSummariesResult = v.InferOutput<
-  typeof OtelTraceSummariesResultSchema
->;
+export type OtelTraceSummariesResult =
+  typeof OtelTraceSummariesResultSchema.Type;

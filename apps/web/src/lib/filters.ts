@@ -1,21 +1,21 @@
-import * as v from 'valibot';
+import * as S from 'effect/Schema';
 
-const RangePresetSchema = v.picklist(['15m', '1h', '6h', '24h', '7d']);
+const RangePresetSchema = S.Literal('15m', '1h', '6h', '24h', '7d');
 
-export type RangePreset = v.InferOutput<typeof RangePresetSchema>;
+export type RangePreset = typeof RangePresetSchema.Type;
 
 export type RangeValue =
   | RangePreset
   | { readonly from: string; readonly to: string };
 
-export const GlobalFilterSchema = v.object({
-  service: v.optional(v.union([v.string(), v.array(v.string())])),
-  range: v.optional(v.union([RangePresetSchema, v.literal('custom')])),
-  from: v.optional(v.string()),
-  to: v.optional(v.string()),
+export const GlobalFilterSchema = S.Struct({
+  service: S.optional(S.Union(S.String, S.Array(S.String))),
+  range: S.optional(S.Union(RangePresetSchema, S.Literal('custom'))),
+  from: S.optional(S.String),
+  to: S.optional(S.String),
 });
 
-export type RawGlobalFilters = v.InferOutput<typeof GlobalFilterSchema>;
+export type RawGlobalFilters = typeof GlobalFilterSchema.Type;
 
 export function normalizeGlobalFilters(raw: RawGlobalFilters): {
   readonly service: ReadonlyArray<string>;

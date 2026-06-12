@@ -1,6 +1,5 @@
 import { HttpClient } from '@effect/platform';
 import { Config, Effect, Layer, Ref, Schema } from 'effect';
-import * as v from 'valibot';
 import type { TraceQuery } from './backend.js';
 import { TraceBackend } from './backend.js';
 import {
@@ -196,11 +195,11 @@ export function parseJson(
   });
 }
 
-export function validate<T>(
-  schema: v.GenericSchema<T>,
+export function validate<A>(
+  schema: Schema.Schema<A>,
   data: unknown,
-): Effect.Effect<T, JaegerBadResponse, never> {
-  return Effect.sync(() => v.parse(schema, data)).pipe(
+): Effect.Effect<A, JaegerBadResponse, never> {
+  return Schema.decodeUnknown(schema)(data).pipe(
     Effect.mapError(
       (cause) =>
         new JaegerBadResponse({

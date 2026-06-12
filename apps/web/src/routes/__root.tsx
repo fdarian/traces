@@ -1,11 +1,9 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router';
-import * as v from 'valibot';
+import * as S from 'effect/Schema';
 import { GlobalFilterSchema } from '#/lib/filters';
 
 export const Route = createRootRoute({
-  validateSearch: (search) => {
-    return v.parse(GlobalFilterSchema, search);
-  },
+  validateSearch: S.standardSchemaV1(GlobalFilterSchema),
   component: RootComponent,
   head: () => ({
     meta: [

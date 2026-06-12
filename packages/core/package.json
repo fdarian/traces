@@ -13,8 +13,7 @@
   },
   "dependencies": {
     "effect": "latest",
-    "@effect/platform": "latest",
-    "valibot": "latest"
+    "@effect/platform": "latest"
   },
   "devDependencies": {
     "typescript": "latest"

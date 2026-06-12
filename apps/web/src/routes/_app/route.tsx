@@ -4,15 +4,13 @@ import {
   Outlet,
   useRouter,
 } from '@tanstack/react-router';
+import * as S from 'effect/Schema';
 import { Activity, Home, Layers } from 'lucide-react';
-import * as v from 'valibot';
 import { GlobalFilterSchema, normalizeGlobalFilters } from '#/lib/filters';
 import { listServices } from '#/server/listServices.server-fn';
 
 export const Route = createFileRoute('/_app')({
-  validateSearch: (search) => {
-    return v.parse(GlobalFilterSchema, search);
-  },
+  validateSearch: S.standardSchemaV1(GlobalFilterSchema),
   component: AppLayout,
   loader: async () => {
     try {
