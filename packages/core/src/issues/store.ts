@@ -37,4 +37,6 @@ export interface IssueStore {
 
 export const IssueStore = Context.GenericTag<IssueStore>('traces/IssueStore');
 
+// Lifetime total per issue — incremented once per real occurrence, never
+// decremented when retention prunes stored rows below this count.
 export const MAX_OCCURRENCES_PER_ISSUE = 1000;

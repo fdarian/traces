@@ -14,6 +14,13 @@ import type {
   UpsertOccurrenceInput,
 } from './model.js';
 import { IssueStore, MAX_OCCURRENCES_PER_ISSUE } from './store.js';
+import { issueStoreDefect, maxTimestamp } from './store-helpers.js';
+
+type UpsertTransactionResult =
+  | 'deduped'
+  | 'inserted'
+  | 'insert-failed'
+  | 'missing-issue';
 
 const migrationsFolder = fileURLToPath(
   new URL('../../drizzle/sqlite', import.meta.url),
@@ -35,114 +42,128 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
   const upsertOccurrence = (
     input: UpsertOccurrenceInput,
   ): Effect.Effect<void, IssueStoreError, never> => {
-    return wrapStoreError(() => {
+    return Effect.gen(function* () {
       const timestamp = new Date(input.timestamp);
       const stacktrace = input.exceptionStacktrace;
 
-      db.transaction((tx) => {
-        const existingIssues = tx
-          .select()
-          .from(sqliteSchema.issues)
-          .where(eq(sqliteSchema.issues.fingerprint, input.fingerprint))
-          .all();
+      const result = yield* wrapStoreError(() =>
+        db.transaction((tx): UpsertTransactionResult => {
+          const existingIssues = tx
+            .select()
+            .from(sqliteSchema.issues)
+            .where(eq(sqliteSchema.issues.fingerprint, input.fingerprint))
+            .all();
 
-        let issueId: number;
-        const existingIssue = existingIssues[0];
-        if (existingIssue === undefined) {
-          const inserted = tx
-            .insert(sqliteSchema.issues)
+          let issueId: number;
+          const existingIssue = existingIssues[0];
+          if (existingIssue === undefined) {
+            const inserted = tx
+              .insert(sqliteSchema.issues)
+              .values({
+                fingerprint: input.fingerprint,
+                title: input.title,
+                service: input.service,
+                exceptionType: input.exceptionType,
+                status: 'unresolved',
+                firstSeen: timestamp,
+                lastSeen: timestamp,
+                occurrenceCount: 0,
+                resolvedAt: null,
+              })
+              .returning({ id: sqliteSchema.issues.id })
+              .all();
+            const row = inserted[0];
+            if (row === undefined) {
+              return 'insert-failed';
+            }
+            issueId = row.id;
+          } else {
+            issueId = existingIssue.id;
+          }
+
+          const insertedOccurrences = tx
+            .insert(sqliteSchema.occurrences)
             .values({
-              fingerprint: input.fingerprint,
-              title: input.title,
-              service: input.service,
-              exceptionType: input.exceptionType,
-              status: 'unresolved',
-              firstSeen: timestamp,
-              lastSeen: timestamp,
-              occurrenceCount: 0,
-              resolvedAt: null,
+              issueId,
+              traceId: input.traceId,
+              spanId: input.spanId,
+              serviceName: input.serviceName,
+              timestamp,
+              exceptionMessage: input.exceptionMessage,
+              exceptionStacktrace: stacktrace,
+              attributes: input.attributes,
             })
-            .returning({ id: sqliteSchema.issues.id })
-            .all();
-          const row = inserted[0];
-          if (row === undefined) {
-            throw new Error('failed to insert issue');
-          }
-          issueId = row.id;
-        } else {
-          issueId = existingIssue.id;
-        }
-
-        const existingOccurrences = tx
-          .select({ id: sqliteSchema.occurrences.id })
-          .from(sqliteSchema.occurrences)
-          .where(
-            and(
-              eq(sqliteSchema.occurrences.issueId, issueId),
-              eq(sqliteSchema.occurrences.spanId, input.spanId),
-            ),
-          )
-          .all();
-
-        if (existingOccurrences.length > 0) {
-          return;
-        }
-
-        tx.insert(sqliteSchema.occurrences)
-          .values({
-            issueId,
-            traceId: input.traceId,
-            spanId: input.spanId,
-            serviceName: input.serviceName,
-            timestamp,
-            exceptionMessage: input.exceptionMessage,
-            exceptionStacktrace: stacktrace,
-            attributes: input.attributes,
-          })
-          .run();
-
-        const issueRows = tx
-          .select()
-          .from(sqliteSchema.issues)
-          .where(eq(sqliteSchema.issues.id, issueId))
-          .all();
-        const issueRow = issueRows[0];
-        if (issueRow === undefined) {
-          throw new Error('issue missing after upsert');
-        }
-
-        const nextCount = issueRow.occurrenceCount + 1;
-        const nextStatus =
-          issueRow.status === 'resolved' ? 'unresolved' : issueRow.status;
-
-        tx.update(sqliteSchema.issues)
-          .set({
-            lastSeen: timestamp,
-            occurrenceCount: nextCount,
-            status: nextStatus,
-            resolvedAt:
-              nextStatus === 'unresolved' ? null : issueRow.resolvedAt,
-          })
-          .where(eq(sqliteSchema.issues.id, issueId))
-          .run();
-
-        const overflow = nextCount - MAX_OCCURRENCES_PER_ISSUE;
-        if (overflow > 0) {
-          const staleRows = tx
-            .select({ id: sqliteSchema.occurrences.id })
-            .from(sqliteSchema.occurrences)
-            .where(eq(sqliteSchema.occurrences.issueId, issueId))
-            .orderBy(desc(sqliteSchema.occurrences.timestamp))
-            .offset(MAX_OCCURRENCES_PER_ISSUE)
+            .onConflictDoNothing({
+              target: [
+                sqliteSchema.occurrences.issueId,
+                sqliteSchema.occurrences.spanId,
+              ],
+            })
+            .returning({ id: sqliteSchema.occurrences.id })
             .all();
 
-          for (const stale of staleRows) {
-            tx.delete(sqliteSchema.occurrences)
-              .where(eq(sqliteSchema.occurrences.id, stale.id))
-              .run();
+          if (insertedOccurrences.length === 0) {
+            return 'deduped';
           }
-        }
-      });
+
+          const issueRows = tx
+            .select()
+            .from(sqliteSchema.issues)
+            .where(eq(sqliteSchema.issues.id, issueId))
+            .all();
+          const issueRow = issueRows[0];
+          if (issueRow === undefined) {
+            return 'missing-issue';
+          }
+
+          const nextCount = issueRow.occurrenceCount + 1;
+          const nextStatus =
+            issueRow.status === 'resolved' ? 'unresolved' : issueRow.status;
+          const nextLastSeen = maxTimestamp(issueRow.lastSeen, timestamp);
+
+          tx.update(sqliteSchema.issues)
+            .set({
+              lastSeen: nextLastSeen,
+              occurrenceCount: nextCount,
+              status: nextStatus,
+              resolvedAt:
+                nextStatus === 'unresolved' ? null : issueRow.resolvedAt,
+            })
+            .where(eq(sqliteSchema.issues.id, issueId))
+            .run();
+
+          // Retention keeps the latest rows; occurrenceCount stays lifetime total.
+          const overflow = nextCount - MAX_OCCURRENCES_PER_ISSUE;
+          if (overflow > 0) {
+            const staleRows = tx
+              .select({ id: sqliteSchema.occurrences.id })
+              .from(sqliteSchema.occurrences)
+              .where(eq(sqliteSchema.occurrences.issueId, issueId))
+              .orderBy(desc(sqliteSchema.occurrences.timestamp))
+              .offset(MAX_OCCURRENCES_PER_ISSUE)
+              .all();
+
+            for (const stale of staleRows) {
+              tx.delete(sqliteSchema.occurrences)
+                .where(eq(sqliteSchema.occurrences.id, stale.id))
+                .run();
+            }
+          }
+
+          return 'inserted';
+        }),
+      );
+
+      if (result === 'insert-failed') {
+        return yield* Effect.fail(
+          issueStoreDefect('failed to insert issue row'),
+        );
+      }
+      if (result === 'missing-issue') {
+        return yield* Effect.fail(
+          issueStoreDefect('issue row missing after occurrence insert'),
+        );
+      }
     });
   };
 

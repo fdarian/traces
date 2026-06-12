@@ -14,6 +14,13 @@ import type {
   UpsertOccurrenceInput,
 } from './model.js';
 import { IssueStore, MAX_OCCURRENCES_PER_ISSUE } from './store.js';
+import { issueStoreDefect, maxTimestamp } from './store-helpers.js';
+
+type UpsertTransactionResult =
+  | 'deduped'
+  | 'inserted'
+  | 'insert-failed'
+  | 'missing-issue';
 
 const migrationsFolder = fileURLToPath(
   new URL('../../drizzle/pg', import.meta.url),
@@ -35,107 +42,124 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
   const upsertOccurrence = (
     input: UpsertOccurrenceInput,
   ): Effect.Effect<void, IssueStoreError, never> => {
-    return wrapStoreError(async () => {
+    return Effect.gen(function* () {
       const timestamp = new Date(input.timestamp);
       const stacktrace = input.exceptionStacktrace;
 
-      await db.transaction(async (tx) => {
-        const existingIssues = await tx
-          .select()
-          .from(pgSchema.issues)
-          .where(eq(pgSchema.issues.fingerprint, input.fingerprint));
+      const result = yield* wrapStoreError(
+        (): Promise<UpsertTransactionResult> =>
+          db.transaction(async (tx): Promise<UpsertTransactionResult> => {
+            const existingIssues = await tx
+              .select()
+              .from(pgSchema.issues)
+              .where(eq(pgSchema.issues.fingerprint, input.fingerprint));
 
-        let issueId: number;
-        const existingIssue = existingIssues[0];
-        if (existingIssue === undefined) {
-          const inserted = await tx
-            .insert(pgSchema.issues)
-            .values({
-              fingerprint: input.fingerprint,
-              title: input.title,
-              service: input.service,
-              exceptionType: input.exceptionType,
-              status: 'unresolved',
-              firstSeen: timestamp,
-              lastSeen: timestamp,
-              occurrenceCount: 0,
-              resolvedAt: null,
-            })
-            .returning({ id: pgSchema.issues.id });
-          const row = inserted[0];
-          if (row === undefined) {
-            throw new Error('failed to insert issue');
-          }
-          issueId = row.id;
-        } else {
-          issueId = existingIssue.id;
-        }
+            let issueId: number;
+            const existingIssue = existingIssues[0];
+            if (existingIssue === undefined) {
+              const inserted = await tx
+                .insert(pgSchema.issues)
+                .values({
+                  fingerprint: input.fingerprint,
+                  title: input.title,
+                  service: input.service,
+                  exceptionType: input.exceptionType,
+                  status: 'unresolved',
+                  firstSeen: timestamp,
+                  lastSeen: timestamp,
+                  occurrenceCount: 0,
+                  resolvedAt: null,
+                })
+                .returning({ id: pgSchema.issues.id });
+              const row = inserted[0];
+              if (row === undefined) {
+                return 'insert-failed';
+              }
+              issueId = row.id;
+            } else {
+              issueId = existingIssue.id;
+            }
 
-        const existingOccurrences = await tx
-          .select({ id: pgSchema.occurrences.id })
-          .from(pgSchema.occurrences)
-          .where(
-            and(
-              eq(pgSchema.occurrences.issueId, issueId),
-              eq(pgSchema.occurrences.spanId, input.spanId),
-            ),
-          );
+            const insertedOccurrences = await tx
+              .insert(pgSchema.occurrences)
+              .values({
+                issueId,
+                traceId: input.traceId,
+                spanId: input.spanId,
+                serviceName: input.serviceName,
+                timestamp,
+                exceptionMessage: input.exceptionMessage,
+                exceptionStacktrace: stacktrace,
+                attributes: input.attributes,
+              })
+              .onConflictDoNothing({
+                target: [
+                  pgSchema.occurrences.issueId,
+                  pgSchema.occurrences.spanId,
+                ],
+              })
+              .returning({ id: pgSchema.occurrences.id });
 
-        if (existingOccurrences.length > 0) {
-          return;
-        }
+            if (insertedOccurrences.length === 0) {
+              return 'deduped';
+            }
 
-        await tx.insert(pgSchema.occurrences).values({
-          issueId,
-          traceId: input.traceId,
-          spanId: input.spanId,
-          serviceName: input.serviceName,
-          timestamp,
-          exceptionMessage: input.exceptionMessage,
-          exceptionStacktrace: stacktrace,
-          attributes: input.attributes,
-        });
+            const issueRows = await tx
+              .select()
+              .from(pgSchema.issues)
+              .where(eq(pgSchema.issues.id, issueId));
+            const issueRow = issueRows[0];
+            if (issueRow === undefined) {
+              return 'missing-issue';
+            }
 
-        const issueRows = await tx
-          .select()
-          .from(pgSchema.issues)
-          .where(eq(pgSchema.issues.id, issueId));
-        const issueRow = issueRows[0];
-        if (issueRow === undefined) {
-          throw new Error('issue missing after upsert');
-        }
+            const nextCount = issueRow.occurrenceCount + 1;
+            const nextStatus =
+              issueRow.status === 'resolved' ? 'unresolved' : issueRow.status;
+            const nextLastSeen = maxTimestamp(issueRow.lastSeen, timestamp);
 
-        const nextCount = issueRow.occurrenceCount + 1;
-        const nextStatus =
-          issueRow.status === 'resolved' ? 'unresolved' : issueRow.status;
-
-        await tx
-          .update(pgSchema.issues)
-          .set({
-            lastSeen: timestamp,
-            occurrenceCount: nextCount,
-            status: nextStatus,
-            resolvedAt:
-              nextStatus === 'unresolved' ? null : issueRow.resolvedAt,
-          })
-          .where(eq(pgSchema.issues.id, issueId));
-
-        const overflow = nextCount - MAX_OCCURRENCES_PER_ISSUE;
-        if (overflow > 0) {
-          const staleRows = await tx
-            .select({ id: pgSchema.occurrences.id })
-            .from(pgSchema.occurrences)
-            .where(eq(pgSchema.occurrences.issueId, issueId))
-            .orderBy(desc(pgSchema.occurrences.timestamp))
-            .offset(MAX_OCCURRENCES_PER_ISSUE);
-
-          for (const stale of staleRows) {
             await tx
-              .delete(pgSchema.occurrences)
-              .where(eq(pgSchema.occurrences.id, stale.id));
-          }
-        }
-      });
+              .update(pgSchema.issues)
+              .set({
+                lastSeen: nextLastSeen,
+                occurrenceCount: nextCount,
+                status: nextStatus,
+                resolvedAt:
+                  nextStatus === 'unresolved' ? null : issueRow.resolvedAt,
+              })
+              .where(eq(pgSchema.issues.id, issueId));
+
+            // Retention keeps the latest rows; occurrenceCount stays lifetime total.
+            const overflow = nextCount - MAX_OCCURRENCES_PER_ISSUE;
+            if (overflow > 0) {
+              const staleRows = await tx
+                .select({ id: pgSchema.occurrences.id })
+                .from(pgSchema.occurrences)
+                .where(eq(pgSchema.occurrences.issueId, issueId))
+                .orderBy(desc(pgSchema.occurrences.timestamp))
+                .offset(MAX_OCCURRENCES_PER_ISSUE);
+
+              for (const stale of staleRows) {
+                await tx
+                  .delete(pgSchema.occurrences)
+                  .where(eq(pgSchema.occurrences.id, stale.id));
+              }
+            }
+
+            return 'inserted';
+          }),
+      );
+
+      if (result === 'insert-failed') {
+        return yield* Effect.fail(
+          issueStoreDefect('failed to insert issue row'),
+        );
+      }
+      if (result === 'missing-issue') {
+        return yield* Effect.fail(
+          issueStoreDefect('issue row missing after occurrence insert'),
+        );
+      }
     });
   };
 
@@ -143,7 +167,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     issueId: number,
   ): Effect.Effect<void, IssueStoreError | IssueNotFound, never> => {
     return Effect.gen(function* () {
-      const rows = yield* wrapStoreError(async () =>
+      const rows = yield* wrapStoreError(() =>
         db
           .select({ id: pgSchema.issues.id })
           .from(pgSchema.issues)
@@ -154,15 +178,15 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
       }
 
       const now = new Date();
-      yield* wrapStoreError(async () => {
-        await db
+      yield* wrapStoreError(() =>
+        db
           .update(pgSchema.issues)
           .set({
             status: 'resolved',
             resolvedAt: now,
           })
-          .where(eq(pgSchema.issues.id, issueId));
-      });
+          .where(eq(pgSchema.issues.id, issueId)),
+      );
     });
   };
 
@@ -170,7 +194,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     issueId: number,
   ): Effect.Effect<void, IssueStoreError | IssueNotFound, never> => {
     return Effect.gen(function* () {
-      const rows = yield* wrapStoreError(async () =>
+      const rows = yield* wrapStoreError(() =>
         db
           .select({ id: pgSchema.issues.id })
           .from(pgSchema.issues)
@@ -180,15 +204,15 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
         return yield* Effect.fail(new IssueNotFound({ issueId }));
       }
 
-      yield* wrapStoreError(async () => {
-        await db
+      yield* wrapStoreError(() =>
+        db
           .update(pgSchema.issues)
           .set({
             status: 'unresolved',
             resolvedAt: null,
           })
-          .where(eq(pgSchema.issues.id, issueId));
-      });
+          .where(eq(pgSchema.issues.id, issueId)),
+      );
     });
   };
 
@@ -196,7 +220,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     filter: ListIssuesFilter,
   ): Effect.Effect<ReadonlyArray<Issue>, IssueStoreError, never> => {
     return Effect.gen(function* () {
-      const rows = yield* wrapStoreError(async () => {
+      const rows = yield* wrapStoreError(() => {
         const conditions = [];
         if (filter.status !== undefined) {
           conditions.push(eq(pgSchema.issues.status, filter.status));
@@ -239,7 +263,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     issueId: number,
   ): Effect.Effect<Issue, IssueStoreError | IssueNotFound, never> => {
     return Effect.gen(function* () {
-      const rows = yield* wrapStoreError(async () =>
+      const rows = yield* wrapStoreError(() =>
         db
           .select()
           .from(pgSchema.issues)
@@ -268,7 +292,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     issueId: number,
   ): Effect.Effect<ReadonlyArray<Occurrence>, IssueStoreError, never> => {
     return Effect.gen(function* () {
-      const rows = yield* wrapStoreError(async () =>
+      const rows = yield* wrapStoreError(() =>
         db
           .select()
           .from(pgSchema.occurrences)
@@ -304,7 +328,7 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     service: string,
   ): Effect.Effect<Date | null, IssueStoreError, never> => {
     return Effect.gen(function* () {
-      const rows = yield* wrapStoreError(async () =>
+      const rows = yield* wrapStoreError(() =>
         db
           .select()
           .from(pgSchema.ingestState)
@@ -322,8 +346,8 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     service: string,
     cursorEnd: Date,
   ): Effect.Effect<void, IssueStoreError, never> => {
-    return wrapStoreError(async () => {
-      await db
+    return wrapStoreError(() =>
+      db
         .insert(pgSchema.ingestState)
         .values({
           service,
@@ -336,8 +360,8 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
             cursorEnd,
             updatedAt: new Date(),
           },
-        });
-    });
+        }),
+    );
   };
 
   return {
@@ -364,9 +388,7 @@ export const PgIssueStoreLayer = Layer.scoped(
         }),
     );
     const db = drizzle(sql, { schema: pgSchema });
-    yield* wrapStoreError(async () => {
-      await migrate(db, { migrationsFolder });
-    });
+    yield* wrapStoreError(() => migrate(db, { migrationsFolder }));
     return makePgStore(db);
   }),
 );

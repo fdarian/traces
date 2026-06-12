@@ -186,6 +186,62 @@ describe('SqliteIssueStore', () => {
     expect(issues[0].occurrenceCount).toBe(1);
   });
 
+  test('keeps lastSeen monotonic when a late span arrives via overlap', async () => {
+    dbPath = tempDbPath();
+    const later = Date.now() + 5000;
+    const earlier = Date.now();
+
+    await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        yield* store.upsertOccurrence({
+          fingerprint: 'fp-last-seen',
+          title: 'TimeoutError: request timed out',
+          service: 'api',
+          exceptionType: 'TimeoutError',
+          traceId: 'trace-later',
+          spanId: 'span-later',
+          serviceName: 'api',
+          timestamp: later,
+          exceptionMessage: 'request timed out after 30000ms',
+          attributes: {},
+        });
+      }),
+    );
+
+    await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        yield* store.upsertOccurrence({
+          fingerprint: 'fp-last-seen',
+          title: 'TimeoutError: request timed out',
+          service: 'api',
+          exceptionType: 'TimeoutError',
+          traceId: 'trace-earlier',
+          spanId: 'span-earlier',
+          serviceName: 'api',
+          timestamp: earlier,
+          exceptionMessage: 'request timed out after 30000ms',
+          attributes: {},
+        });
+      }),
+    );
+
+    const issue = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        const issues = yield* store.listIssues({});
+        return issues[0];
+      }),
+    );
+
+    expect(issue.occurrenceCount).toBe(2);
+    expect(issue.lastSeen.getTime()).toBe(later);
+  });
+
   test('tracks ingest cursor per service', async () => {
     dbPath = tempDbPath();
     const cursor = new Date('2026-06-12T10:00:00.000Z');
