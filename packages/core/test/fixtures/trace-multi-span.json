@@ -1,0 +1,172 @@
+{
+  "result": {
+    "resourceSpans": [
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": { "stringValue": "web" }
+            },
+            {
+              "key": "deployment.environment",
+              "value": { "stringValue": "production" }
+            }
+          ]
+        },
+        "scopeSpans": [
+          {
+            "scope": {
+              "name": "test-tracer",
+              "version": "1.0.0"
+            },
+            "spans": [
+              {
+                "traceId": "abc123def45678901234567890abcdef",
+                "spanId": "span001",
+                "name": "GET /api/users",
+                "kind": 2,
+                "startTimeUnixNano": "1700000000000000000",
+                "endTimeUnixNano": "1700000000600000000",
+                "attributes": [
+                  {
+                    "key": "http.method",
+                    "value": { "stringValue": "GET" }
+                  },
+                  {
+                    "key": "http.status_code",
+                    "value": { "intValue": 200 }
+                  },
+                  {
+                    "key": "http.secure",
+                    "value": { "boolValue": true }
+                  },
+                  {
+                    "key": "http.latency",
+                    "value": { "doubleValue": 45.5 }
+                  },
+                  {
+                    "key": "http.tags",
+                    "value": {
+                      "arrayValue": {
+                        "values": [
+                          { "stringValue": "api" },
+                          { "stringValue": "users" }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "key": "http.headers",
+                    "value": {
+                      "kvlistValue": {
+                        "values": [
+                          {
+                            "key": "content-type",
+                            "value": { "stringValue": "application/json" }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ],
+                "events": [
+                  {
+                    "timeUnixNano": "1700000000100000000",
+                    "name": "processing",
+                    "attributes": [
+                      {
+                        "key": "stage",
+                        "value": { "stringValue": "validation" }
+                      }
+                    ]
+                  }
+                ],
+                "status": {
+                  "code": 1,
+                  "message": ""
+                }
+              },
+              {
+                "traceId": "abc123def45678901234567890abcdef",
+                "spanId": "span002",
+                "parentSpanId": "span001",
+                "name": "db.query",
+                "kind": 3,
+                "startTimeUnixNano": "1700000000100000000",
+                "endTimeUnixNano": "1700000000500000000",
+                "attributes": [
+                  {
+                    "key": "db.statement",
+                    "value": {
+                      "stringValue": "SELECT * FROM users WHERE id = ?"
+                    }
+                  }
+                ],
+                "events": [
+                  {
+                    "timeUnixNano": "1700000000200000000",
+                    "name": "exception",
+                    "attributes": [
+                      {
+                        "key": "exception.type",
+                        "value": { "stringValue": "DatabaseConnectionError" }
+                      },
+                      {
+                        "key": "exception.message",
+                        "value": {
+                          "stringValue": "connection refused to postgres:5432"
+                        }
+                      },
+                      {
+                        "key": "exception.stacktrace",
+                        "value": {
+                          "stringValue": "DatabaseConnectionError: connection refused\n    at db.query (/app/db.ts:42:10)"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "status": {
+                  "code": 2,
+                  "message": "connection refused to postgres:5432"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": { "stringValue": "db" }
+            }
+          ]
+        },
+        "scopeSpans": [
+          {
+            "scope": {
+              "name": "db-tracer"
+            },
+            "spans": [
+              {
+                "traceId": "abc123def45678901234567890abcdef",
+                "spanId": "span003",
+                "parentSpanId": "span002",
+                "name": "db.connection",
+                "kind": 1,
+                "startTimeUnixNano": "1700000000150000000",
+                "endTimeUnixNano": "1700000000400000000",
+                "attributes": [],
+                "events": [],
+                "status": {}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

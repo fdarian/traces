@@ -1,0 +1,155 @@
+{
+  "result": {
+    "resourceSpans": [
+      {
+        "resource": {
+          "attributes": [
+            { "key": "service.name", "value": { "stringValue": "web" } }
+          ]
+        },
+        "scopeSpans": [
+          {
+            "scope": { "name": "seed-script" },
+            "spans": [
+              {
+                "traceId": "5a09233a69f976d42e9807c3164e7de1",
+                "spanId": "64682c4becbe39f5",
+                "flags": 257,
+                "name": "GET /dashboard",
+                "kind": 1,
+                "startTimeUnixNano": "1781270068282000000",
+                "endTimeUnixNano": "1781270068889000000",
+                "attributes": [
+                  {
+                    "key": "operation",
+                    "value": { "stringValue": "GET /dashboard" }
+                  },
+                  { "key": "span.kind", "value": { "stringValue": "server" } }
+                ],
+                "status": {}
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resource": {
+          "attributes": [
+            { "key": "service.name", "value": { "stringValue": "web" } }
+          ]
+        },
+        "scopeSpans": [
+          {
+            "scope": { "name": "seed-script" },
+            "spans": [
+              {
+                "traceId": "ca30626a4281b50cae64c3dfe4d09569",
+                "spanId": "5c87961d39a5df87",
+                "flags": 257,
+                "name": "GET /",
+                "kind": 1,
+                "startTimeUnixNano": "1781270068284000000",
+                "endTimeUnixNano": "1781270068708000000",
+                "attributes": [
+                  { "key": "operation", "value": { "stringValue": "GET /" } },
+                  { "key": "span.kind", "value": { "stringValue": "server" } }
+                ],
+                "status": {}
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resource": {
+          "attributes": [
+            { "key": "service.name", "value": { "stringValue": "web" } }
+          ]
+        },
+        "scopeSpans": [
+          {
+            "scope": { "name": "seed-script" },
+            "spans": [
+              {
+                "traceId": "d80003b36463581f7695696c9f635a15",
+                "spanId": "475bddac08d8d6d6",
+                "flags": 257,
+                "name": "GET /",
+                "kind": 1,
+                "startTimeUnixNano": "1781270068283000000",
+                "endTimeUnixNano": "1781270069039000000",
+                "attributes": [
+                  { "key": "operation", "value": { "stringValue": "GET /" } },
+                  { "key": "span.kind", "value": { "stringValue": "server" } }
+                ],
+                "status": {}
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resource": {
+          "attributes": [
+            { "key": "service.name", "value": { "stringValue": "web" } }
+          ]
+        },
+        "scopeSpans": [
+          {
+            "scope": { "name": "seed-script" },
+            "spans": [
+              {
+                "traceId": "736e9242e4f1872c92235e070f817fdd",
+                "spanId": "bece9f94ffd33965",
+                "flags": 257,
+                "name": "POST /api/checkout",
+                "kind": 1,
+                "startTimeUnixNano": "1781270068285000000",
+                "endTimeUnixNano": "1781270068766000000",
+                "attributes": [
+                  {
+                    "key": "operation",
+                    "value": { "stringValue": "POST /api/checkout" }
+                  },
+                  { "key": "span.kind", "value": { "stringValue": "server" } }
+                ],
+                "status": {}
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resource": {
+          "attributes": [
+            { "key": "service.name", "value": { "stringValue": "web" } }
+          ]
+        },
+        "scopeSpans": [
+          {
+            "scope": { "name": "seed-script" },
+            "spans": [
+              {
+                "traceId": "2b9448331c7919c4954c0e4463abf58d",
+                "spanId": "f2fcbf12a6960b2a",
+                "flags": 257,
+                "name": "GET /api/health",
+                "kind": 1,
+                "startTimeUnixNano": "1781270068283000000",
+                "endTimeUnixNano": "1781270068788000000",
+                "attributes": [
+                  {
+                    "key": "operation",
+                    "value": { "stringValue": "GET /api/health" }
+                  },
+                  { "key": "span.kind", "value": { "stringValue": "server" } }
+                ],
+                "status": {}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

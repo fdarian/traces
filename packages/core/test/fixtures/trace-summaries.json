@@ -1,0 +1,188 @@
+{
+  "summaries": [
+    {
+      "traceId": "5a09233a69f976d42e9807c3164e7de1",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /dashboard",
+      "minStartTimeUnixNano": "1781270068282000000",
+      "maxEndTimeUnixNano": "1781270068889000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "ca30626a4281b50cae64c3dfe4d09569",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /",
+      "minStartTimeUnixNano": "1781270068284000000",
+      "maxEndTimeUnixNano": "1781270068708000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "d80003b36463581f7695696c9f635a15",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /",
+      "minStartTimeUnixNano": "1781270068283000000",
+      "maxEndTimeUnixNano": "1781270069039000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "736e9242e4f1872c92235e070f817fdd",
+      "rootServiceName": "web",
+      "rootOperationName": "POST /api/checkout",
+      "minStartTimeUnixNano": "1781270068285000000",
+      "maxEndTimeUnixNano": "1781270068766000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "2b9448331c7919c4954c0e4463abf58d",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /api/health",
+      "minStartTimeUnixNano": "1781270068283000000",
+      "maxEndTimeUnixNano": "1781270068788000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "a4664d3eaa90e6e7e49d8ca08ae36e6c",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /",
+      "minStartTimeUnixNano": "1781270068285000000",
+      "maxEndTimeUnixNano": "1781270068566000000",
+      "spanCount": 1,
+      "errorSpanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1, "errorSpanCount": 1 }]
+    },
+    {
+      "traceId": "f7e4f0a50c7b305ee83aa9ffe958fe8f",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /dashboard",
+      "minStartTimeUnixNano": "1781270068283000000",
+      "maxEndTimeUnixNano": "1781270068304000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "009314ad2945cd5bebccf1096c208564",
+      "rootServiceName": "web",
+      "rootOperationName": "POST /api/checkout",
+      "minStartTimeUnixNano": "1781270068284000000",
+      "maxEndTimeUnixNano": "1781270068353000000",
+      "spanCount": 1,
+      "errorSpanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1, "errorSpanCount": 1 }]
+    },
+    {
+      "traceId": "a13b3408e6fbdb3df22c42562f316b99",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /dashboard",
+      "minStartTimeUnixNano": "1781270068285000000",
+      "maxEndTimeUnixNano": "1781270068620000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "408e7af6ccadc4c30948a884a7455041",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /dashboard",
+      "minStartTimeUnixNano": "1781270068285000000",
+      "maxEndTimeUnixNano": "1781270068425000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "ce1ace00992fce53c9a261dae799d00b",
+      "rootServiceName": "web",
+      "rootOperationName": "POST /api/checkout",
+      "minStartTimeUnixNano": "1781270068283000000",
+      "maxEndTimeUnixNano": "1781270068989000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "3c64a6f376224b61e40ee551fe278e83",
+      "rootServiceName": "web",
+      "rootOperationName": "POST /api/checkout",
+      "minStartTimeUnixNano": "1781270068284000000",
+      "maxEndTimeUnixNano": "1781270068652000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "156ef8075a551d10406df4415f377a4a",
+      "rootServiceName": "web",
+      "rootOperationName": "POST /api/checkout",
+      "minStartTimeUnixNano": "1781270068285000000",
+      "maxEndTimeUnixNano": "1781270068483000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "eb7ad380d4c84260a4cb908e9b50737f",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /",
+      "minStartTimeUnixNano": "1781270068285000000",
+      "maxEndTimeUnixNano": "1781270069021000000",
+      "spanCount": 1,
+      "errorSpanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1, "errorSpanCount": 1 }]
+    },
+    {
+      "traceId": "267ff882786c8abdfd1f8398236b84a8",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /",
+      "minStartTimeUnixNano": "1781270068282000000",
+      "maxEndTimeUnixNano": "1781270068601000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "1b1f50d69d8cb548ef153c288f33a16c",
+      "rootServiceName": "web",
+      "rootOperationName": "POST /api/checkout",
+      "minStartTimeUnixNano": "1781270068285000000",
+      "maxEndTimeUnixNano": "1781270068921000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "9c0bf58a56d83919f69230c008872874",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /",
+      "minStartTimeUnixNano": "1781270068284000000",
+      "maxEndTimeUnixNano": "1781270068645000000",
+      "spanCount": 1,
+      "errorSpanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1, "errorSpanCount": 1 }]
+    },
+    {
+      "traceId": "3993474a1ceb633f7fd4ab7dc0f1e8d9",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /",
+      "minStartTimeUnixNano": "1781270068283000000",
+      "maxEndTimeUnixNano": "1781270068297000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "1dbdb7cfaa2f42308fed984dcc005ffe",
+      "rootServiceName": "web",
+      "rootOperationName": "POST /api/checkout",
+      "minStartTimeUnixNano": "1781270068284000000",
+      "maxEndTimeUnixNano": "1781270068844000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    },
+    {
+      "traceId": "4c6a8d94fee7ad51de4872aaabde8177",
+      "rootServiceName": "web",
+      "rootOperationName": "GET /",
+      "minStartTimeUnixNano": "1781270068283000000",
+      "maxEndTimeUnixNano": "1781270068855000000",
+      "spanCount": 1,
+      "services": [{ "name": "web", "spanCount": 1 }]
+    }
+  ]
+}

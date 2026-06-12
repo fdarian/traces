@@ -1,0 +1,3 @@
+{
+  "services": ["api", "jaeger", "unknown_service:bun", "payments", "db", "web"]
+}

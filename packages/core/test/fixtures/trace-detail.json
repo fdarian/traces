@@ -1,0 +1,37 @@
+{
+  "result": {
+    "resourceSpans": [
+      {
+        "resource": {
+          "attributes": [
+            { "key": "service.name", "value": { "stringValue": "web" } }
+          ]
+        },
+        "scopeSpans": [
+          {
+            "scope": { "name": "seed-script" },
+            "spans": [
+              {
+                "traceId": "5a09233a69f976d42e9807c3164e7de1",
+                "spanId": "64682c4becbe39f5",
+                "flags": 257,
+                "name": "GET /dashboard",
+                "kind": 1,
+                "startTimeUnixNano": "1781270068282000000",
+                "endTimeUnixNano": "1781270068889000000",
+                "attributes": [
+                  {
+                    "key": "operation",
+                    "value": { "stringValue": "GET /dashboard" }
+                  },
+                  { "key": "span.kind", "value": { "stringValue": "server" } }
+                ],
+                "status": {}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

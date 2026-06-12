@@ -1,0 +1,8 @@
+{
+  "operations": [
+    { "name": "GET /", "spanKind": "internal" },
+    { "name": "GET /dashboard", "spanKind": "internal" },
+    { "name": "POST /api/checkout", "spanKind": "internal" },
+    { "name": "GET /api/health", "spanKind": "internal" }
+  ]
+}
