@@ -3,7 +3,6 @@ import { TraceBackend } from '@traces/core';
 import { Effect } from 'effect';
 import * as S from 'effect/Schema';
 import { RuntimeServer } from '#/server/runtime';
-import { wrapErrorsMiddleware } from './errors/server-fn-middleware';
 
 const SearchTracesInputSchema = S.Struct({
   service: S.String,
@@ -17,7 +16,6 @@ const SearchTracesInputSchema = S.Struct({
 });
 
 export const searchTraces = createServerFn({ method: 'GET' })
-  .middleware([wrapErrorsMiddleware])
   .inputValidator(S.standardSchemaV1(SearchTracesInputSchema))
   .handler(async ({ data }) => {
     const effect = Effect.gen(function* () {
