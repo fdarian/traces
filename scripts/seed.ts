@@ -1,4 +1,4 @@
-import { Span, TraceFlags, trace } from '@opentelemetry/api';
+import { context, trace } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
@@ -77,7 +77,7 @@ function emitTrace(
   errorRate: number,
   depth: number,
   parentService: string,
-  parentSpan?: Span,
+  parentCtx?: ReturnType<typeof context.active>,
 ) {
   if (depth > 3) return;
 
@@ -89,10 +89,8 @@ function emitTrace(
   const provider = providers[service];
   const tracer = provider.getTracer('seed-script');
 
-  const span = tracer.startSpan(operation, {
-    startTime: Date.now(),
-    ...(parentSpan && { parent: parentSpan.spanContext() }),
-  });
+  const ctx = parentCtx ?? context.active();
+  const span = tracer.startSpan(operation, { startTime: Date.now() }, ctx);
 
   span.setAttribute('operation', operation);
   span.setAttribute('span.kind', depth === 0 ? 'server' : 'internal');
@@ -111,8 +109,12 @@ function emitTrace(
   }
 
   const childCount = depth === 0 ? randomInt(1, 3) : randomInt(0, 2);
+  const childCtx = trace.setSpan(context.active(), span);
+
   for (let i = 0; i < childCount; i++) {
-    emitTrace(providers, errorRate, depth + 1, service, span);
+    context.with(childCtx, () => {
+      emitTrace(providers, errorRate, depth + 1, service, childCtx);
+    });
   }
 
   span.end(Date.now() + duration);
@@ -131,7 +133,9 @@ async function main() {
     emitTrace(providers, errorRate, 0, 'web');
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  for (const provider of Object.values(providers)) {
+    await provider.forceFlush();
+  }
 
   for (const provider of Object.values(providers)) {
     await provider.shutdown();
