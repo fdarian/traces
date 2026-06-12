@@ -16,7 +16,7 @@ const SearchTracesInputSchema = S.Struct({
 });
 
 export const searchTraces = createServerFn({ method: 'GET' })
-  .inputValidator(S.standardSchemaV1(SearchTracesInputSchema))
+  .validator(S.standardSchemaV1(SearchTracesInputSchema))
   .handler(async ({ data }) => {
     const effect = Effect.gen(function* () {
       const backend = yield* TraceBackend;
