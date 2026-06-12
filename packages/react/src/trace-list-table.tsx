@@ -16,6 +16,27 @@ export function TraceListTable(props: {
   readonly error: Error | null;
   readonly getTraceHref: (traceId: string) => string;
 }) {
+  const sortedTraces = useMemo(() => {
+    const arr = [...props.traces];
+    if (props.sort === 'start') {
+      arr.sort((a, b) => {
+        const aStart = BigInt(a.startTimeUnixNano);
+        const bStart = BigInt(b.startTimeUnixNano);
+        if (bStart > aStart) return 1;
+        if (bStart < aStart) return -1;
+        return 0;
+      });
+    } else {
+      arr.sort((a, b) => b.durationMs - a.durationMs);
+    }
+    return arr;
+  }, [props.traces, props.sort]);
+
+  const maxDuration = useMemo(() => {
+    if (props.traces.length === 0) return 1;
+    return Math.max(...props.traces.map((t) => t.durationMs), 1);
+  }, [props.traces]);
+
   if (props.error !== null) {
     return (
       <div className="px-4 py-12 text-body text-status-error">
@@ -35,37 +56,23 @@ export function TraceListTable(props: {
   }
 
   if (props.traces.length === 0) {
-    return <EmptyState message="no traces in this range" />;
+    return (
+      <div>
+        <EmptyState message="no traces in this range" />
+        {props.hasMore && (
+          <LoadMoreRow
+            isLoading={props.isLoading}
+            onLoadMore={props.onLoadMore}
+          />
+        )}
+      </div>
+    );
   }
-
-  const maxDuration = Math.max(...props.traces.map((t) => t.durationMs), 1);
-
-  const sortedTraces = useMemo(() => {
-    const arr = [...props.traces];
-    if (props.sort === 'start') {
-      arr.sort((a, b) => {
-        const aStart = BigInt(a.startTimeUnixNano);
-        const bStart = BigInt(b.startTimeUnixNano);
-        if (bStart > aStart) return 1;
-        if (bStart < aStart) return -1;
-        return 0;
-      });
-    } else {
-      arr.sort((a, b) => b.durationMs - a.durationMs);
-    }
-    return arr;
-  }, [props.traces, props.sort]);
 
   return (
     <div>
       <div className="flex h-8 items-center gap-3 border-b border-border-default px-3 text-label uppercase tracking-wide text-text-tertiary">
-        <button
-          type="button"
-          onClick={() => props.onSortChange('start')}
-          className="flex-1 text-left transition-colors duration-120 hover:text-text-primary"
-        >
-          start {props.sort === 'start' ? '▼' : ''}
-        </button>
+        <span className="flex-1 text-left">operation</span>
         <button
           type="button"
           onClick={() => props.onSortChange('duration')}
@@ -76,7 +83,13 @@ export function TraceListTable(props: {
         <span className="w-16 shrink-0 text-right">spans</span>
         <span className="w-16 shrink-0 text-right">errors</span>
         <span className="w-32 shrink-0">services</span>
-        <span className="w-24 shrink-0 text-right">start</span>
+        <button
+          type="button"
+          onClick={() => props.onSortChange('start')}
+          className="w-24 shrink-0 text-right transition-colors duration-120 hover:text-text-primary"
+        >
+          start {props.sort === 'start' ? '▼' : ''}
+        </button>
       </div>
 
       {sortedTraces.map((trace) => (
@@ -142,17 +155,29 @@ export function TraceListTable(props: {
       ))}
 
       {props.hasMore && (
-        <div className="flex h-10 items-center justify-center border-b border-border-subtle">
-          <button
-            type="button"
-            onClick={props.onLoadMore}
-            disabled={props.isLoading}
-            className="text-body text-text-secondary transition-colors duration-120 hover:text-text-primary disabled:text-text-tertiary"
-          >
-            {props.isLoading ? 'loading…' : 'load more'}
-          </button>
-        </div>
+        <LoadMoreRow
+          isLoading={props.isLoading}
+          onLoadMore={props.onLoadMore}
+        />
       )}
+    </div>
+  );
+}
+
+function LoadMoreRow(props: {
+  readonly isLoading: boolean;
+  readonly onLoadMore: () => void;
+}) {
+  return (
+    <div className="flex h-10 items-center justify-center border-b border-border-subtle">
+      <button
+        type="button"
+        onClick={props.onLoadMore}
+        disabled={props.isLoading}
+        className="text-body text-text-secondary transition-colors duration-120 hover:text-text-primary disabled:text-text-tertiary"
+      >
+        {props.isLoading ? 'loading…' : 'load more'}
+      </button>
     </div>
   );
 }
