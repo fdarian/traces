@@ -8,6 +8,8 @@ import { ServiceBadge, serviceColorValue } from './service-badge.js';
 import { StatusBadge } from './status-badge.js';
 import {
   buildSpanTree,
+  collectDefaultCollapsed,
+  type FlatSpanRow,
   flattenSpanTree,
   ORPHAN_ROOT_ID,
   spanStartMs,
@@ -18,11 +20,15 @@ import {
   timeToX,
   type ZoomWindow,
 } from './utils/time-scale.js';
+import { MINIMAP_HEIGHT, WaterfallMinimap } from './waterfall-minimap.js';
 
 const ROW_HEIGHT = 32;
 const TREE_MIN_WIDTH = 280;
 const AXIS_MIN_WIDTH = 320;
 const INDENT_PX = 16;
+const VIRTUALIZE_THRESHOLD = 200;
+const AUTO_COLLAPSE_THRESHOLD = 500;
+const SCROLL_OVERSCAN = 8;
 
 function spanEndMs(span: Span): number {
   return normalizeTimestampToMs(span.endTimeUnixNano);
@@ -30,6 +36,43 @@ function spanEndMs(span: Span): number {
 
 function isErrorSpan(span: Span): boolean {
   return span.status.code === 'error';
+}
+
+function computeVisibleRange(
+  rowCount: number,
+  scrollTop: number,
+  viewportHeight: number,
+  virtualize: boolean,
+): {
+  readonly startIndex: number;
+  readonly endIndex: number;
+  readonly offsetTop: number;
+  readonly totalHeight: number;
+} {
+  const totalHeight = rowCount * ROW_HEIGHT;
+  if (!virtualize || rowCount <= VIRTUALIZE_THRESHOLD) {
+    return {
+      startIndex: 0,
+      endIndex: rowCount,
+      offsetTop: 0,
+      totalHeight,
+    };
+  }
+
+  const startIndex = Math.max(
+    0,
+    Math.floor(scrollTop / ROW_HEIGHT) - SCROLL_OVERSCAN,
+  );
+  const visibleCount =
+    Math.ceil(viewportHeight / ROW_HEIGHT) + SCROLL_OVERSCAN * 2;
+  const endIndex = Math.min(rowCount, startIndex + visibleCount);
+
+  return {
+    startIndex,
+    endIndex,
+    offsetTop: startIndex * ROW_HEIGHT,
+    totalHeight,
+  };
 }
 
 export function TraceWaterfall(props: {
@@ -44,10 +87,19 @@ export function TraceWaterfall(props: {
   readonly scrollToSpanId?: string | null;
 }) {
   const axisRef = useRef<HTMLDivElement>(null);
+  const treeScrollRef = useRef<HTMLDivElement>(null);
+  const axisScrollRef = useRef<HTMLDivElement>(null);
   const [axisWidth, setAxisWidth] = useState(AXIS_MIN_WIDTH);
-  const [internalCollapsed, setInternalCollapsed] = useState(
-    () => new Set<string>(),
-  );
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(400);
+  const [internalCollapsed, setInternalCollapsed] = useState(() => {
+    const tree = buildSpanTree(props.trace.spans);
+    return collectDefaultCollapsed(
+      tree,
+      props.trace.spans.length,
+      AUTO_COLLAPSE_THRESHOLD,
+    );
+  });
   const bounds = useMemo(
     () => computeTraceTimeBounds(props.trace.spans),
     [props.trace.spans],
@@ -73,6 +125,18 @@ export function TraceWaterfall(props: {
     [tree, collapsed],
   );
 
+  const virtualize = rows.length > VIRTUALIZE_THRESHOLD;
+  const visibleRange = computeVisibleRange(
+    rows.length,
+    scrollTop,
+    viewportHeight,
+    virtualize,
+  );
+  const visibleRows = rows.slice(
+    visibleRange.startIndex,
+    visibleRange.endIndex,
+  );
+
   useEffect(() => {
     const element = axisRef.current;
     if (element === null) {
@@ -89,6 +153,43 @@ export function TraceWaterfall(props: {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const element = axisScrollRef.current;
+    if (element === null) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry !== undefined) {
+        setViewportHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(element);
+    setViewportHeight(element.clientHeight);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const targetSpanId = props.scrollToSpanId;
+    if (targetSpanId === undefined || targetSpanId === null) {
+      return;
+    }
+    const index = rows.findIndex((row) => row.spanId === targetSpanId);
+    if (index === -1) {
+      return;
+    }
+    const top = index * ROW_HEIGHT;
+    const treeElement = treeScrollRef.current;
+    const axisElement = axisScrollRef.current;
+    if (treeElement !== null) {
+      treeElement.scrollTop = top;
+    }
+    if (axisElement !== null) {
+      axisElement.scrollTop = top;
+    }
+    setScrollTop(top);
+  }, [props.scrollToSpanId, rows]);
+
   const ticks = useMemo(() => generateTimeTicks(zoom, 8), [zoom]);
 
   const toggleCollapsed = (spanId: string) => {
@@ -101,33 +202,71 @@ export function TraceWaterfall(props: {
     setCollapsed(next);
   };
 
+  const syncScroll = (source: 'tree' | 'axis', nextTop: number) => {
+    setScrollTop(nextTop);
+    const treeElement = treeScrollRef.current;
+    const axisElement = axisScrollRef.current;
+    if (source === 'tree' && axisElement !== null) {
+      axisElement.scrollTop = nextTop;
+    }
+    if (source === 'axis' && treeElement !== null) {
+      treeElement.scrollTop = nextTop;
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col border border-border-subtle bg-bg-subtle">
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
-          className="shrink-0 overflow-y-auto border-r border-border-subtle"
+          className="flex shrink-0 flex-col border-r border-border-subtle"
           style={{ minWidth: TREE_MIN_WIDTH, width: '38%' }}
         >
-          <div className="sticky top-0 z-10 flex h-8 items-center border-b border-border-default bg-bg-subtle px-3 text-label uppercase tracking-wide text-text-tertiary">
+          <div
+            className="shrink-0 border-b border-border-default bg-bg-subtle"
+            style={{ height: MINIMAP_HEIGHT }}
+          />
+          <div className="sticky top-0 z-10 flex h-8 shrink-0 items-center border-b border-border-default bg-bg-subtle px-3 text-label uppercase tracking-wide text-text-tertiary">
             span
           </div>
-          {rows.map((row) => (
-            <WaterfallTreeRow
-              key={row.spanId}
-              row={row}
-              selected={selectedSpanId === row.spanId}
-              collapsed={collapsed.has(row.spanId)}
-              onToggle={() => toggleCollapsed(row.spanId)}
-              onSelect={() => {
-                if (onSelectSpan !== undefined && row.span !== null) {
-                  onSelectSpan(row.spanId);
-                }
-              }}
-            />
-          ))}
+          <div
+            ref={treeScrollRef}
+            className="min-h-0 flex-1 overflow-y-auto"
+            onScroll={(event) => {
+              syncScroll('tree', event.currentTarget.scrollTop);
+            }}
+          >
+            <div
+              style={{ height: visibleRange.totalHeight, position: 'relative' }}
+            >
+              <div
+                style={{ transform: `translateY(${visibleRange.offsetTop}px)` }}
+              >
+                {visibleRows.map((row) => (
+                  <WaterfallTreeRow
+                    key={row.spanId}
+                    row={row}
+                    selected={selectedSpanId === row.spanId}
+                    collapsed={collapsed.has(row.spanId)}
+                    onToggle={() => toggleCollapsed(row.spanId)}
+                    onSelect={() => {
+                      if (onSelectSpan !== undefined && row.span !== null) {
+                        onSelectSpan(row.spanId);
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <WaterfallMinimap
+            spans={props.trace.spans}
+            zoom={zoom}
+            onZoomChange={setZoom}
+          />
+
           <div
             ref={axisRef}
             className="relative h-8 shrink-0 border-b border-border-default bg-bg-subtle"
@@ -145,80 +284,51 @@ export function TraceWaterfall(props: {
             ))}
           </div>
 
-          <div className="relative min-h-0 flex-1 overflow-y-auto bg-bg-inset">
-            {ticks.map((tick) => (
-              <div
-                key={`grid-${tick.ms}`}
-                className="pointer-events-none absolute top-0 bottom-0 border-l border-border-subtle"
-                style={{ left: `${tick.xRatio * 100}%` }}
-              />
-            ))}
-
-            {rows.map((row, index) => {
-              if (row.span === null) {
-                return (
-                  <div
-                    key={row.spanId}
-                    className="relative border-b border-border-subtle"
-                    style={{ height: ROW_HEIGHT }}
-                  />
-                );
-              }
-              const span = row.span;
-              const startX = timeToX(spanStartMs(span), zoom, axisWidth);
-              const endX = timeToX(spanEndMs(span), zoom, axisWidth);
-              const barWidth = Math.max(endX - startX, 2);
-              const serviceColor = serviceColorValue(span.resource.serviceName);
-              const error = isErrorSpan(span);
-              const selected = selectedSpanId === row.spanId;
-              const animate = props.animateBars === true;
-
-              return (
-                <button
-                  key={row.spanId}
-                  type="button"
-                  onClick={() => {
-                    if (onSelectSpan !== undefined) {
-                      onSelectSpan(row.spanId);
-                    }
+          <div
+            ref={axisScrollRef}
+            className="relative min-h-0 flex-1 overflow-y-auto bg-bg-inset"
+            onScroll={(event) => {
+              syncScroll('axis', event.currentTarget.scrollTop);
+            }}
+          >
+            <div
+              className="relative"
+              style={{ height: visibleRange.totalHeight }}
+            >
+              {ticks.map((tick) => (
+                <div
+                  key={`grid-${tick.ms}`}
+                  className="pointer-events-none absolute top-0 border-l border-border-subtle"
+                  style={{
+                    left: `${tick.xRatio * 100}%`,
+                    height: visibleRange.totalHeight,
                   }}
-                  className={`relative w-full border-b border-border-subtle transition-colors duration-120 hover:bg-bg-raised/40 ${selected ? 'bg-accent-subtle/30' : ''}`}
-                  style={{ height: ROW_HEIGHT }}
-                >
-                  <div
-                    className={animate ? 'waterfall-bar-animated' : undefined}
-                    style={{
-                      position: 'absolute',
-                      top: 4,
-                      bottom: 4,
-                      left: startX,
-                      width: barWidth,
-                      borderRadius: 2,
-                      backgroundColor: serviceColor,
-                      opacity: error ? 0.75 : 0.9,
-                      outline: selected
-                        ? '1px solid var(--accent)'
-                        : error
-                          ? '1px solid var(--status-error)'
-                          : undefined,
-                      transformOrigin: 'left center',
-                      transform: animate ? undefined : 'scaleX(1)',
-                      animation: animate
-                        ? `waterfall-bar-in 160ms ease-out ${index * 8}ms both`
-                        : undefined,
+                />
+              ))}
+
+              <div
+                style={{
+                  transform: `translateY(${visibleRange.offsetTop}px)`,
+                }}
+              >
+                {visibleRows.map((row, index) => (
+                  <WaterfallBarRow
+                    key={row.spanId}
+                    row={row}
+                    rowIndex={visibleRange.startIndex + index}
+                    zoom={zoom}
+                    axisWidth={axisWidth}
+                    selected={selectedSpanId === row.spanId}
+                    animate={props.animateBars === true}
+                    onSelect={() => {
+                      if (onSelectSpan !== undefined && row.span !== null) {
+                        onSelectSpan(row.spanId);
+                      }
                     }}
                   />
-                  {barWidth > 48 && (
-                    <span
-                      className="pointer-events-none absolute top-1/2 -translate-y-1/2 font-data text-data text-text-primary"
-                      style={{ left: startX + barWidth + 4 }}
-                    >
-                      <Duration ms={span.durationMs} />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -226,8 +336,76 @@ export function TraceWaterfall(props: {
   );
 }
 
+function WaterfallBarRow(props: {
+  readonly row: FlatSpanRow;
+  readonly rowIndex: number;
+  readonly zoom: ZoomWindow;
+  readonly axisWidth: number;
+  readonly selected: boolean;
+  readonly animate: boolean;
+  readonly onSelect: () => void;
+}) {
+  const row = props.row;
+  if (row.span === null) {
+    return (
+      <div
+        className="relative border-b border-border-subtle"
+        style={{ height: ROW_HEIGHT }}
+      />
+    );
+  }
+
+  const span = row.span;
+  const startX = timeToX(spanStartMs(span), props.zoom, props.axisWidth);
+  const endX = timeToX(spanEndMs(span), props.zoom, props.axisWidth);
+  const barWidth = Math.max(endX - startX, 2);
+  const serviceColor = serviceColorValue(span.resource.serviceName);
+  const error = isErrorSpan(span);
+
+  return (
+    <button
+      type="button"
+      onClick={props.onSelect}
+      className={`relative w-full border-b border-border-subtle transition-colors duration-120 hover:bg-bg-raised/40 ${props.selected ? 'bg-accent-subtle/30' : ''}`}
+      style={{ height: ROW_HEIGHT }}
+    >
+      <div
+        className={props.animate ? 'waterfall-bar-animated' : undefined}
+        style={{
+          position: 'absolute',
+          top: 4,
+          bottom: 4,
+          left: startX,
+          width: barWidth,
+          borderRadius: 2,
+          backgroundColor: serviceColor,
+          opacity: error ? 0.75 : 0.9,
+          outline: props.selected
+            ? '1px solid var(--accent)'
+            : error
+              ? '1px solid var(--status-error)'
+              : undefined,
+          transformOrigin: 'left center',
+          transform: props.animate ? undefined : 'scaleX(1)',
+          animation: props.animate
+            ? `waterfall-bar-in 160ms ease-out ${props.rowIndex * 8}ms both`
+            : undefined,
+        }}
+      />
+      {barWidth > 48 && (
+        <span
+          className="pointer-events-none absolute top-1/2 -translate-y-1/2 font-data text-data text-text-primary"
+          style={{ left: startX + barWidth + 4 }}
+        >
+          <Duration ms={span.durationMs} />
+        </span>
+      )}
+    </button>
+  );
+}
+
 function WaterfallTreeRow(props: {
-  readonly row: ReturnType<typeof flattenSpanTree>[number];
+  readonly row: FlatSpanRow;
   readonly selected: boolean;
   readonly collapsed: boolean;
   readonly onToggle: () => void;
