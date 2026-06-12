@@ -10,6 +10,7 @@ import {
   fingerprintFromErrorSpan,
   fingerprintFromException,
 } from './fingerprint.js';
+import { computeIngestCursorEnd } from './ingest-cursor.js';
 import { IssueStore } from './store.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 30000;
@@ -105,10 +106,6 @@ const ingestService = (
     }
 
     for (const summary of summaries) {
-      if (summary.errorSpanCount === 0) {
-        continue;
-      }
-
       const traceResult = yield* backend
         .getTrace(summary.traceId)
         .pipe(Effect.catchTag('TraceNotFound', () => Effect.succeed(null)));
@@ -164,7 +161,13 @@ const ingestService = (
       }
     }
 
-    yield* store.setIngestCursor(service, now);
+    const cursorEnd = computeIngestCursorEnd(
+      summaries,
+      now,
+      traceLimit,
+      overlapMs,
+    );
+    yield* store.setIngestCursor(service, cursorEnd);
   });
 };
 
@@ -232,10 +235,10 @@ export const runIngester = Effect.gen(function* () {
     initialLookbackMs,
     windowScaleRef,
   ).pipe(
-    Effect.repeat(Schedule.spaced(pollIntervalMs)),
     Effect.catchAllCause((cause) =>
       Effect.logError(`ingester tick failed: ${String(cause)}`),
     ),
+    Effect.repeat(Schedule.spaced(pollIntervalMs)),
   );
 });
 
