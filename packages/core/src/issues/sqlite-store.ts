@@ -11,11 +11,14 @@ import type {
   HistogramGranularity,
   Issue,
   IssueDetail,
+  IssueStoreStats,
   ListIssuesFilter,
   ListIssuesResult,
   Occurrence,
   OccurrenceBucket,
   PaginatedOccurrences,
+  TopIssue,
+  TrendBucket,
   UpsertOccurrenceInput,
 } from './model.js';
 import { OCCURRENCES_PAGE_SIZE } from './model.js';
@@ -563,6 +566,292 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
     });
   };
 
+  const getStats = (
+    filter: ListIssuesFilter,
+    startTime: Date,
+    endTime: Date,
+  ): Effect.Effect<IssueStoreStats, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const conditions = issueListFilterConditions(filter, sqliteSchema.issues);
+      const issueWhere = combineSqlConditions(conditions);
+      const windowMs = endTime.getTime() - startTime.getTime();
+      const prevStart = new Date(startTime.getTime() - windowMs);
+
+      const occurrenceQuery = db
+        .select({
+          total: sql<number>`count(*)`,
+        })
+        .from(sqliteSchema.occurrences)
+        .innerJoin(
+          sqliteSchema.issues,
+          eq(sqliteSchema.occurrences.issueId, sqliteSchema.issues.id),
+        )
+        .where(
+          and(
+            gte(sqliteSchema.occurrences.timestamp, startTime),
+            sql`${sqliteSchema.occurrences.timestamp} < ${endTime.getTime()}`,
+            issueWhere,
+          ),
+        );
+
+      const occurrenceRows = yield* wrapStoreError(() =>
+        occurrenceQuery.all(),
+      );
+      const occurrenceRow = occurrenceRows[0];
+      if (occurrenceRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('occurrence count query returned no rows'),
+        );
+      }
+      const occurrenceCount = occurrenceRow.total;
+
+      const prevOccurrenceRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(*)`,
+          })
+          .from(sqliteSchema.occurrences)
+          .innerJoin(
+            sqliteSchema.issues,
+            eq(sqliteSchema.occurrences.issueId, sqliteSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(sqliteSchema.occurrences.timestamp, prevStart),
+              sql`${sqliteSchema.occurrences.timestamp} < ${startTime.getTime()}`,
+              issueWhere,
+            ),
+          )
+          .all(),
+      );
+      const prevOccurrenceRow = prevOccurrenceRows[0];
+      if (prevOccurrenceRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('previous occurrence count query returned no rows'),
+        );
+      }
+      const occurrenceDelta = occurrenceCount - prevOccurrenceRow.total;
+
+      const activeIssueRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(distinct ${sqliteSchema.occurrences.issueId})`,
+          })
+          .from(sqliteSchema.occurrences)
+          .innerJoin(
+            sqliteSchema.issues,
+            eq(sqliteSchema.occurrences.issueId, sqliteSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(sqliteSchema.occurrences.timestamp, startTime),
+              sql`${sqliteSchema.occurrences.timestamp} < ${endTime.getTime()}`,
+              eq(sqliteSchema.issues.status, 'unresolved'),
+              issueWhere,
+            ),
+          )
+          .all(),
+      );
+      const activeIssueRow = activeIssueRows[0];
+      if (activeIssueRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('active issue count query returned no rows'),
+        );
+      }
+      const activeIssueCount = activeIssueRow.total;
+
+      const prevActiveIssueRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(distinct ${sqliteSchema.occurrences.issueId})`,
+          })
+          .from(sqliteSchema.occurrences)
+          .innerJoin(
+            sqliteSchema.issues,
+            eq(sqliteSchema.occurrences.issueId, sqliteSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(sqliteSchema.occurrences.timestamp, prevStart),
+              sql`${sqliteSchema.occurrences.timestamp} < ${startTime.getTime()}`,
+              eq(sqliteSchema.issues.status, 'unresolved'),
+              issueWhere,
+            ),
+          )
+          .all(),
+      );
+      const prevActiveIssueRow = prevActiveIssueRows[0];
+      if (prevActiveIssueRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('previous active issue count query returned no rows'),
+        );
+      }
+      const activeIssueDelta = activeIssueCount - prevActiveIssueRow.total;
+
+      const serviceRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(distinct ${sqliteSchema.occurrences.serviceName})`,
+          })
+          .from(sqliteSchema.occurrences)
+          .innerJoin(
+            sqliteSchema.issues,
+            eq(sqliteSchema.occurrences.issueId, sqliteSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(sqliteSchema.occurrences.timestamp, startTime),
+              sql`${sqliteSchema.occurrences.timestamp} < ${endTime.getTime()}`,
+              issueWhere,
+            ),
+          )
+          .all(),
+      );
+      const serviceRow = serviceRows[0];
+      if (serviceRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('service count query returned no rows'),
+        );
+      }
+      const serviceCount = serviceRow.total;
+
+      const prevServiceRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(distinct ${sqliteSchema.occurrences.serviceName})`,
+          })
+          .from(sqliteSchema.occurrences)
+          .innerJoin(
+            sqliteSchema.issues,
+            eq(sqliteSchema.occurrences.issueId, sqliteSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(sqliteSchema.occurrences.timestamp, prevStart),
+              sql`${sqliteSchema.occurrences.timestamp} < ${startTime.getTime()}`,
+              issueWhere,
+            ),
+          )
+          .all(),
+      );
+      const prevServiceRow = prevServiceRows[0];
+      if (prevServiceRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('previous service count query returned no rows'),
+        );
+      }
+      const serviceDelta = serviceCount - prevServiceRow.total;
+
+      return {
+        occurrenceCount,
+        occurrenceDelta,
+        activeIssueCount,
+        activeIssueDelta,
+        serviceCount,
+        serviceDelta,
+      };
+    });
+  };
+
+  function sqliteTrendBucketExpr(windowMs: number) {
+    if (windowMs <= 60 * 60 * 1000) {
+      // 5-minute buckets for <= 1h
+      return sql<string>`strftime('%Y-%m-%d %H:%M:00', (${sqliteSchema.occurrences.timestamp} / 1000 / 300) * 300, 'unixepoch')`;
+    }
+    if (windowMs <= 24 * 60 * 60 * 1000) {
+      // hour buckets for <= 24h
+      return sql<string>`strftime('%Y-%m-%d %H:00:00', ${sqliteSchema.occurrences.timestamp} / 1000, 'unixepoch')`;
+    }
+    // day buckets for > 24h
+    return sql<string>`strftime('%Y-%m-%d', ${sqliteSchema.occurrences.timestamp} / 1000, 'unixepoch')`;
+  }
+
+  const getOccurrenceTrend = (
+    filter: ListIssuesFilter,
+    startTime: Date,
+    endTime: Date,
+  ): Effect.Effect<ReadonlyArray<TrendBucket>, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const conditions = issueListFilterConditions(filter, sqliteSchema.issues);
+      const issueWhere = combineSqlConditions(conditions);
+      const windowMs = endTime.getTime() - startTime.getTime();
+      const bucketExpr = sqliteTrendBucketExpr(windowMs);
+
+      const rows = yield* wrapStoreError(() =>
+        db
+          .select({
+            bucket: bucketExpr,
+            count: sql<number>`count(*)`,
+          })
+          .from(sqliteSchema.occurrences)
+          .innerJoin(
+            sqliteSchema.issues,
+            eq(sqliteSchema.occurrences.issueId, sqliteSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(sqliteSchema.occurrences.timestamp, startTime),
+              sql`${sqliteSchema.occurrences.timestamp} < ${endTime.getTime()}`,
+              issueWhere,
+            ),
+          )
+          .groupBy(bucketExpr)
+          .orderBy(bucketExpr)
+          .all(),
+      );
+
+      const result: Array<TrendBucket> = [];
+      for (const row of rows) {
+        const bucketDate = parseSqliteBucketStart(
+          row.bucket,
+          windowMs <= 24 * 60 * 60 * 1000 ? 'hour' : 'day',
+        );
+        result.push({
+          bucketStart: bucketDate,
+          count: row.count,
+        });
+      }
+      return result;
+    });
+  };
+
+  const getTopUnresolvedIssues = (
+    filter: ListIssuesFilter,
+    limit: number,
+  ): Effect.Effect<ReadonlyArray<TopIssue>, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const conditions = issueListFilterConditions(filter, sqliteSchema.issues);
+      const whereClause = combineSqlConditions(conditions);
+
+      const rows = yield* wrapStoreError(() => {
+        let query = db
+          .select()
+          .from(sqliteSchema.issues)
+          .where(eq(sqliteSchema.issues.status, 'unresolved'))
+          .$dynamic();
+        if (whereClause !== undefined) {
+          query = query.where(and(whereClause, eq(sqliteSchema.issues.status, 'unresolved')));
+        }
+        return query
+          .orderBy(sql`${sqliteSchema.issues.occurrenceCount} desc`)
+          .limit(limit)
+          .all();
+      });
+
+      const result: Array<TopIssue> = [];
+      for (const row of rows) {
+        result.push({
+          id: row.id,
+          title: row.title,
+          service: row.service,
+          occurrenceCount: row.occurrenceCount,
+          lastSeen: row.lastSeen,
+        });
+      }
+      return result;
+    });
+  };
+
   const getIngestCursor = (
     service: string,
   ): Effect.Effect<Date | null, IssueStoreError, never> => {
@@ -616,6 +905,9 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
     getIssueOccurrencesPaginated,
     getOccurrenceHistogram,
     getOccurrenceHistograms,
+    getStats,
+    getOccurrenceTrend,
+    getTopUnresolvedIssues,
     getIngestCursor,
     setIngestCursor,
   };

@@ -30,12 +30,15 @@ export type {
   Issue,
   IssueDetail,
   IssueStatus,
+  IssueStoreStats,
   ListIssuesFilter,
   ListIssuesResult,
   ListIssuesSummary,
   Occurrence,
   OccurrenceBucket,
   PaginatedOccurrences,
+  TopIssue,
+  TrendBucket,
   UpsertOccurrenceInput,
 } from './issues/model.js';
 export { OCCURRENCES_PAGE_SIZE } from './issues/model.js';
@@ -62,6 +65,16 @@ export type {
   TraceSummary,
   TraceSummaryService,
 } from './model.js';
+export {
+  computePercentiles,
+  percentile,
+} from './percentiles.js';
+export {
+  computeServiceHealth,
+} from './service-health.js';
+export type {
+  ServiceHealth,
+} from './service-health.js';
 export {
   extractExceptionInfo,
   normalizeAttribute,

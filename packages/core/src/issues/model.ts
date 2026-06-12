@@ -67,6 +67,28 @@ export interface OccurrenceBucket {
   readonly count: number;
 }
 
+export interface TrendBucket {
+  readonly bucketStart: Date;
+  readonly count: number;
+}
+
+export interface IssueStoreStats {
+  readonly occurrenceCount: number;
+  readonly occurrenceDelta: number;
+  readonly activeIssueCount: number;
+  readonly activeIssueDelta: number;
+  readonly serviceCount: number;
+  readonly serviceDelta: number;
+}
+
+export interface TopIssue {
+  readonly id: number;
+  readonly title: string;
+  readonly service: string;
+  readonly occurrenceCount: number;
+  readonly lastSeen: Date;
+}
+
 export interface PaginatedOccurrences {
   readonly occurrences: ReadonlyArray<Occurrence>;
   readonly page: number;

@@ -11,11 +11,14 @@ import type {
   HistogramGranularity,
   Issue,
   IssueDetail,
+  IssueStoreStats,
   ListIssuesFilter,
   ListIssuesResult,
   Occurrence,
   OccurrenceBucket,
   PaginatedOccurrences,
+  TopIssue,
+  TrendBucket,
   UpsertOccurrenceInput,
 } from './model.js';
 import { OCCURRENCES_PAGE_SIZE } from './model.js';
@@ -540,6 +543,278 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     });
   };
 
+  const getStats = (
+    filter: ListIssuesFilter,
+    startTime: Date,
+    endTime: Date,
+  ): Effect.Effect<IssueStoreStats, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const conditions = issueListFilterConditions(filter, pgSchema.issues);
+      const issueWhere = combineSqlConditions(conditions);
+      const windowMs = endTime.getTime() - startTime.getTime();
+      const prevStart = new Date(startTime.getTime() - windowMs);
+
+      const occurrenceRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(*)::int`,
+          })
+          .from(pgSchema.occurrences)
+          .innerJoin(
+            pgSchema.issues,
+            eq(pgSchema.occurrences.issueId, pgSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(pgSchema.occurrences.timestamp, startTime),
+              sql`${pgSchema.occurrences.timestamp} < ${endTime}`,
+              issueWhere,
+            ),
+          ),
+      );
+      const occurrenceRow = occurrenceRows[0];
+      if (occurrenceRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('occurrence count query returned no rows'),
+        );
+      }
+      const occurrenceCount = occurrenceRow.total;
+
+      const prevOccurrenceRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(*)::int`,
+          })
+          .from(pgSchema.occurrences)
+          .innerJoin(
+            pgSchema.issues,
+            eq(pgSchema.occurrences.issueId, pgSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(pgSchema.occurrences.timestamp, prevStart),
+              sql`${pgSchema.occurrences.timestamp} < ${startTime}`,
+              issueWhere,
+            ),
+          ),
+      );
+      const prevOccurrenceRow = prevOccurrenceRows[0];
+      if (prevOccurrenceRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('previous occurrence count query returned no rows'),
+        );
+      }
+      const occurrenceDelta = occurrenceCount - prevOccurrenceRow.total;
+
+      const activeIssueRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(distinct ${pgSchema.occurrences.issueId})::int`,
+          })
+          .from(pgSchema.occurrences)
+          .innerJoin(
+            pgSchema.issues,
+            eq(pgSchema.occurrences.issueId, pgSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(pgSchema.occurrences.timestamp, startTime),
+              sql`${pgSchema.occurrences.timestamp} < ${endTime}`,
+              eq(pgSchema.issues.status, 'unresolved'),
+              issueWhere,
+            ),
+          ),
+      );
+      const activeIssueRow = activeIssueRows[0];
+      if (activeIssueRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('active issue count query returned no rows'),
+        );
+      }
+      const activeIssueCount = activeIssueRow.total;
+
+      const prevActiveIssueRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(distinct ${pgSchema.occurrences.issueId})::int`,
+          })
+          .from(pgSchema.occurrences)
+          .innerJoin(
+            pgSchema.issues,
+            eq(pgSchema.occurrences.issueId, pgSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(pgSchema.occurrences.timestamp, prevStart),
+              sql`${pgSchema.occurrences.timestamp} < ${startTime}`,
+              eq(pgSchema.issues.status, 'unresolved'),
+              issueWhere,
+            ),
+          ),
+      );
+      const prevActiveIssueRow = prevActiveIssueRows[0];
+      if (prevActiveIssueRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('previous active issue count query returned no rows'),
+        );
+      }
+      const activeIssueDelta = activeIssueCount - prevActiveIssueRow.total;
+
+      const serviceRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(distinct ${pgSchema.occurrences.serviceName})::int`,
+          })
+          .from(pgSchema.occurrences)
+          .innerJoin(
+            pgSchema.issues,
+            eq(pgSchema.occurrences.issueId, pgSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(pgSchema.occurrences.timestamp, startTime),
+              sql`${pgSchema.occurrences.timestamp} < ${endTime}`,
+              issueWhere,
+            ),
+          ),
+      );
+      const serviceRow = serviceRows[0];
+      if (serviceRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('service count query returned no rows'),
+        );
+      }
+      const serviceCount = serviceRow.total;
+
+      const prevServiceRows = yield* wrapStoreError(() =>
+        db
+          .select({
+            total: sql<number>`count(distinct ${pgSchema.occurrences.serviceName})::int`,
+          })
+          .from(pgSchema.occurrences)
+          .innerJoin(
+            pgSchema.issues,
+            eq(pgSchema.occurrences.issueId, pgSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(pgSchema.occurrences.timestamp, prevStart),
+              sql`${pgSchema.occurrences.timestamp} < ${startTime}`,
+              issueWhere,
+            ),
+          ),
+      );
+      const prevServiceRow = prevServiceRows[0];
+      if (prevServiceRow === undefined) {
+        return yield* Effect.fail(
+          issueStoreDefect('previous service count query returned no rows'),
+        );
+      }
+      const serviceDelta = serviceCount - prevServiceRow.total;
+
+      return {
+        occurrenceCount,
+        occurrenceDelta,
+        activeIssueCount,
+        activeIssueDelta,
+        serviceCount,
+        serviceDelta,
+      };
+    });
+  };
+
+  function pgTrendBucketExpr(windowMs: number) {
+    if (windowMs <= 60 * 60 * 1000) {
+      return sql<Date>`date_trunc('hour', ${pgSchema.occurrences.timestamp}) + interval '5 min' * (extract(minute from ${pgSchema.occurrences.timestamp})::int / 5)`;
+    }
+    if (windowMs <= 24 * 60 * 60 * 1000) {
+      return sql<Date>`date_trunc('hour', ${pgSchema.occurrences.timestamp})`;
+    }
+    return sql<Date>`date_trunc('day', ${pgSchema.occurrences.timestamp})`;
+  }
+
+  const getOccurrenceTrend = (
+    filter: ListIssuesFilter,
+    startTime: Date,
+    endTime: Date,
+  ): Effect.Effect<ReadonlyArray<TrendBucket>, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const conditions = issueListFilterConditions(filter, pgSchema.issues);
+      const issueWhere = combineSqlConditions(conditions);
+      const windowMs = endTime.getTime() - startTime.getTime();
+      const bucketExpr = pgTrendBucketExpr(windowMs);
+
+      const rows = yield* wrapStoreError(() =>
+        db
+          .select({
+            bucket: bucketExpr,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(pgSchema.occurrences)
+          .innerJoin(
+            pgSchema.issues,
+            eq(pgSchema.occurrences.issueId, pgSchema.issues.id),
+          )
+          .where(
+            and(
+              gte(pgSchema.occurrences.timestamp, startTime),
+              sql`${pgSchema.occurrences.timestamp} < ${endTime}`,
+              issueWhere,
+            ),
+          )
+          .groupBy(bucketExpr)
+          .orderBy(bucketExpr),
+      );
+
+      const result: Array<TrendBucket> = [];
+      for (const row of rows) {
+        result.push({
+          bucketStart: row.bucket,
+          count: row.count,
+        });
+      }
+      return result;
+    });
+  };
+
+  const getTopUnresolvedIssues = (
+    filter: ListIssuesFilter,
+    limit: number,
+  ): Effect.Effect<ReadonlyArray<TopIssue>, IssueStoreError, never> => {
+    return Effect.gen(function* () {
+      const conditions = issueListFilterConditions(filter, pgSchema.issues);
+      const whereClause = combineSqlConditions(conditions);
+
+      const rows = yield* wrapStoreError(() => {
+        let query = db
+          .select()
+          .from(pgSchema.issues)
+          .where(eq(pgSchema.issues.status, 'unresolved'))
+          .$dynamic();
+        if (whereClause !== undefined) {
+          query = query.where(
+            and(whereClause, eq(pgSchema.issues.status, 'unresolved')),
+          );
+        }
+        return query
+          .orderBy(sql`${pgSchema.issues.occurrenceCount} desc`)
+          .limit(limit);
+      });
+
+      const result: Array<TopIssue> = [];
+      for (const row of rows) {
+        result.push({
+          id: row.id,
+          title: row.title,
+          service: row.service,
+          occurrenceCount: row.occurrenceCount,
+          lastSeen: row.lastSeen,
+        });
+      }
+      return result;
+    });
+  };
+
   const getIngestCursor = (
     service: string,
   ): Effect.Effect<Date | null, IssueStoreError, never> => {
@@ -592,6 +867,9 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
     getIssueOccurrencesPaginated,
     getOccurrenceHistogram,
     getOccurrenceHistograms,
+    getStats,
+    getOccurrenceTrend,
+    getTopUnresolvedIssues,
     getIngestCursor,
     setIngestCursor,
   };

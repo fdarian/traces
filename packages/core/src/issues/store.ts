@@ -4,11 +4,14 @@ import type {
   HistogramGranularity,
   Issue,
   IssueDetail,
+  IssueStoreStats,
   ListIssuesFilter,
   ListIssuesResult,
   Occurrence,
   OccurrenceBucket,
   PaginatedOccurrences,
+  TopIssue,
+  TrendBucket,
   UpsertOccurrenceInput,
 } from './model.js';
 
@@ -55,6 +58,20 @@ export interface IssueStore {
     IssueStoreError,
     never
   >;
+  readonly getStats: (
+    filter: ListIssuesFilter,
+    startTime: Date,
+    endTime: Date,
+  ) => Effect.Effect<IssueStoreStats, IssueStoreError, never>;
+  readonly getOccurrenceTrend: (
+    filter: ListIssuesFilter,
+    startTime: Date,
+    endTime: Date,
+  ) => Effect.Effect<ReadonlyArray<TrendBucket>, IssueStoreError, never>;
+  readonly getTopUnresolvedIssues: (
+    filter: ListIssuesFilter,
+    limit: number,
+  ) => Effect.Effect<ReadonlyArray<TopIssue>, IssueStoreError, never>;
   readonly getIngestCursor: (
     service: string,
   ) => Effect.Effect<Date | null, IssueStoreError, never>;

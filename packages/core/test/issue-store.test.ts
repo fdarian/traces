@@ -444,4 +444,252 @@ describe('SqliteIssueStore', () => {
       }),
     );
   });
+
+  test('getStats computes occurrences, active issues, and services with deltas', async () => {
+    dbPath = tempDbPath();
+    const baseTime = Date.UTC(2026, 5, 12, 10, 0, 0);
+    const startTime = new Date(baseTime + 30 * 60 * 1000);
+    const endTime = new Date(baseTime + 60 * 60 * 1000);
+    const prevWindowStart = new Date(baseTime);
+
+    const issueId = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        const shared = {
+          fingerprint: 'fp-stats',
+          title: 'TimeoutError: request timed out',
+          service: 'api',
+          exceptionType: 'TimeoutError',
+          serviceName: 'api',
+          exceptionMessage: 'request timed out',
+          attributes: {},
+        };
+        // 3 occurrences in current window, 1 in previous window
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-prev-1',
+          spanId: 'span-prev-1',
+          timestamp: prevWindowStart.getTime() + 1,
+        });
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-cur-1',
+          spanId: 'span-cur-1',
+          timestamp: startTime.getTime() + 1,
+        });
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-cur-2',
+          spanId: 'span-cur-2',
+          timestamp: startTime.getTime() + 2,
+        });
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-cur-3',
+          spanId: 'span-cur-3',
+          timestamp: startTime.getTime() + 3,
+        });
+        const issues = yield* store.listIssues({});
+        return issues[0].id;
+      }),
+    );
+
+    const stats = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getStats({}, startTime, endTime);
+      }),
+    );
+
+    expect(stats.occurrenceCount).toBe(3);
+    expect(stats.occurrenceDelta).toBe(2);
+    expect(stats.activeIssueCount).toBe(1);
+    expect(stats.activeIssueDelta).toBe(0);
+    expect(stats.serviceCount).toBe(1);
+    expect(stats.serviceDelta).toBe(0);
+
+    // Resolve the issue and verify activeIssueCount drops to 0
+    await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        yield* store.resolveIssue(issueId);
+      }),
+    );
+
+    const afterResolve = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getStats({}, startTime, endTime);
+      }),
+    );
+
+    expect(afterResolve.activeIssueCount).toBe(0);
+    // Resolved issue is no longer active in either window, so delta is 0
+    expect(afterResolve.activeIssueDelta).toBe(0);
+  });
+
+  test('getStats filters by service', async () => {
+    dbPath = tempDbPath();
+    const baseTime = Date.UTC(2026, 5, 12, 10, 0, 0);
+    const startTime = new Date(baseTime + 30 * 60 * 1000);
+    const endTime = new Date(baseTime + 60 * 60 * 1000);
+
+    await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        yield* store.upsertOccurrence({
+          fingerprint: 'fp-api',
+          title: 'TimeoutError: request timed out',
+          service: 'api',
+          exceptionType: 'TimeoutError',
+          traceId: 'trace-api',
+          spanId: 'span-api',
+          serviceName: 'api',
+          timestamp: startTime.getTime() + 1,
+          exceptionMessage: 'request timed out',
+          attributes: {},
+        });
+        yield* store.upsertOccurrence({
+          fingerprint: 'fp-db',
+          title: 'DatabaseConnectionError: connection refused',
+          service: 'db',
+          exceptionType: 'DatabaseConnectionError',
+          traceId: 'trace-db',
+          spanId: 'span-db',
+          serviceName: 'db',
+          timestamp: startTime.getTime() + 2,
+          exceptionMessage: 'connection refused',
+          attributes: {},
+        });
+      }),
+    );
+
+    const apiStats = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getStats({ service: 'api' }, startTime, endTime);
+      }),
+    );
+
+    expect(apiStats.occurrenceCount).toBe(1);
+    expect(apiStats.serviceCount).toBe(1);
+  });
+
+  test('getOccurrenceTrend buckets occurrences over time', async () => {
+    dbPath = tempDbPath();
+    const baseTime = Date.UTC(2026, 5, 12, 10, 0, 0);
+    const startTime = new Date(baseTime);
+    const endTime = new Date(baseTime + 60 * 60 * 1000);
+
+    await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        const shared = {
+          fingerprint: 'fp-trend',
+          title: 'TimeoutError: request timed out',
+          service: 'api',
+          exceptionType: 'TimeoutError',
+          serviceName: 'api',
+          exceptionMessage: 'request timed out',
+          attributes: {},
+        };
+        // 2 in first 5 min, 1 in second 5 min
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          timestamp: baseTime + 1 * 60 * 1000,
+        });
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-2',
+          spanId: 'span-2',
+          timestamp: baseTime + 2 * 60 * 1000,
+        });
+        yield* store.upsertOccurrence({
+          ...shared,
+          traceId: 'trace-3',
+          spanId: 'span-3',
+          timestamp: baseTime + 8 * 60 * 1000,
+        });
+      }),
+    );
+
+    const trend = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getOccurrenceTrend({}, startTime, endTime);
+      }),
+    );
+
+    expect(trend.length).toBe(2);
+    expect(trend[0].count).toBe(2);
+    expect(trend[1].count).toBe(1);
+  });
+
+  test('getTopUnresolvedIssues returns top issues by occurrence count', async () => {
+    dbPath = tempDbPath();
+
+    await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        const base = {
+          serviceName: 'api',
+          timestamp: Date.now(),
+          exceptionMessage: 'boom',
+          attributes: {},
+        };
+        yield* store.upsertOccurrence({
+          ...base,
+          fingerprint: 'fp-high',
+          title: 'HighCountError: many',
+          service: 'api',
+          exceptionType: 'HighCountError',
+          traceId: 'trace-high-1',
+          spanId: 'span-high-1',
+        });
+        yield* store.upsertOccurrence({
+          ...base,
+          fingerprint: 'fp-high',
+          title: 'HighCountError: many',
+          service: 'api',
+          exceptionType: 'HighCountError',
+          traceId: 'trace-high-2',
+          spanId: 'span-high-2',
+        });
+        yield* store.upsertOccurrence({
+          ...base,
+          fingerprint: 'fp-low',
+          title: 'LowCountError: few',
+          service: 'api',
+          exceptionType: 'LowCountError',
+          traceId: 'trace-low',
+          spanId: 'span-low',
+        });
+      }),
+    );
+
+    const top = await runStore(
+      dbPath,
+      Effect.gen(function* () {
+        const store = yield* IssueStore;
+        return yield* store.getTopUnresolvedIssues({}, 8);
+      }),
+    );
+
+    expect(top.length).toBe(2);
+    expect(top[0].occurrenceCount).toBe(2);
+    expect(top[0].title).toBe('HighCountError: many');
+    expect(top[1].occurrenceCount).toBe(1);
+    expect(top[1].title).toBe('LowCountError: few');
+  });
 });
