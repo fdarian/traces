@@ -7,7 +7,7 @@ import {
 import * as S from 'effect/Schema';
 import { Activity, Home, Layers } from 'lucide-react';
 import { GlobalFilterSchema, normalizeGlobalFilters } from '#/lib/filters';
-import { listServices } from '#/server/listServices.server-fn';
+import { listServices } from '#/server/list-services.functions';
 
 export const Route = createFileRoute('/_app')({
   validateSearch: S.standardSchemaV1(GlobalFilterSchema),

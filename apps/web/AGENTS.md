@@ -6,7 +6,7 @@ TanStack Start app — the traces observability dashboard.
 - TanStack Start + React
 - Effect.ts (ManagedRuntime for framework integration)
 - shadcn (new-york / zinc) + Tailwind v4 + Geist
-- TanStack Form + Valibot
+- TanStack Form + Effect Schema
 
 ## Dev
 - `bun dev` — start dev server
@@ -20,6 +20,6 @@ TanStack Start app — the traces observability dashboard.
 - `vite.config.ts` — TanStack Start + Nitro (preset: bun)
 
 ## Conventions
-- Server functions live in dedicated `*.server-fn.ts` files. **Never** mix them with components, hooks, or client utilities in the same file.
+- Server functions live in dedicated `*.functions.ts` files. **Never** mix them with components, hooks, or client utilities in the same file.
 - No `'use client'` anywhere — TanStack Start has no RSC directive.
 - Path alias is `#/*` → `src/*`, never `@/*`.
