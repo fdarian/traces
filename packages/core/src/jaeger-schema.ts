@@ -76,9 +76,13 @@ export const OtelResourceSpanSchema = S.Struct({
 export type OtelResourceSpan = typeof OtelResourceSpanSchema.Type;
 
 export const OtelTracesResultSchema = S.Struct({
-  result: S.Struct({
-    resourceSpans: S.optional(S.Array(OtelResourceSpanSchema)),
-  }),
+  // Jaeger v3 omits `result` entirely when a search window matches no traces
+  // (the body is a bare `{}`), so it must be optional.
+  result: S.optional(
+    S.Struct({
+      resourceSpans: S.optional(S.Array(OtelResourceSpanSchema)),
+    }),
+  ),
 });
 
 export type OtelTracesResult = typeof OtelTracesResultSchema.Type;

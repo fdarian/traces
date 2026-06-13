@@ -285,7 +285,7 @@ function makeBackend(
       }
       const parsed = yield* parseJson(response.body);
       const validated = yield* validate(OtelTracesResultSchema, parsed);
-      const resourceSpans = validated.result.resourceSpans ?? [];
+      const resourceSpans = validated.result?.resourceSpans ?? [];
       if (resourceSpans.length === 0) {
         return yield* Effect.fail(new TraceNotFound({ traceId }));
       }
@@ -331,7 +331,7 @@ function makeBackend(
       const response = yield* makeRequest('/api/v3/traces', params);
       const parsed = yield* parseJson(response.body);
       const validated = yield* validate(OtelTracesResultSchema, parsed);
-      const resourceSpans = validated.result.resourceSpans ?? [];
+      const resourceSpans = validated.result?.resourceSpans ?? [];
 
       const traceMap: Map<string, Array<OtelResourceSpan>> = new Map();
       for (const resourceSpan of resourceSpans) {
