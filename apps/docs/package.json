@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "check:tsc": "tsc --noEmit",
-    "check:lint": "biome check"
+    "check:lint": "biome check",
+    "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
