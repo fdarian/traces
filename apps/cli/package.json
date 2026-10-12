@@ -1,0 +1,26 @@
+{
+  "name": "@traces/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "traces": "./src/main.ts"
+  },
+  "scripts": {
+    "check:tsc": "tsc --noEmit",
+    "check:lint": "biome check",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@effect/cli": "0.75.2",
+    "@effect/platform": "~0.96.1",
+    "@effect/platform-bun": "0.90.0",
+    "@traces/core": "workspace:*",
+    "effect": "~3.21.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "latest",
+    "typescript": "latest"
+  }
+}
