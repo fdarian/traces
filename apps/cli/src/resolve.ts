@@ -24,7 +24,7 @@ export const globalOptions = {
   project: Flag.String('project').pipe(Flag.optional),
   env: Flag.String('env').pipe(Flag.optional),
   config: Flag.String('config').pipe(Flag.optional),
-  json: Flag.Boolean('json').pipe(),
+  json: Flag.Boolean('json').pipe(Flag.withDefault(false)),
 };
 
 export interface GlobalFlags {
