@@ -19,7 +19,7 @@ import { listOperations } from '#/server/list-operations.functions';
 import { searchTraces } from '#/server/search-traces.functions';
 
 export const Route = createFileRoute('/_app/traces/')({
-  validateSearch: S.standardSchemaV1(TraceFilterSchema),
+  validateSearch: S.toStandardSchemaV1(TraceFilterSchema),
   component: TracesPage,
   pendingComponent: TracesPending,
   errorComponent: TracesError,

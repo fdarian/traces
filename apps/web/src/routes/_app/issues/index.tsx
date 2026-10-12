@@ -24,8 +24,8 @@ const HOUR_MS = 60 * 60 * 1000;
 const LIST_SPARKLINE_SLOTS = 24;
 
 export const Route = createFileRoute('/_app/issues/')({
-  validateSearch: S.standardSchemaV1(
-    S.extend(GlobalFilterSchema, IssueFilterSchema),
+  validateSearch: S.toStandardSchemaV1(
+    GlobalFilterSchema.pipe(S.fieldsAssign(IssueFilterSchema.fields)),
   ),
   component: IssuesPage,
   pendingComponent: IssuesPending,

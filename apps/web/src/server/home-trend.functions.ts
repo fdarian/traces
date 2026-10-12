@@ -29,7 +29,7 @@ function serializeTrendBuckets(
 }
 
 export const homeTrend = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(HomeTrendInputSchema))
+  .validator(S.toStandardSchemaV1(HomeTrendInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const startTime = new Date(data.startTime);

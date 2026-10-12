@@ -29,7 +29,7 @@ function computeErrorRate(traces: ReadonlyArray<{ errorSpanCount?: number }>): {
 }
 
 export const homeErrorRate = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(HomeErrorRateInputSchema))
+  .validator(S.toStandardSchemaV1(HomeErrorRateInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const limit = data.limit ?? 200;

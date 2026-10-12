@@ -5,7 +5,7 @@ import type { ListIssuesFilter } from './model.js';
 
 export function issueStoreDefect(message: string): IssueStoreError {
   return new IssueStoreError({
-    cause: Schema.decodeUnknownSync(Schema.Defect)(new Error(message)),
+    cause: new Error(message),
   });
 }
 

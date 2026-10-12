@@ -1,13 +1,13 @@
 import * as S from 'effect/Schema';
 
-export const OtelAttributeValueSchema = S.Union(
+export const OtelAttributeValueSchema = S.Union([
   S.Struct({ stringValue: S.String }),
-  S.Struct({ intValue: S.Union(S.String, S.Number) }),
+  S.Struct({ intValue: S.Union([S.String, S.Number]) }),
   S.Struct({ boolValue: S.Boolean }),
   S.Struct({ doubleValue: S.Number }),
   S.Struct({ arrayValue: S.Unknown }),
   S.Struct({ kvlistValue: S.Unknown }),
-);
+]);
 
 export type OtelAttributeValue = typeof OtelAttributeValueSchema.Type;
 
@@ -19,7 +19,7 @@ export const OtelAttributeSchema = S.Struct({
 export type OtelAttribute = typeof OtelAttributeSchema.Type;
 
 export const OtelEventSchema = S.Struct({
-  timeUnixNano: S.Union(S.String, S.Number),
+  timeUnixNano: S.Union([S.String, S.Number]),
   name: S.String,
   attributes: S.optional(S.Array(OtelAttributeSchema)),
 });
@@ -27,7 +27,7 @@ export const OtelEventSchema = S.Struct({
 export type OtelEvent = typeof OtelEventSchema.Type;
 
 export const OtelStatusSchema = S.Struct({
-  code: S.optional(S.Union(S.String, S.Number)),
+  code: S.optional(S.Union([S.String, S.Number])),
   message: S.optional(S.String),
 });
 
@@ -38,9 +38,9 @@ export const OtelSpanSchema = S.Struct({
   spanId: S.String,
   parentSpanId: S.optional(S.String),
   name: S.String,
-  kind: S.optional(S.Union(S.String, S.Number)),
-  startTimeUnixNano: S.Union(S.String, S.Number),
-  endTimeUnixNano: S.Union(S.String, S.Number),
+  kind: S.optional(S.Union([S.String, S.Number])),
+  startTimeUnixNano: S.Union([S.String, S.Number]),
+  endTimeUnixNano: S.Union([S.String, S.Number]),
   attributes: S.optional(S.Array(OtelAttributeSchema)),
   events: S.optional(S.Array(OtelEventSchema)),
   status: S.optional(OtelStatusSchema),
@@ -118,8 +118,8 @@ export const OtelTraceSummarySchema = S.Struct({
       spanCount: S.Number,
     }),
   ),
-  minStartTimeUnixNano: S.Union(S.String, S.Number),
-  maxEndTimeUnixNano: S.Union(S.String, S.Number),
+  minStartTimeUnixNano: S.Union([S.String, S.Number]),
+  maxEndTimeUnixNano: S.Union([S.String, S.Number]),
 });
 
 export type OtelTraceSummary = typeof OtelTraceSummarySchema.Type;

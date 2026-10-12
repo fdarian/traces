@@ -27,7 +27,7 @@ import { SectionErrorBoundary } from './home/-section-error-boundary.js';
 const HOUR_MS = 60 * 60 * 1000;
 
 export const Route = createFileRoute('/_app/')({
-  validateSearch: S.standardSchemaV1(GlobalFilterSchema),
+  validateSearch: S.toStandardSchemaV1(GlobalFilterSchema),
   component: HomePage,
   pendingComponent: HomePending,
   loader: async (ctx: { location: { search: Record<string, unknown> } }) => {

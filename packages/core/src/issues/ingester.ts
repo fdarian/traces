@@ -201,13 +201,13 @@ const ingestTick = (
 };
 
 export const runIngestOnce = Effect.gen(function* () {
-  const traceLimit = yield* Config.number('INGEST_TRACE_LIMIT').pipe(
+  const traceLimit = yield* Config.Number('INGEST_TRACE_LIMIT').pipe(
     Config.withDefault(DEFAULT_TRACE_LIMIT),
   );
-  const overlapMs = yield* Config.number('INGEST_OVERLAP_MS').pipe(
+  const overlapMs = yield* Config.Number('INGEST_OVERLAP_MS').pipe(
     Config.withDefault(DEFAULT_OVERLAP_MS),
   );
-  const initialLookbackMs = yield* Config.number(
+  const initialLookbackMs = yield* Config.Number(
     'INGEST_INITIAL_LOOKBACK_MS',
   ).pipe(Config.withDefault(DEFAULT_INITIAL_LOOKBACK_MS));
   const windowScaleRef = yield* Ref.make(new Map<string, number>());
@@ -215,16 +215,16 @@ export const runIngestOnce = Effect.gen(function* () {
 });
 
 export const runIngester = Effect.gen(function* () {
-  const pollIntervalMs = yield* Config.number('INGEST_POLL_INTERVAL_MS').pipe(
+  const pollIntervalMs = yield* Config.Number('INGEST_POLL_INTERVAL_MS').pipe(
     Config.withDefault(DEFAULT_POLL_INTERVAL_MS),
   );
-  const traceLimit = yield* Config.number('INGEST_TRACE_LIMIT').pipe(
+  const traceLimit = yield* Config.Number('INGEST_TRACE_LIMIT').pipe(
     Config.withDefault(DEFAULT_TRACE_LIMIT),
   );
-  const overlapMs = yield* Config.number('INGEST_OVERLAP_MS').pipe(
+  const overlapMs = yield* Config.Number('INGEST_OVERLAP_MS').pipe(
     Config.withDefault(DEFAULT_OVERLAP_MS),
   );
-  const initialLookbackMs = yield* Config.number(
+  const initialLookbackMs = yield* Config.Number(
     'INGEST_INITIAL_LOOKBACK_MS',
   ).pipe(Config.withDefault(DEFAULT_INITIAL_LOOKBACK_MS));
 
@@ -236,14 +236,14 @@ export const runIngester = Effect.gen(function* () {
     initialLookbackMs,
     windowScaleRef,
   ).pipe(
-    Effect.catchAllCause((cause) =>
+    Effect.catchCause((cause) =>
       Effect.logError(`ingester tick failed: ${String(cause)}`),
     ),
     Effect.repeat(Schedule.spaced(pollIntervalMs)),
   );
 });
 
-export const IngesterLayer = Layer.scopedDiscard(
+export const IngesterLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     const program = yield* runIngester;
     const fiber = yield* Effect.forkScoped(program);

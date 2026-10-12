@@ -7,7 +7,7 @@ import { RuntimeServer } from '#/server/runtime';
 const ListOperationsInputSchema = S.String;
 
 export const listOperations = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(ListOperationsInputSchema))
+  .validator(S.toStandardSchemaV1(ListOperationsInputSchema))
   .handler(async (ctx) => {
     const effect = Effect.gen(function* () {
       const backend = yield* TraceBackend;

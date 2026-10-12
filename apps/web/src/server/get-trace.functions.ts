@@ -144,7 +144,7 @@ function serializeTrace(trace: Trace): SerializableTrace {
 }
 
 export const getTrace = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(GetTraceInputSchema))
+  .validator(S.toStandardSchemaV1(GetTraceInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const program = Effect.gen(function* () {

@@ -12,8 +12,8 @@ function runStore<A, E>(
   dbPath: string,
   program: Effect.Effect<A, E, IssueStore>,
 ): Promise<A> {
-  const configLayer = Layer.setConfigProvider(
-    ConfigProvider.fromMap(new Map([['TRACES_DB', dbPath]])),
+  const configLayer = ConfigProvider.layer(
+    ConfigProvider.fromUnknown({ TRACES_DB: dbPath }),
   );
   const layer = Layer.provide(SqliteIssueStoreLayer, configLayer);
   return Effect.runPromise(Effect.provide(program, layer));

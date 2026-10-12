@@ -11,7 +11,7 @@ import {
 import { RuntimeServer } from '#/server/runtime';
 
 const ListIssuesInputSchema = S.Struct({
-  status: S.Literal('unresolved', 'resolved'),
+  status: S.Literals(['unresolved', 'resolved']),
   services: S.optional(S.Array(S.String)),
 });
 
@@ -31,7 +31,7 @@ const HOUR_MS = 60 * 60 * 1000;
 const LIST_SPARKLINE_SLOTS = 24;
 
 export const listIssues = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(ListIssuesInputSchema))
+  .validator(S.toStandardSchemaV1(ListIssuesInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const since = new Date(Date.now() - LIST_SPARKLINE_SLOTS * HOUR_MS);

@@ -23,7 +23,7 @@ function copyDir(src: string, dest: string): void {
 const coreRoot = path.resolve(import.meta.dirname, '../../packages/core');
 
 const config = Effect.gen(function* () {
-  const port = yield* Config.number('PORT').pipe(Config.withDefault(3000));
+  const port = yield* Config.Number('PORT').pipe(Config.withDefault(3000));
   return {
     server: { port },
     plugins: [

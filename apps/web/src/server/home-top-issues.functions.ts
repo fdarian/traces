@@ -53,7 +53,7 @@ function serializeOccurrenceBuckets(
 }
 
 export const homeTopIssues = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(HomeTopIssuesInputSchema))
+  .validator(S.toStandardSchemaV1(HomeTopIssuesInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const filter = {

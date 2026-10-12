@@ -1,6 +1,6 @@
 import * as S from 'effect/Schema';
 
-const RangePresetSchema = S.Literal('15m', '1h', '6h', '24h', '7d');
+const RangePresetSchema = S.Literals(['15m', '1h', '6h', '24h', '7d']);
 
 export type RangePreset = typeof RangePresetSchema.Type;
 
@@ -9,8 +9,8 @@ export type RangeValue =
   | { readonly from: string; readonly to: string };
 
 export const GlobalFilterSchema = S.Struct({
-  service: S.optional(S.Union(S.String, S.Array(S.String))),
-  range: S.optional(S.Union(RangePresetSchema, S.Literal('custom'))),
+  service: S.optional(S.Union([S.String, S.Array(S.String)])),
+  range: S.optional(S.Union([RangePresetSchema, S.Literal('custom')])),
   from: S.optional(S.String),
   to: S.optional(S.String),
 });
@@ -47,7 +47,7 @@ export function normalizeGlobalFilters(raw: RawGlobalFilters): {
 
 export const TraceFilterSchema = S.Struct({
   operation: S.optional(S.String),
-  status: S.optional(S.Literal('all', 'errors-only')),
+  status: S.optional(S.Literals(['all', 'errors-only'])),
   minDuration: S.optional(S.String),
   maxDuration: S.optional(S.String),
   attributes: S.optional(S.String),
@@ -107,7 +107,7 @@ export function computeTimeRange(range: RangeValue | null): {
 }
 
 export const IssueFilterSchema = S.Struct({
-  status: S.optional(S.Literal('unresolved', 'resolved')),
+  status: S.optional(S.Literals(['unresolved', 'resolved'])),
 });
 
 export type RawIssueFilters = typeof IssueFilterSchema.Type;

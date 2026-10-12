@@ -1,5 +1,5 @@
-import { HttpClient } from '@effect/platform';
 import { Config, Effect, Layer, Ref, Schema } from 'effect';
+import { HttpClient } from 'effect/http';
 import type { TraceQuery } from './backend.js';
 import { TraceBackend } from './backend.js';
 import {
@@ -186,26 +186,17 @@ export function mapTraceSummary(raw: OtelTraceSummary): TraceSummary {
 export function parseJson(
   body: string,
 ): Effect.Effect<unknown, JaegerBadResponse, never> {
-  return Effect.try({
-    try: () => JSON.parse(body),
-    catch: (cause) =>
-      new JaegerBadResponse({
-        cause: Schema.decodeUnknownSync(Schema.Defect)(cause),
-      }),
-  });
+  return Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
+    body,
+  ).pipe(Effect.mapError((cause) => new JaegerBadResponse({ cause })));
 }
 
 export function validate<A>(
-  schema: Schema.Schema<A>,
+  schema: Schema.Decoder<A>,
   data: unknown,
 ): Effect.Effect<A, JaegerBadResponse, never> {
-  return Schema.decodeUnknown(schema)(data).pipe(
-    Effect.mapError(
-      (cause) =>
-        new JaegerBadResponse({
-          cause: Schema.decodeUnknownSync(Schema.Defect)(cause),
-        }),
-    ),
+  return Schema.decodeUnknownEffect(schema)(data).pipe(
+    Effect.mapError((cause) => new JaegerBadResponse({ cause })),
   );
 }
 
@@ -230,7 +221,7 @@ function makeBackend(
       Effect.mapError(
         (cause) =>
           new JaegerUnreachable({
-            cause: Schema.decodeUnknownSync(Schema.Defect)(cause),
+            cause,
           }),
       ),
       Effect.flatMap((response) =>
@@ -238,7 +229,7 @@ function makeBackend(
           Effect.mapError(
             (cause) =>
               new JaegerUnreachable({
-                cause: Schema.decodeUnknownSync(Schema.Defect)(cause),
+                cause,
               }),
           ),
           Effect.map((body) => ({ status: response.status, body })),
@@ -306,9 +297,7 @@ function makeBackend(
       if (response.status === 404) {
         return yield* Effect.fail(
           new JaegerBadResponse({
-            cause: Schema.decodeUnknownSync(Schema.Defect)(
-              new Error('trace-summaries endpoint not found'),
-            ),
+            cause: new Error('trace-summaries endpoint not found'),
           }),
         );
       }
@@ -396,7 +385,7 @@ export const JaegerBackendLayer = Layer.effect(
   TraceBackend,
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    const jaegerUrl = yield* Config.string('JAEGER_URL').pipe(
+    const jaegerUrl = yield* Config.String('JAEGER_URL').pipe(
       Config.withDefault('http://localhost:16686'),
     );
     const baseURL = new URL(jaegerUrl);

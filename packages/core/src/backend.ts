@@ -46,6 +46,6 @@ export interface TraceBackend {
   >;
 }
 
-export const TraceBackend = Context.GenericTag<TraceBackend>(
+export const TraceBackend = Context.Service<TraceBackend>(
   'traces/TraceBackend',
 );

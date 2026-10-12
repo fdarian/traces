@@ -3,7 +3,7 @@ import * as S from 'effect/Schema';
 import { GlobalFilterSchema } from '#/lib/filters';
 
 export const Route = createRootRoute({
-  validateSearch: S.standardSchemaV1(GlobalFilterSchema),
+  validateSearch: S.toStandardSchemaV1(GlobalFilterSchema),
   component: RootComponent,
   head: () => ({
     meta: [

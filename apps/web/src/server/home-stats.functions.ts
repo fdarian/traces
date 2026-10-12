@@ -33,7 +33,7 @@ function serializeIssueStoreStats(
 }
 
 export const homeStats = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(HomeStatsInputSchema))
+  .validator(S.toStandardSchemaV1(HomeStatsInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const startTime = new Date(data.startTime);

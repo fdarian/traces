@@ -9,7 +9,7 @@ const ResolveIssueInputSchema = S.Struct({
 });
 
 export const resolveIssue = createServerFn({ method: 'POST' })
-  .validator(S.standardSchemaV1(ResolveIssueInputSchema))
+  .validator(S.toStandardSchemaV1(ResolveIssueInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const effect = Effect.gen(function* () {

@@ -10,7 +10,7 @@ const TraceDetailSearchSchema = S.Struct({
 });
 
 export const Route = createFileRoute('/_app/traces/$traceId')({
-  validateSearch: S.standardSchemaV1(TraceDetailSearchSchema),
+  validateSearch: S.toStandardSchemaV1(TraceDetailSearchSchema),
   component: TraceDetailPage,
   pendingComponent: TraceDetailPending,
   loader: async (ctx) => {

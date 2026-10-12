@@ -30,7 +30,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DETAIL_SPARKLINE_SLOTS = 14;
 
 export const getIssue = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(GetIssueInputSchema))
+  .validator(S.toStandardSchemaV1(GetIssueInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const page = data.page ?? 1;

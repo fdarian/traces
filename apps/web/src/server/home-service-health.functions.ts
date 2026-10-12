@@ -38,7 +38,7 @@ function serializeServiceHealth(
 }
 
 export const homeServiceHealth = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(HomeServiceHealthInputSchema))
+  .validator(S.toStandardSchemaV1(HomeServiceHealthInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const limit = data.limit ?? 200;

@@ -47,7 +47,7 @@ function wrapStoreError<A>(
     try: fn,
     catch: (cause) =>
       new IssueStoreError({
-        cause: Schema.decodeUnknownSync(Schema.Defect)(cause),
+        cause,
       }),
   });
 }
@@ -877,10 +877,10 @@ function makePgStore(db: ReturnType<typeof drizzle>) {
   };
 }
 
-export const PgIssueStoreLayer = Layer.scoped(
+export const PgIssueStoreLayer = Layer.effect(
   IssueStore,
   Effect.gen(function* () {
-    const databaseUrl = yield* Config.string('DATABASE_URL');
+    const databaseUrl = yield* Config.String('DATABASE_URL');
     const sql = yield* Effect.acquireRelease(
       Effect.sync(() => postgres(databaseUrl, { max: 1 })),
       (client) =>

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { HttpClient, HttpClientResponse } from '@effect/platform';
 import { ConfigProvider, Effect, Layer } from 'effect';
+import { HttpClient, HttpClientResponse } from 'effect/http';
 import { TraceBackend } from '#/backend.js';
 import { JaegerBackendLayer } from '#/jaeger.js';
 import operationsFixture from './fixtures/operations.json';
@@ -45,8 +45,8 @@ function runWithMockClient<A, E>(
     HttpClient.HttpClient,
     createMockClient(handlers),
   );
-  const configLayer = Layer.setConfigProvider(
-    ConfigProvider.fromMap(new Map([['JAEGER_URL', 'http://localhost:16686']])),
+  const configLayer = ConfigProvider.layer(
+    ConfigProvider.fromUnknown({ JAEGER_URL: 'http://localhost:16686' }),
   );
   const program = effect.pipe(
     Effect.provide(JaegerBackendLayer),

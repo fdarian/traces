@@ -20,7 +20,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DETAIL_SPARKLINE_SLOTS = 14;
 
 export const Route = createFileRoute('/_app/issues/$issueId')({
-  validateSearch: S.standardSchemaV1(IssueFilterSchema),
+  validateSearch: S.toStandardSchemaV1(IssueFilterSchema),
   component: IssueDetailPage,
   pendingComponent: IssueDetailPending,
   errorComponent: IssueDetailError,

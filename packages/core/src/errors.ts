@@ -3,14 +3,14 @@ import { Schema } from 'effect';
 export class JaegerUnreachable extends Schema.TaggedError<JaegerUnreachable>()(
   'JaegerUnreachable',
   {
-    cause: Schema.Defect,
+    cause: Schema.Defect(),
   },
 ) {}
 
 export class JaegerBadResponse extends Schema.TaggedError<JaegerBadResponse>()(
   'JaegerBadResponse',
   {
-    cause: Schema.Defect,
+    cause: Schema.Defect(),
   },
 ) {}
 

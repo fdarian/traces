@@ -1,4 +1,3 @@
-import { FetchHttpClient } from '@effect/platform';
 import {
   IngesterLayer,
   type IssueStore,
@@ -6,7 +5,8 @@ import {
   JaegerBackendLayer,
   type TraceBackend,
 } from '@traces/core';
-import { Effect, Exit, Layer, ManagedRuntime } from 'effect';
+import { Cause, Effect, Exit, Layer, ManagedRuntime } from 'effect';
+import { FetchHttpClient } from 'effect/http';
 
 type RuntimeServices = TraceBackend | IssueStore;
 
@@ -32,8 +32,7 @@ const runToPromise = <A, E>(
     Effect.gen(function* () {
       const exit = yield* Effect.promise(() => runtime.runPromiseExit(effect));
       if (Exit.isFailure(exit)) {
-        const cause = Exit.causeOption(exit);
-        return yield* Effect.fail(new Error(String(cause)));
+        return yield* Effect.fail(new Error(Cause.pretty(exit.cause)));
       }
       return exit.value;
     }),
@@ -48,8 +47,7 @@ export const RuntimeServer = {
           runtime.runSync(Effect.exit(effect)),
         );
         if (Exit.isFailure(exit)) {
-          const cause = Exit.causeOption(exit);
-          return yield* Effect.fail(new Error(String(cause)));
+          return yield* Effect.fail(new Error(Cause.pretty(exit.cause)));
         }
         return exit.value;
       }),

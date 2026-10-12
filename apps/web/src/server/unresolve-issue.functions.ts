@@ -9,7 +9,7 @@ const UnresolveIssueInputSchema = S.Struct({
 });
 
 export const unresolveIssue = createServerFn({ method: 'POST' })
-  .validator(S.standardSchemaV1(UnresolveIssueInputSchema))
+  .validator(S.toStandardSchemaV1(UnresolveIssueInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const effect = Effect.gen(function* () {

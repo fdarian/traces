@@ -14,9 +14,8 @@
     "db:generate:pg": "drizzle-kit generate --config drizzle.config.pg.ts"
   },
   "dependencies": {
-    "@effect/platform": "0.96.1",
     "drizzle-orm": "0.45.2",
-    "effect": "3.21.3",
+    "effect": "catalog:",
     "postgres": "3.4.9"
   },
   "devDependencies": {

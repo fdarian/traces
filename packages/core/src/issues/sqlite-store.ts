@@ -47,7 +47,7 @@ function wrapStoreError<A>(
     try: fn,
     catch: (cause) =>
       new IssueStoreError({
-        cause: Schema.decodeUnknownSync(Schema.Defect)(cause),
+        cause,
       }),
   });
 }
@@ -915,10 +915,10 @@ function makeSqliteStore(db: ReturnType<typeof drizzle>) {
   };
 }
 
-export const SqliteIssueStoreLayer = Layer.scoped(
+export const SqliteIssueStoreLayer = Layer.effect(
   IssueStore,
   Effect.gen(function* () {
-    const dbPath = yield* Config.string('TRACES_DB').pipe(
+    const dbPath = yield* Config.String('TRACES_DB').pipe(
       Config.withDefault('./traces.db'),
     );
     const sqlite = yield* Effect.acquireRelease(

@@ -34,7 +34,7 @@ function serializeTraceSummary(trace: TraceSummary): SerializableTraceSummary {
 }
 
 export const homeRecentErrorTraces = createServerFn({ method: 'GET' })
-  .validator(S.standardSchemaV1(HomeRecentErrorTracesInputSchema))
+  .validator(S.toStandardSchemaV1(HomeRecentErrorTracesInputSchema))
   .handler(async (ctx) => {
     const data = ctx.data;
     const limit = data.limit ?? 50;

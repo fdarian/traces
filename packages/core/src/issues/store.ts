@@ -81,7 +81,7 @@ export interface IssueStore {
   ) => Effect.Effect<void, IssueStoreError, never>;
 }
 
-export const IssueStore = Context.GenericTag<IssueStore>('traces/IssueStore');
+export const IssueStore = Context.Service<IssueStore>('traces/IssueStore');
 
 // Lifetime total per issue — incremented once per real occurrence, never
 // decremented when retention prunes stored rows below this count.
