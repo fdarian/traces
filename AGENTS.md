@@ -17,6 +17,7 @@ lightweight observability dashboard — point it at an existing Jaeger (v2) and 
 - `packages/contract` — oRPC contract + DTO schemas shared by engine and web
 - `packages/core` — domain model, `TraceBackend` interface, Jaeger adapter (pure, no persistence)
 - `packages/react` — publishable React SDK (components from day one)
+- `apps/cli` — `traces` CLI: unified logs/deploys over Vercel and Railway for agents (provider adapters live in `packages/core/src/logs/`)
 
 Dependency direction: `engine → contract ← web`; `engine → core`. Web never imports the engine or core at runtime.
 
