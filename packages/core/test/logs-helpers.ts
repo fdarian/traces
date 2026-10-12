@@ -45,7 +45,9 @@ export const fakeRailway = (
         stdout: Stream.make(new TextEncoder().encode(stdout)),
         stderr: Stream.empty,
       };
-      return Effect.succeed(handle as unknown as ChildProcessSpawner.ChildProcessHandle);
+      return Effect.succeed(
+        handle as unknown as ChildProcessSpawner.ChildProcessHandle,
+      );
     }),
   );
 

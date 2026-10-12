@@ -13,7 +13,8 @@ export const LogLevel = Schema.Literals([
   'warn',
   'error',
   'fatal',
-  'unknown']);
+  'unknown',
+]);
 export type LogLevel = typeof LogLevel.Type;
 
 export const LogRequest = Schema.Struct({
@@ -49,7 +50,8 @@ export const DeploymentStatus = Schema.Literals([
   'crashed',
   'removed',
   'sleeping',
-  'unknown']);
+  'unknown',
+]);
 export type DeploymentStatus = typeof DeploymentStatus.Type;
 
 export const DeploymentCommit = Schema.Struct({
