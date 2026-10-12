@@ -27,9 +27,11 @@ const formatService = (record: ServiceRecord): string => {
   return `${record.service.padEnd(16)} ${record.provider.padEnd(8)} ${ref}  auth: ${record.auth.status} (${record.auth.detail})`;
 };
 
+export const servicesOptions = { ...globalOptions };
+
 export const servicesCommand = Command.make(
   'services',
-  { ...globalOptions },
+  servicesOptions,
   (args) =>
     Effect.gen(function* () {
       const resolved = yield* resolveProject(args);
@@ -63,8 +65,4 @@ export const servicesCommand = Command.make(
         );
       }
     }),
-).pipe(
-  Command.withDescription(
-    'Show the project matched for the current directory, its services, and whether each provider is authenticated.',
-  ),
 );

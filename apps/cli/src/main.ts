@@ -7,8 +7,20 @@ import { deploysCommand } from '#/commands/deploys.ts';
 import { errorsCommand } from '#/commands/errors.ts';
 import { logsCommand } from '#/commands/logs.ts';
 import { servicesCommand } from '#/commands/services.ts';
-import { HELP_TEXT } from '#/help.ts';
-import { EXIT_CODES, ExitWith, renderError, reportError } from '#/output.ts';
+import { UsageError } from '#/errors.ts';
+import {
+  COMMAND_NAMES,
+  HELP_TEXT,
+  renderCommandHelp,
+  resolveHelpRequest,
+} from '#/help.ts';
+import {
+  EXIT_CODES,
+  ExitWith,
+  renderError,
+  reportError,
+  withPlainConsole,
+} from '#/output.ts';
 
 const root = Command.make('traces').pipe(
   Command.withSubcommands([
@@ -22,27 +34,32 @@ const root = Command.make('traces').pipe(
 const run = Command.run(root, { name: 'traces', version: '0.0.0' });
 
 const rawArgs = process.argv.slice(2);
-const wantsTopLevelHelp =
-  rawArgs.length === 0 ||
-  (rawArgs.length === 1 && ['--help', '-h', 'help'].includes(rawArgs[0] ?? ''));
-// `traces help logs` reads like `traces logs --help`.
-const argv =
-  rawArgs[0] === 'help' && rawArgs.length > 1
-    ? [...process.argv.slice(0, 2), ...rawArgs.slice(1), '--help']
-    : process.argv;
+const helpRequest = resolveHelpRequest(rawArgs);
 
-const program = wantsTopLevelHelp
-  ? Console.log(HELP_TEXT.trimEnd())
-  : run(argv).pipe(
-      Effect.catchAll((error) => {
-        const rendered = renderError(error);
-        return reportError(rendered).pipe(
-          Effect.zipRight(Effect.fail(new ExitWith({ code: rendered.code }))),
-        );
-      }),
+const program = Effect.gen(function* () {
+  if (helpRequest === undefined) return yield* run(process.argv);
+  switch (helpRequest.kind) {
+    case 'top':
+      return yield* Console.log(HELP_TEXT);
+    case 'command':
+      return yield* Console.log(renderCommandHelp(helpRequest.name));
+    case 'unknown':
+      return yield* new UsageError({
+        message: `no command named "${helpRequest.name}"`,
+        hint: `commands: ${COMMAND_NAMES.join(', ')}`,
+      });
+  }
+}).pipe(
+  Effect.catchAll((error) => {
+    const rendered = renderError(error);
+    return reportError(rendered).pipe(
+      Effect.zipRight(Effect.fail(new ExitWith({ code: rendered.code }))),
     );
+  }),
+);
 
 program.pipe(
+  withPlainConsole,
   Effect.provide(Layer.mergeAll(BunContext.layer, FetchHttpClient.layer)),
   BunRuntime.runMain({
     disableErrorReporting: true,
