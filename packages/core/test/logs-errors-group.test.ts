@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { groupErrors, type LogRecord } from '@traces/core';
+import { groupErrors, type LogRecord } from '#/index.js';
 
 const record = (
   message: string,

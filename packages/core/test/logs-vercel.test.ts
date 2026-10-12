@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Effect, Option, Redacted } from 'effect';
 import {
   makeVercelSource,
   mapBuildEvent,
@@ -7,9 +8,8 @@ import {
   mapVercelDeployment,
   mapVercelStatus,
   type VercelTarget,
-} from '@traces/core';
-import { Effect, Option, Redacted } from 'effect';
-import { fakeHttp, fixture, type HttpCall } from './helpers.ts';
+} from '#/index.js';
+import { fakeHttp, fixture, type HttpCall } from './logs-helpers.ts';
 
 const target: VercelTarget = {
   provider: 'vercel',
