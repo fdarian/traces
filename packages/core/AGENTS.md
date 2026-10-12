@@ -6,8 +6,8 @@ domain model, `TraceBackend` interface, and Jaeger v3 adapter.
 - Effect.ts
 
 ## Dev
-- `bun check:tsc` — typecheck
-- `bun check:lint` — lint
+- `pnpm check:tsc` — typecheck
+- `pnpm check:lint` — lint
 
 ## Architecture
 - `src/index.ts` — entry point

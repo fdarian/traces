@@ -19,8 +19,8 @@ lightweight observability dashboard — point it at an existing Jaeger (v2) and 
 ## Dev loop
 1. `docker compose up -d` — starts Jaeger v2 all-in-one (in-memory)
 2. `bun run scripts/seed.ts` — seeds realistic multi-service traces
-3. `bun dev` (in `apps/web` or `apps/docs`) — starts the app
-4. `bun turbo run check` — typecheck + lint across the monorepo
+3. `pnpm dev` (in `apps/web` or `apps/docs`) — starts the app
+4. `pnpm turbo run check` — typecheck + lint across the monorepo
 
 ## Design
 - [DESIGN.md](./DESIGN.md) — color tokens, typography, spacing, component idioms

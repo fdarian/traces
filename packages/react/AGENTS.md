@@ -17,11 +17,11 @@ Publishable React SDK — controlled, presentational components that power the d
 - The package ships `dist/theme.css` (exported as `@traces/react/theme.css`): self-contained compiled output containing `:root` dark token defaults, all utility rules, `.font-data`, shimmer keyframes, and waterfall animation.
 - Consumers import `@traces/react/theme.css` and may override any `--token` variable. Token groups: surfaces (`--bg-*`), borders (`--border-*`), text (`--text-*`), accent (`--accent*`), status (`--status-*`).
 - Consumers must supply Geist fonts themselves (`@fontsource-variable/geist` + `geist-mono`); `theme.css` sets font-family vars but bundles no font files.
-- Tailwind is an internal build detail. Editing component classNames requires re-running `bun run build:css` (included in `bun run build`).
+- Tailwind is an internal build detail. Editing component classNames requires re-running `pnpm run build:css` (included in `pnpm run build`).
 
 ## Build / packaging
 
-- `bun run build` = `tsup` (ESM + `.d.ts` → `dist/`) then `build:css` (`theme.css` → `dist/`).
+- `pnpm run build` = `tsup` (ESM + `.d.ts` → `dist/`) then `build:css` (`theme.css` → `dist/`).
 - `dist/` is gitignored — never commit it; produced at publish/pack time.
 - exports: `.` (types + import) and `./theme.css`. peerDeps: `react/react-dom >=19`. `publishConfig.access: public`. version `0.1.0`.
 - Biome ignores `src/styles.src.css` (`packages/react/biome.jsonc`) — Tailwind v4 at-rules aren't valid plain CSS to Biome.
@@ -32,7 +32,7 @@ Pure presentation and pure utils live HERE. Data fetching, server functions, rou
 
 ## Dev commands
 
-- `bun check:tsc` — typecheck
-- `bun check:lint` — lint
+- `pnpm check:tsc` — typecheck
+- `pnpm check:lint` — lint
 - `bun test` — run tests
-- `bun run build` — full build (tsup + theme.css)
+- `pnpm run build` — full build (tsup + theme.css)

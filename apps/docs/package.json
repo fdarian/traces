@@ -14,11 +14,11 @@
     "@fontsource-variable/geist-mono": "^5.2.8",
     "@traces/react": "workspace:*",
     "@types/mdx": "^2.0.14",
-    "fumadocs-core": "latest",
-    "fumadocs-mdx": "^15.0.12",
-    "fumadocs-ui": "latest",
+    "fumadocs-core": "16.10.2",
+    "fumadocs-mdx": "15.0.12",
+    "fumadocs-ui": "16.10.2",
     "lucide-react": "^1.18.0",
-    "next": "latest",
+    "next": "16.2.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -28,6 +28,6 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "tailwindcss": "^4.3.1",
-    "typescript": "latest"
+    "typescript": "6.0.3"
   }
 }

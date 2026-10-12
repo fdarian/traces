@@ -19,7 +19,7 @@
     "*.css"
   ],
   "scripts": {
-    "build": "tsup && bun run build:css",
+    "build": "tsup && pnpm run build:css",
     "build:css": "tailwindcss -i ./src/styles.src.css -o ./dist/theme.css",
     "check:tsc": "tsc --noEmit",
     "check:lint": "biome check",

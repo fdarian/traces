@@ -1,0 +1,12 @@
+packages:
+  - packages/*
+  - apps/*
+  - scripts
+allowBuilds:
+  "@parcel/watcher": false
+  esbuild: false
+  msgpackr-extract: false
+  sharp: false
+overrides:
+  mdast-util-to-markdown: 2.1.2
+enableGlobalVirtualStore: false

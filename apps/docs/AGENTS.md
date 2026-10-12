@@ -6,9 +6,9 @@ fumadocs documentation site — covers the app + the React SDK.
 - Next.js + fumadocs
 
 ## Dev
-- `bun dev` — start dev server
-- `bun check:tsc` — typecheck
-- `bun check:lint` — lint
+- `pnpm dev` — start dev server
+- `pnpm check:tsc` — typecheck
+- `pnpm check:lint` — lint
 
 ## Architecture
 - `src/app/` — Next.js app router pages

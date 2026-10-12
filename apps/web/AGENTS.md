@@ -9,9 +9,9 @@ TanStack Start app — the traces observability dashboard.
 - TanStack Form + Effect Schema
 
 ## Dev
-- `bun dev` — start dev server
-- `bun check:tsc` — typecheck
-- `bun check:lint` — lint
+- `pnpm dev` — start dev server
+- `pnpm check:tsc` — typecheck
+- `pnpm check:lint` — lint
 
 ## Architecture
 - `src/routes/` — file-based routing
