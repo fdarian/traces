@@ -1,4 +1,3 @@
-import { ValidationError } from '@effect/cli';
 import {
   type Deployment,
   InvalidCursor,
@@ -9,7 +8,8 @@ import {
   ProviderResponseInvalid,
   stripAnsi,
 } from '@traces/core';
-import { Console, Effect, ParseResult, Schema } from 'effect';
+import { Console, Effect, Schema } from 'effect';
+import { CliError } from 'effect/cli';
 import { ConfigError, UsageError } from '#/errors.ts';
 
 export type OutputMode = 'human' | 'ndjson';
@@ -100,15 +100,15 @@ export interface RenderedError {
 }
 
 const causeMessage = (cause: unknown): string => {
-  if (ParseResult.isParseError(cause)) {
-    return ParseResult.TreeFormatter.formatErrorSync(cause).slice(0, 600);
+  if (Schema.isSchemaError(cause)) {
+    return cause.message.slice(0, 600);
   }
   return cause instanceof Error ? cause.message : String(cause);
 };
 
 /** `unknown` because the CLI framework's own failures also land here. */
 export const renderError = (error: unknown): RenderedError => {
-  if (ValidationError.isValidationError(error)) {
+  if (CliError.isCliError(error)) {
     return {
       message: 'invalid command line',
       hint: 'run `traces --help`, or `traces <command> --help` for that command',
@@ -191,9 +191,10 @@ export const plainWhenPiped = (
 });
 
 export const withPlainConsole = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.flatMap(Effect.console, (base) =>
-    Effect.withConsole(
+  Console.consoleWith((base) =>
+    Effect.provideService(
       effect,
+      Console.Console,
       plainWhenPiped(base, {
         stdout: process.stdout.isTTY === true,
         stderr: process.stderr.isTTY === true,

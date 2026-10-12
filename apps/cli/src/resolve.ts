@@ -1,4 +1,3 @@
-import { Options } from '@effect/cli';
 import {
   type LogSource,
   makeRailwaySource,
@@ -6,6 +5,7 @@ import {
   type ServiceTarget,
 } from '@traces/core';
 import { Effect, Option } from 'effect';
+import { Flag } from 'effect/cli';
 import {
   type ProjectConfig,
   readConfig,
@@ -21,10 +21,10 @@ import {
 import { findVercelToken } from '#/vercel-token.ts';
 
 export const globalOptions = {
-  project: Options.text('project').pipe(Options.optional),
-  env: Options.text('env').pipe(Options.optional),
-  config: Options.text('config').pipe(Options.optional),
-  json: Options.boolean('json').pipe(),
+  project: Flag.String('project').pipe(Flag.optional),
+  env: Flag.String('env').pipe(Flag.optional),
+  config: Flag.String('config').pipe(Flag.optional),
+  json: Flag.Boolean('json').pipe(),
 };
 
 export interface GlobalFlags {

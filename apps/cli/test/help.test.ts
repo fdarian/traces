@@ -121,11 +121,12 @@ describe('plainWhenPiped', () => {
   const capture = (tty: { stdout: boolean; stderr: boolean }) => {
     const seen: Array<string> = [];
     const base = {
-      ...Effect.runSync(Effect.console),
       log: (...args: ReadonlyArray<unknown>) =>
-        Effect.sync(() => void seen.push(`log:${args.join(' ')}`)),
+        void seen.push(`log:${args.join(' ')}`),
       error: (...args: ReadonlyArray<unknown>) =>
-        Effect.sync(() => void seen.push(`error:${args.join(' ')}`)),
+        void seen.push(`error:${args.join(' ')}`),
+      warn: (...args: ReadonlyArray<unknown>) =>
+        void seen.push(`warn:${args.join(' ')}`),
     } as unknown as Console.Console;
     return { seen, console: plainWhenPiped(base, tty) };
   };
@@ -133,12 +134,12 @@ describe('plainWhenPiped', () => {
   test('strips escapes from piped streams only', () => {
     const colored = `${escape}[31mred${escape}[0m`;
     const piped = capture({ stdout: false, stderr: false });
-    Effect.runSync(piped.console.error(colored));
-    Effect.runSync(piped.console.log(colored));
+    piped.console.error(colored);
+    piped.console.log(colored);
     expect(piped.seen).toEqual(['error:red', 'log:red']);
 
     const tty = capture({ stdout: true, stderr: true });
-    Effect.runSync(tty.console.error(colored));
+    tty.console.error(colored);
     expect(tty.seen).toEqual([`error:${colored}`]);
   });
 });

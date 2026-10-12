@@ -1,12 +1,12 @@
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
-import { FileSystem } from '@effect/platform';
 import { ProviderAuthError } from '@traces/core';
 import { Config, Effect, Option, Redacted, Schema } from 'effect';
+import { FileSystem } from 'effect/FileSystem';
 
 const LOGIN_HINT = 'run `vercel login` or set VERCEL_TOKEN';
 
-const AuthFile = Schema.parseJson(Schema.Struct({ token: Schema.String }));
+const AuthFile = Schema.fromJsonString(Schema.Struct({ token: Schema.String }));
 
 export const vercelAuthFilePath = (
   system: NodeJS.Platform,
@@ -36,16 +36,19 @@ export interface VercelToken {
 export const findVercelToken: Effect.Effect<
   VercelToken,
   ProviderAuthError,
-  FileSystem.FileSystem
+  FileSystem
 > = Effect.gen(function* () {
-  const fromEnv = yield* Config.redacted('VERCEL_TOKEN').pipe(
+  const fromEnv = yield* Config.String('VERCEL_TOKEN').pipe(
     Config.option,
     Effect.orDie,
   );
   if (Option.isSome(fromEnv)) {
-    return { token: fromEnv.value, source: 'VERCEL_TOKEN' as const };
+    return {
+      token: Redacted.make(fromEnv.value),
+      source: 'VERCEL_TOKEN' as const,
+    };
   }
-  const xdgDataHome = yield* Config.string('XDG_DATA_HOME').pipe(
+  const xdgDataHome = yield* Config.String('XDG_DATA_HOME').pipe(
     Config.option,
     Effect.orDie,
   );
@@ -54,7 +57,7 @@ export const findVercelToken: Effect.Effect<
     homedir(),
     Option.getOrUndefined(xdgDataHome),
   );
-  const fileSystem = yield* FileSystem.FileSystem;
+  const fileSystem = yield* FileSystem;
   const content = yield* fileSystem.readFileString(path).pipe(
     Effect.mapError(
       () =>
@@ -64,7 +67,7 @@ export const findVercelToken: Effect.Effect<
         }),
     ),
   );
-  const parsed = yield* Schema.decodeUnknown(AuthFile)(content).pipe(
+  const parsed = yield* Schema.decodeUnknownEffect(AuthFile)(content).pipe(
     Effect.mapError(
       () =>
         new ProviderAuthError({

@@ -1,4 +1,3 @@
-import { Args, Command, Options } from '@effect/cli';
 import {
   decodeCursor,
   encodeCursor,
@@ -8,6 +7,7 @@ import {
   type ServiceTarget,
 } from '@traces/core';
 import { Console, Duration, Effect, Option, Schedule } from 'effect';
+import { Argument, Command, Flag } from 'effect/cli';
 import { UsageError } from '#/errors.ts';
 import { parseLevels } from '#/levels.ts';
 import {
@@ -92,17 +92,17 @@ const windowText = (query: LogQuery, target: ServiceTarget) =>
 
 export const logsOptions = {
   ...globalOptions,
-  service: Args.text({ name: 'service' }).pipe(Args.optional),
-  since: Options.text('since').pipe(Options.optional),
-  until: Options.text('until').pipe(Options.optional),
-  level: Options.text('level').pipe(Options.optional),
-  grep: Options.text('grep').pipe(Options.optional),
-  deploy: Options.text('deploy').pipe(Options.optional),
-  build: Options.boolean('build'),
-  http: Options.boolean('http'),
-  limit: Options.integer('limit').pipe(Options.withDefault(LOGS_LIMIT.default)),
-  cursor: Options.text('cursor').pipe(Options.optional),
-  follow: Options.boolean('follow').pipe(Options.withAlias('f')),
+  service: Argument.String('service').pipe(Argument.optional),
+  since: Flag.String('since').pipe(Flag.optional),
+  until: Flag.String('until').pipe(Flag.optional),
+  level: Flag.String('level').pipe(Flag.optional),
+  grep: Flag.String('grep').pipe(Flag.optional),
+  deploy: Flag.String('deploy').pipe(Flag.optional),
+  build: Flag.Boolean('build'),
+  http: Flag.Boolean('http'),
+  limit: Flag.Int('limit').pipe(Flag.withDefault(LOGS_LIMIT.default)),
+  cursor: Flag.String('cursor').pipe(Flag.optional),
+  follow: Flag.Boolean('follow').pipe(Flag.withAlias('f')),
 };
 
 export const logsCommand = Command.make('logs', logsOptions, (args) =>

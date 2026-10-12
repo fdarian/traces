@@ -1,5 +1,5 @@
-import { Command } from '@effect/cli';
 import { Console, Effect } from 'effect';
+import { Command } from 'effect/cli';
 import {
   type AuthStatus,
   railwayAuthStatus,

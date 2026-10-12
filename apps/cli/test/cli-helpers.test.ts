@@ -32,9 +32,9 @@ describe('parseWhen', () => {
   test('rejects anything else with a usage error', async () => {
     for (const text of ['banana', '10', '1x', '12:00']) {
       const result = await Effect.runPromise(
-        parseWhen('--since', text, now).pipe(Effect.either),
+        parseWhen('--since', text, now).pipe(Effect.result),
       );
-      expect(result._tag).toBe('Left');
+      expect(result._tag).toBe('Failure');
     }
   });
 });
@@ -48,9 +48,9 @@ describe('parseLevels', () => {
 
   test('rejects unknown levels', async () => {
     const result = await Effect.runPromise(
-      parseLevels('loud').pipe(Effect.either),
+      parseLevels('loud').pipe(Effect.result),
     );
-    expect(result._tag).toBe('Left');
+    expect(result._tag).toBe('Failure');
   });
 });
 

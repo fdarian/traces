@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-import { Command } from '@effect/cli';
-import { FetchHttpClient } from '@effect/platform';
-import { BunContext, BunRuntime } from '@effect/platform-bun';
+import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Cause, Console, Effect, Exit, Layer, Option } from 'effect';
+import { Command } from 'effect/cli';
+import { FetchHttpClient } from 'effect/http';
 import { deploysCommand } from '#/commands/deploys.ts';
 import { errorsCommand } from '#/commands/errors.ts';
 import { logsCommand } from '#/commands/logs.ts';
@@ -31,13 +31,13 @@ const root = Command.make('traces').pipe(
   ]),
 );
 
-const run = Command.run(root, { name: 'traces', version: '0.0.0' });
+const run = Command.runWith(root, { version: '0.0.0' });
 
 const rawArgs = process.argv.slice(2);
 const helpRequest = resolveHelpRequest(rawArgs);
 
 const program = Effect.gen(function* () {
-  if (helpRequest === undefined) return yield* run(process.argv);
+  if (helpRequest === undefined) return yield* run(rawArgs);
   switch (helpRequest.kind) {
     case 'top':
       return yield* Console.log(HELP_TEXT);
@@ -50,23 +50,23 @@ const program = Effect.gen(function* () {
       });
   }
 }).pipe(
-  Effect.catchAll((error) => {
+  Effect.catch((error) => {
     const rendered = renderError(error);
     return reportError(rendered).pipe(
-      Effect.zipRight(Effect.fail(new ExitWith({ code: rendered.code }))),
+      Effect.andThen(Effect.fail(new ExitWith({ code: rendered.code }))),
     );
   }),
 );
 
 program.pipe(
   withPlainConsole,
-  Effect.provide(Layer.mergeAll(BunContext.layer, FetchHttpClient.layer)),
+  Effect.provide(Layer.mergeAll(BunServices.layer, FetchHttpClient.layer)),
   BunRuntime.runMain({
     disableErrorReporting: true,
     teardown: (exit, onExit) => {
       if (Exit.isSuccess(exit)) return onExit(EXIT_CODES.ok);
-      if (Cause.isInterruptedOnly(exit.cause)) return onExit(130);
-      const failure = Cause.failureOption(exit.cause);
+      if (Cause.hasInterruptsOnly(exit.cause)) return onExit(130);
+      const failure = Cause.findErrorOption(exit.cause);
       onExit(
         Option.isSome(failure) && failure.value instanceof ExitWith
           ? failure.value.code
