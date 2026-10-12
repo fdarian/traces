@@ -1,0 +1,33 @@
+{
+  "deployments": [
+    {
+      "uid": "dpl_prod",
+      "readyState": "READY",
+      "target": "production",
+      "created": 1791614805667,
+      "url": "app-abc-team.vercel.app",
+      "meta": {
+        "githubCommitSha": "979403b39a53afc6b877f452bb5ba59fe98bc5a4",
+        "githubCommitMessage": "fix: thing (#26)",
+        "githubCommitRef": "main",
+        "githubCommitOrg": "acme"
+      }
+    },
+    {
+      "uid": "dpl_preview",
+      "readyState": "ERROR",
+      "target": null,
+      "created": 1791614714253,
+      "url": "app-def-team.vercel.app",
+      "meta": {}
+    },
+    {
+      "uid": "dpl_cancel",
+      "readyState": "CANCELED",
+      "target": "production",
+      "created": 1791609515562,
+      "meta": { "gitlabCommitSha": "abc123", "gitlabCommitRef": "dev" }
+    }
+  ],
+  "pagination": { "count": 3, "next": 1791609515562, "prev": 1791614805667 }
+}

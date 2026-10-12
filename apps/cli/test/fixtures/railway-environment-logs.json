@@ -1,0 +1,35 @@
+[
+  {
+    "attributes": [{ "key": "level", "value": "\"info\"" }],
+    "message": "oldest row, the limit+1 extra",
+    "severity": "info",
+    "tags": { "deploymentId": "dep-1" },
+    "timestamp": "2026-10-12T00:25:58.664078887Z"
+  },
+  {
+    "attributes": [
+      { "key": "level", "value": "\"info\"" },
+      { "key": "fiberId", "value": "\"#9\"" },
+      { "key": "spans", "value": "{}" },
+      { "key": "count", "value": "3" }
+    ],
+    "message": "Connected to postgres",
+    "severity": "info",
+    "tags": { "deploymentId": "dep-1" },
+    "timestamp": "2026-10-12T00:25:58.664093687Z"
+  },
+  {
+    "attributes": [{ "key": "level", "value": "\"error\"" }],
+    "message": "\u001b[31mboom: failed to bind port 8080\u001b[0m",
+    "severity": "error",
+    "tags": { "deploymentId": "dep-1" },
+    "timestamp": "2026-10-12T00:25:58.664098007Z"
+  },
+  {
+    "attributes": [{ "key": "level", "value": "\"warn\"" }],
+    "message": "slow query",
+    "severity": null,
+    "tags": { "deploymentId": null },
+    "timestamp": "2026-10-12T00:25:58.664102327Z"
+  }
+]

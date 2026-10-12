@@ -1,0 +1,39 @@
+{
+  "deployments": {
+    "edges": [
+      {
+        "node": {
+          "id": "dep-skipped",
+          "status": "SKIPPED",
+          "createdAt": "2026-10-11T21:28:31.330Z",
+          "staticUrl": null,
+          "meta": {
+            "branch": "main",
+            "commitHash": "3e8c0810b11462237b12e6e4e8b6e2e21583b3d1",
+            "commitMessage": "feat: skipped\n\nbody",
+            "skippedReason": "No changes to watched files"
+          }
+        }
+      },
+      {
+        "node": {
+          "id": "dep-ready",
+          "status": "SUCCESS",
+          "createdAt": "2026-10-08T15:14:10.488Z",
+          "staticUrl": "panel.example.com",
+          "meta": { "buildOnly": false, "runtime": "V2" }
+        }
+      },
+      {
+        "node": {
+          "id": "dep-crashed",
+          "status": "CRASHED",
+          "createdAt": "2026-10-07T12:39:47.437Z",
+          "staticUrl": null,
+          "meta": null
+        }
+      }
+    ],
+    "pageInfo": { "hasNextPage": true, "endCursor": "R1BDOlM6YWJj" }
+  }
+}
