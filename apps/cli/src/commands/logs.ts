@@ -98,11 +98,14 @@ export const logsOptions = {
   level: Flag.String('level').pipe(Flag.optional),
   grep: Flag.String('grep').pipe(Flag.optional),
   deploy: Flag.String('deploy').pipe(Flag.optional),
-  build: Flag.Boolean('build'),
-  http: Flag.Boolean('http'),
+  build: Flag.Boolean('build').pipe(Flag.withDefault(false)),
+  http: Flag.Boolean('http').pipe(Flag.withDefault(false)),
   limit: Flag.Int('limit').pipe(Flag.withDefault(LOGS_LIMIT.default)),
   cursor: Flag.String('cursor').pipe(Flag.optional),
-  follow: Flag.Boolean('follow').pipe(Flag.withAlias('f')),
+  follow: Flag.Boolean('follow').pipe(
+    Flag.withAlias('f'),
+    Flag.withDefault(false),
+  ),
 };
 
 export const logsCommand = Command.make('logs', logsOptions, (args) =>
