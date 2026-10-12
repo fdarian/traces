@@ -15,3 +15,6 @@ packageExtensions:
   recharts:
     peerDependencies:
       "@types/react": "*"
+peerDependencyRules:
+  allowedVersions:
+    tsconfck>typescript: "6"
