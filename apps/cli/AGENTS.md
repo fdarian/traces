@@ -11,5 +11,6 @@
 
 ## Notes
 - Provider adapters live in `@traces/core` (`packages/core/src/logs/`); this app owns config, project matching, commands, and output.
-- Top-level `--help` is hand-written in `src/help.ts`; keep it under ~100 lines.
+- All help is hand-written in `src/help.ts`; `COMMAND_HELP` is the one place each command's flags are documented, and `test/help.test.ts` fails when a command's flags and its help disagree. Adding a flag means adding it there.
+- Adapter tests, fixtures and fakes live in `packages/core/test`; config, matcher, help and output tests live here.
 - stdout carries one record type only (NDJSON when piped); hints and pagination go to stderr.
