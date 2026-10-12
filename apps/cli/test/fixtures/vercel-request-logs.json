@@ -1,0 +1,38 @@
+{
+  "rows": [
+    {
+      "requestId": "req-new",
+      "timestamp": "2026-10-12T00:53:45.419Z",
+      "deploymentId": "dpl_new",
+      "environment": "production",
+      "branch": "main",
+      "domain": "app.example.com",
+      "requestMethod": "POST",
+      "requestPath": "/api/pay",
+      "statusCode": 500,
+      "requestDurationMs": 120,
+      "logs": [
+        { "level": "info", "message": "charging card" },
+        {
+          "level": "error",
+          "message": "Error: card declined\n    at charge (pay.ts:10)"
+        }
+      ],
+      "events": [{ "source": "serverless" }]
+    },
+    {
+      "requestId": "req-static",
+      "timestamp": "2026-10-12T00:53:45.248Z",
+      "deploymentId": "dpl_new",
+      "environment": "production",
+      "branch": null,
+      "domain": "app.example.com",
+      "requestMethod": "GET",
+      "requestPath": "/",
+      "statusCode": 200,
+      "requestDurationMs": 7,
+      "logs": []
+    }
+  ],
+  "hasMoreRows": false
+}

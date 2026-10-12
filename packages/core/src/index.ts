@@ -72,7 +72,7 @@ export {
   encodeCursor,
   LogRecord,
 } from './logs/model.js';
-export { normalizeLevel, stripAnsi } from './logs/normalize.js';
+export { normalizeLevel, shortHash, stripAnsi } from './logs/normalize.js';
 export { pageBackwards } from './logs/paging.js';
 export { Provider } from './logs/provider.js';
 export {
