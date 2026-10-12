@@ -1,9 +1,9 @@
+import { Effect, Redacted, Schema } from 'effect';
 import {
   HttpClient,
   HttpClientRequest,
   type HttpClientResponse,
-} from '@effect/platform';
-import { Effect, Redacted, Schema } from 'effect';
+} from 'effect/http';
 import {
   ProviderAuthError,
   type ProviderError,
@@ -35,7 +35,7 @@ export const makeVercelClient = (
       operation: string,
       url: string,
       params: Readonly<Record<string, string | undefined>>,
-      schema: Schema.Schema<A, I>,
+      schema: Schema.Codec<A, I>,
     ): Effect.Effect<A, ProviderError> =>
       Effect.gen(function* () {
         const definedParams: Record<string, string> = {};
@@ -86,7 +86,7 @@ export const makeVercelClient = (
             (cause) => new ProviderRequestError({ provider: PROVIDER, cause }),
           ),
         );
-        return yield* Schema.decodeUnknown(schema)(json).pipe(
+        return yield* Schema.decodeUnknownEffect(schema)(json).pipe(
           Effect.mapError(
             (cause) =>
               new ProviderResponseInvalid({

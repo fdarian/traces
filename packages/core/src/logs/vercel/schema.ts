@@ -41,7 +41,7 @@ export const DeploymentsResponse = Schema.Struct({
       url: Schema.optional(Schema.NullOr(Schema.String)),
       meta: Schema.optional(
         Schema.NullOr(
-          Schema.Record({ key: Schema.String, value: Schema.Unknown }),
+          Schema.Record(Schema.String, Schema.Unknown),
         ),
       ),
     }),

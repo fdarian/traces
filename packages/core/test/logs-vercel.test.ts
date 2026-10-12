@@ -268,14 +268,14 @@ describe('vercel source', () => {
         body: { error: { message: 'no' } },
       })).pipe(
         Effect.flatMap((source) => source.deployments({ limit: 1 })),
-        Effect.either,
+        Effect.result,
       ),
     );
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') {
-      expect(result.left).toMatchObject({ _tag: 'ProviderAuthError' });
-      expect(JSON.stringify(result.left)).toContain('vercel login');
-      expect(JSON.stringify(result.left)).not.toContain('secret-token');
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure).toMatchObject({ _tag: 'ProviderAuthError' });
+      expect(JSON.stringify(result.failure)).toContain('vercel login');
+      expect(JSON.stringify(result.failure)).not.toContain('secret-token');
     }
   });
 
@@ -287,12 +287,12 @@ describe('vercel source', () => {
           : respond(url),
       ).pipe(
         Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
-        Effect.either,
+        Effect.result,
       ),
     );
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') {
-      expect(result.left).toMatchObject({ _tag: 'ProviderResponseInvalid' });
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure).toMatchObject({ _tag: 'ProviderResponseInvalid' });
     }
   });
 });

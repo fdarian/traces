@@ -174,12 +174,12 @@ describe('railway source', () => {
     const missing = makeRailwaySource({ ...target, serviceName: 'ghost' }).pipe(
       Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
       Effect.provide(fakeRailway(respondWith([]))),
-      Effect.either,
+      Effect.result,
     );
     const result = await run(missing);
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') {
-      expect(JSON.stringify(result.left)).toContain('api, web');
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(JSON.stringify(result.failure)).toContain('api, web');
     }
   });
 
@@ -228,12 +228,12 @@ describe('railway source', () => {
             }),
           }),
         ),
-        Effect.either,
+        Effect.result,
       ),
     );
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') {
-      expect(result.left).toMatchObject({ _tag: 'ProviderAuthError' });
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure).toMatchObject({ _tag: 'ProviderAuthError' });
     }
   });
 
@@ -243,12 +243,12 @@ describe('railway source', () => {
         { timestamp: 'not a timestamp', message: 'x', attributes: [] },
       ]).pipe(
         Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
-        Effect.either,
+        Effect.result,
       ),
     );
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') {
-      expect(result.left).toMatchObject({ _tag: 'ProviderResponseInvalid' });
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure).toMatchObject({ _tag: 'ProviderResponseInvalid' });
     }
   });
 });

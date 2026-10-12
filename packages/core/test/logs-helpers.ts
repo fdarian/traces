@@ -1,12 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  type Command,
-  CommandExecutor,
-  HttpClient,
-  HttpClientResponse,
-} from '@effect/platform';
 import { Effect, Layer, Stream } from 'effect';
+import { HttpClient, HttpClientResponse } from 'effect/http';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 export const fixture = (name: string): unknown =>
   JSON.parse(readFileSync(join(import.meta.dir, 'fixtures', name), 'utf8'));
@@ -23,12 +19,9 @@ export const fakeRailway = (
   options: { readonly exitCode?: number; readonly stdout?: string } = {},
 ) =>
   Layer.succeed(
-    CommandExecutor.CommandExecutor,
-    CommandExecutor.makeExecutor((command: Command.Command) => {
-      const standard = command as unknown as {
-        args: ReadonlyArray<string>;
-      };
-      const args = standard.args;
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) => {
+      const args = (command as unknown as ChildProcess.StandardCommand).args;
       const variables: Record<string, string> = {};
       for (let index = 0; index < args.length; index++) {
         const flag = args[index];
@@ -43,7 +36,7 @@ export const fakeRailway = (
       const call = { document: args[1] ?? '', variables };
       calls.push(call);
       const stdout = options.stdout ?? JSON.stringify({ data: respond(call) });
-      const process = {
+      const handle = {
         pid: 1,
         exitCode: Effect.succeed(options.exitCode ?? 0),
         isRunning: Effect.succeed(false),
@@ -52,7 +45,7 @@ export const fakeRailway = (
         stdout: Stream.make(new TextEncoder().encode(stdout)),
         stderr: Stream.empty,
       };
-      return Effect.succeed(process as unknown as CommandExecutor.Process);
+      return Effect.succeed(handle as unknown as ChildProcessSpawner.ChildProcessHandle);
     }),
   );
 
