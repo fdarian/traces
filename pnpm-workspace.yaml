@@ -10,3 +10,5 @@ allowBuilds:
 overrides:
   mdast-util-to-markdown: 2.1.2
 enableGlobalVirtualStore: false
+minimumReleaseAgeExclude:
+  - blume@2.2.3

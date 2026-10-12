@@ -1,0 +1,10 @@
+@import "@traces/react/theme.css";
+
+:root,
+:root[data-theme="dark"] {
+  --blume-background: #0b0d10;
+  --blume-foreground: #e6e9ef;
+  --blume-muted-foreground: #9ba3b0;
+  --blume-border: rgba(255, 255, 255, 0.1);
+  --blume-accent: #4d9fff;
+}

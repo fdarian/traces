@@ -3,12 +3,6 @@
   "$schema": "https://biomejs.dev/schemas/2.5.0/schema.json",
   "extends": ["../../biome.jsonc"],
   "files": {
-    "includes": [
-      "**",
-      "!src/app/globals.css",
-      "!.next/**",
-      "!.source/**",
-      "!next-env.d.ts"
-    ]
+    "includes": ["**", "!.blume/**", "!dist/**"]
   }
 }

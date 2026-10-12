@@ -1,0 +1,21 @@
+import { defineMeta } from 'blume';
+
+export default defineMeta({
+  title: 'Component Reference',
+  pages: [
+    'trace-waterfall',
+    'trace-detail-view',
+    'trace-list-table',
+    'span-detail-panel',
+    'issue-list-table',
+    'issue-detail',
+    'stacktrace-block',
+    'sparkline',
+    'status-badge',
+    'service-badge',
+    'duration',
+    'copy-text',
+    'empty-state',
+    'skeleton-row',
+  ],
+});

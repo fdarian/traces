@@ -1,5 +1,3 @@
 node_modules/
-.next/
-.source/
-out/
-next-env.d.ts
+.blume/
+dist/

@@ -1,11 +1,7 @@
 {
   "extends": "../../packages/config/tsconfig.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "paths": {
-      "#/*": ["./src/*"],
-      "collections/*": ["./.source/*"]
-    }
+    "jsx": "react-jsx"
   },
-  "include": ["src", ".source"]
+  "include": ["islands", "fixtures", "blume.config.ts", "docs/**/meta.ts"]
 }

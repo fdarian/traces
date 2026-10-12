@@ -1,6 +1,6 @@
 # traces
 
-lightweight observability dashboard — point it at an existing Jaeger (v2) and get a home overview, trace exploration, error aggregation, and per-service filtering. The UI components ship as a publishable React SDK (`@traces/react`), documented in a fumadocs site.
+lightweight observability dashboard — point it at an existing Jaeger (v2) and get a home overview, trace exploration, error aggregation, and per-service filtering. The UI components ship as a publishable React SDK (`@traces/react`), documented in a Blume site.
 
 ## Stack
 - Bun + Turborepo + Biome
@@ -12,7 +12,7 @@ lightweight observability dashboard — point it at an existing Jaeger (v2) and 
 
 ## Workspaces
 - `apps/web` — TanStack Start app (dashboard)
-- `apps/docs` — fumadocs documentation site
+- `apps/docs` — Blume documentation site
 - `packages/core` — domain model, `TraceBackend` interface, Jaeger adapter
 - `packages/react` — publishable React SDK (components from day one)
 
