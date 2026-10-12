@@ -29,7 +29,8 @@ describe('cursor', () => {
       decodeCursor('not-a-cursor').pipe(Effect.result),
     );
     expect(result._tag).toBe('Failure');
-    if (result._tag === 'Failure') expect(result.failure._tag).toBe('InvalidCursor');
+    if (result._tag === 'Failure')
+      expect(result.failure._tag).toBe('InvalidCursor');
   });
 
   test('rejects well-formed JSON of the wrong shape', async () => {
