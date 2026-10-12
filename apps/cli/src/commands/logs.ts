@@ -215,7 +215,7 @@ export const logsCommand = Command.make(
           resolved.source.retentionNote,
         );
       }
-      if (page.next !== undefined) {
+      if (page.next !== undefined && !args.follow) {
         yield* Console.error(
           `more: ${commandLine(
             'logs',
