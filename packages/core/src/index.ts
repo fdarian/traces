@@ -81,7 +81,7 @@ export {
   mapRailwayLog,
   mapRailwayStatus,
   RAILWAY_RETENTION_NOTE,
-} from './logs/railway.js';
+} from './logs/railway/index.js';
 export type { LogSource } from './logs/source.js';
 export {
   makeVercelSource,
@@ -91,7 +91,7 @@ export {
   mapVercelDeployment,
   mapVercelStatus,
   VERCEL_RETENTION_NOTE,
-} from './logs/vercel.js';
+} from './logs/vercel/index.js';
 export type {
   AttributeValue,
   ExceptionInfo,
