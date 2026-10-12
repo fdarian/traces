@@ -3,5 +3,11 @@
   "compilerOptions": {
     "jsx": "react-jsx"
   },
-  "include": ["islands", "fixtures", "blume.config.ts", "docs/**/meta.ts"]
+  "include": [
+    "scripts",
+    "islands",
+    "fixtures",
+    "blume.config.ts",
+    "docs/**/meta.ts"
+  ]
 }

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "blume dev",
+    "dev": "bun scripts/dev.ts",
     "build": "blume build",
     "check:validate": "blume validate --strict",
     "check:tsc": "tsc --noEmit",
@@ -17,6 +17,9 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "devsess": "catalog:",
+    "effect": "catalog:",
     "@types/node": "^25.9.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

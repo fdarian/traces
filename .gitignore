@@ -7,3 +7,4 @@ build/
 .turbo/
 .claude/worktrees/
 traces.db
+.data/
