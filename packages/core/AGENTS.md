@@ -1,6 +1,6 @@
 # @traces/core
 
-domain model, `TraceBackend` interface, and Jaeger v3 adapter.
+domain model, `TraceBackend` interface, Jaeger v3 adapter, and the logs model with Railway/Vercel log adapters (`src/logs/`).
 
 ## Stack
 - Effect.ts

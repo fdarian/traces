@@ -30,6 +30,8 @@ COMMANDS
       --since 1h|30m|2d|<ISO>  --until <dur|ISO>  --level error[,warn]  --grep <text>
       --deploy <id|latest>  --build (build logs)  --http (method path status duration)
       --limit 100 (max 1000)  --cursor <c>  -f/--follow (poll ~2s, Ctrl-C)
+      default window: last 1h (build logs: the whole deployment). On Vercel, runtime
+      logs are the app's own log lines; 5xx without a log line only show with --http.
   traces deploys [service]        deployments: status, commit sha, branch, time, url
       --limit 10  --cursor <c>
   traces errors [service]         error/fatal logs grouped by fingerprint, most frequent first
@@ -53,8 +55,9 @@ OUTPUT
   stdout: compact lines on a TTY; NDJSON when piped or with --json (one record per
   line: LogRecord, Deployment, or error group; fields are stable). When older records
   exist, stderr gets "more: <full command with --cursor>". Errors are one stderr line
-  plus a "hint:" line. Exit codes: 0 ok (including empty), 1 runtime/provider error,
-  2 usage/config error, 3 auth error.
+  plus a "hint:" line. Empty results print a note (with the retention caveat) on
+  stderr and exit 0. Exit codes: 0 ok, 1 runtime/provider error, 2 usage/config
+  error, 3 auth error.
 
 RETENTION
   Railway keeps logs 3d (Free), 7d (Hobby), 30d (Pro). Vercel runtime logs: 1h (Hobby),
