@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import {
   type Cursor,
   makeRailwaySource,
@@ -7,9 +8,8 @@ import {
   mapRailwayStatus,
   type RailwayTarget,
   shortHash,
-} from '@traces/core';
-import { Effect } from 'effect';
-import { fakeRailway, fixture, type RailwayCall } from './helpers.ts';
+} from '#/index.js';
+import { fakeRailway, fixture, type RailwayCall } from './logs-helpers.ts';
 
 const target: RailwayTarget = {
   provider: 'railway',

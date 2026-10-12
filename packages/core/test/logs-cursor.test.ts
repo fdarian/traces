@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { type Cursor, decodeCursor, encodeCursor } from '@traces/core';
 import { Effect } from 'effect';
+import { type Cursor, decodeCursor, encodeCursor } from '#/index.js';
 
 const cursors: ReadonlyArray<Cursor> = [
   {
