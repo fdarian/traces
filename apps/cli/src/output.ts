@@ -7,8 +7,9 @@ import {
   ProviderNotFound,
   ProviderRequestError,
   ProviderResponseInvalid,
+  stripAnsi,
 } from '@traces/core';
-import { Console, ParseResult, Schema } from 'effect';
+import { Console, Effect, ParseResult, Schema } from 'effect';
 import { ConfigError, UsageError } from '#/errors.ts';
 
 export type OutputMode = 'human' | 'ndjson';
@@ -174,3 +175,28 @@ export const reportError = (rendered: RenderedError) =>
 export class ExitWith extends Schema.TaggedError<ExitWith>()('ExitWith', {
   code: Schema.Number,
 }) {}
+
+const plainArgs = (args: ReadonlyArray<unknown>) =>
+  args.map((arg) => (typeof arg === 'string' ? stripAnsi(arg) : arg));
+
+/** The CLI framework colors its own messages; keep escapes out of piped output. */
+export const plainWhenPiped = (
+  base: Console.Console,
+  tty: { readonly stdout: boolean; readonly stderr: boolean },
+): Console.Console => ({
+  ...base,
+  log: (...args) => base.log(...(tty.stdout ? args : plainArgs(args))),
+  error: (...args) => base.error(...(tty.stderr ? args : plainArgs(args))),
+  warn: (...args) => base.warn(...(tty.stderr ? args : plainArgs(args))),
+});
+
+export const withPlainConsole = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(Effect.console, (base) =>
+    Effect.withConsole(
+      effect,
+      plainWhenPiped(base, {
+        stdout: process.stdout.isTTY === true,
+        stderr: process.stderr.isTTY === true,
+      }),
+    ),
+  );

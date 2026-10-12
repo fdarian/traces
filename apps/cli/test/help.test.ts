@@ -1,0 +1,144 @@
+import { describe, expect, test } from 'bun:test';
+import { Console, Effect } from 'effect';
+import { deploysOptions } from '#/commands/deploys.ts';
+import { errorsOptions } from '#/commands/errors.ts';
+import { logsOptions } from '#/commands/logs.ts';
+import { servicesOptions } from '#/commands/services.ts';
+import {
+  COMMAND_HELP,
+  COMMAND_NAMES,
+  type CommandName,
+  GLOBAL_FLAGS,
+  HELP_TEXT,
+  renderCommandHelp,
+  resolveHelpRequest,
+} from '#/help.ts';
+import { plainWhenPiped } from '#/output.ts';
+
+const OPTIONS: Record<CommandName, Record<string, unknown>> = {
+  services: servicesOptions,
+  logs: logsOptions,
+  deploys: deploysOptions,
+  errors: errorsOptions,
+};
+
+const names: Array<CommandName> = [...COMMAND_NAMES];
+
+const POSITIONALS = ['service'];
+
+const definedFlags = (name: CommandName) =>
+  Object.keys(OPTIONS[name])
+    .filter((key) => !POSITIONALS.includes(key))
+    .sort();
+
+const documentedFlags = (name: CommandName) => {
+  const help: { flags: ReadonlyArray<{ name: string }> } = COMMAND_HELP[name];
+  return [...help.flags, ...GLOBAL_FLAGS].map((flag) => flag.name).sort();
+};
+
+describe('command help', () => {
+  test('covers every command', () => {
+    expect<ReadonlyArray<string>>([...COMMAND_NAMES].sort()).toEqual(
+      Object.keys(OPTIONS).sort(),
+    );
+  });
+
+  test.each(names)('%s documents exactly the flags it defines', (name) => {
+    expect(documentedFlags(name)).toEqual(definedFlags(name));
+  });
+
+  test.each(names)('%s help text mentions every defined flag', (name) => {
+    const text = renderCommandHelp(name);
+    for (const flag of definedFlags(name)) {
+      expect(text).toContain(`--${flag}`);
+    }
+  });
+
+  test.each(names)('%s help is plain text with usage and examples', (name) => {
+    const text = renderCommandHelp(name);
+    expect(text).not.toContain(String.fromCharCode(27));
+    expect(text.startsWith(`traces ${name}`)).toBe(true);
+    expect(text).toContain('EXAMPLES');
+    expect(text).toContain(`traces ${name}`);
+  });
+
+  test('the top-level help lists every command and its flags', () => {
+    for (const name of COMMAND_NAMES) {
+      expect(HELP_TEXT).toContain(`traces ${name}`);
+      for (const flag of definedFlags(name)) {
+        expect(HELP_TEXT).toContain(`--${flag}`);
+      }
+    }
+    expect(HELP_TEXT.split('\n').length).toBeLessThan(100);
+  });
+
+  test('logs help carries the Vercel 5xx caveat and errors help the partial-count caveat', () => {
+    const flat = (name: CommandName) =>
+      renderCommandHelp(name).replace(/\s+/g, ' ');
+    expect(flat('logs')).toContain('only shows up with --http');
+    expect(flat('errors')).toContain('counts are partial');
+  });
+});
+
+describe('resolveHelpRequest', () => {
+  test('bare invocation and help flags show the top-level help', () => {
+    expect(resolveHelpRequest([])).toEqual({ kind: 'top' });
+    expect(resolveHelpRequest(['--help'])).toEqual({ kind: 'top' });
+    expect(resolveHelpRequest(['-h'])).toEqual({ kind: 'top' });
+    expect(resolveHelpRequest(['help'])).toEqual({ kind: 'top' });
+  });
+
+  test('every spelling of command help resolves to that command', () => {
+    for (const args of [
+      ['logs', '--help'],
+      ['logs', '-h'],
+      ['help', 'logs'],
+      ['logs', 'api', '--since', '1h', '--help'],
+      ['--help', 'logs'],
+    ]) {
+      expect(resolveHelpRequest(args)).toEqual({
+        kind: 'command',
+        name: 'logs',
+      });
+    }
+  });
+
+  test('help for an unknown command is reported', () => {
+    expect(resolveHelpRequest(['help', 'nope'])).toEqual({
+      kind: 'unknown',
+      name: 'nope',
+    });
+  });
+
+  test('ordinary invocations are left to the command parser', () => {
+    expect(resolveHelpRequest(['logs', 'api'])).toBeUndefined();
+    expect(resolveHelpRequest(['logs', '--bogus'])).toBeUndefined();
+  });
+});
+
+describe('plainWhenPiped', () => {
+  const escape = String.fromCharCode(27);
+  const capture = (tty: { stdout: boolean; stderr: boolean }) => {
+    const seen: Array<string> = [];
+    const base = {
+      ...Effect.runSync(Effect.console),
+      log: (...args: ReadonlyArray<unknown>) =>
+        Effect.sync(() => void seen.push(`log:${args.join(' ')}`)),
+      error: (...args: ReadonlyArray<unknown>) =>
+        Effect.sync(() => void seen.push(`error:${args.join(' ')}`)),
+    } as unknown as Console.Console;
+    return { seen, console: plainWhenPiped(base, tty) };
+  };
+
+  test('strips escapes from piped streams only', () => {
+    const colored = `${escape}[31mred${escape}[0m`;
+    const piped = capture({ stdout: false, stderr: false });
+    Effect.runSync(piped.console.error(colored));
+    Effect.runSync(piped.console.log(colored));
+    expect(piped.seen).toEqual(['error:red', 'log:red']);
+
+    const tty = capture({ stdout: true, stderr: true });
+    Effect.runSync(tty.console.error(colored));
+    expect(tty.seen).toEqual([`error:${colored}`]);
+  });
+});
