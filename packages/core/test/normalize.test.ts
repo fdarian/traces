@@ -107,10 +107,10 @@ describe('normalizeAttributes', () => {
       { key: 'b', value: { intValue: 2 } },
     ]);
     expect(result.length).toBe(2);
-    expect(result[0].key).toBe('a');
-    expect(result[0].value).toBe('1');
-    expect(result[1].key).toBe('b');
-    expect(result[1].value).toBe(2);
+    expect(result[0]?.key).toBe('a');
+    expect(result[0]?.value).toBe('1');
+    expect(result[1]?.key).toBe('b');
+    expect(result[1]?.value).toBe(2);
   });
 });
 
@@ -156,8 +156,8 @@ describe('normalizeSpanEvents', () => {
       { name: 'end', timeUnixNano: '2000000000' },
     ]);
     expect(result.length).toBe(2);
-    expect(result[0].name).toBe('start');
-    expect(result[1].name).toBe('end');
+    expect(result[0]?.name).toBe('start');
+    expect(result[1]?.name).toBe('end');
   });
 });
 
@@ -181,8 +181,8 @@ describe('extractExceptionInfo', () => {
     ];
     const result = extractExceptionInfo(events);
     expect(result.length).toBe(1);
-    expect(result[0].type).toBe('TypeError');
-    expect(result[0].message).toBe('cannot read property');
-    expect(result[0].stacktrace).toBe('at foo.ts:1:1');
+    expect(result[0]?.type).toBe('TypeError');
+    expect(result[0]?.message).toBe('cannot read property');
+    expect(result[0]?.stacktrace).toBe('at foo.ts:1:1');
   });
 });

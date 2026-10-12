@@ -123,7 +123,7 @@ describe('JaegerBackendLayer', () => {
     });
     const result = await runWithMockClient(handlers, effect);
     expect(result.length).toBeGreaterThan(0);
-    expect(result[0].traceId).toBeDefined();
+    expect(result[0]?.traceId).toBeDefined();
   });
 
   test('searchTraces falls back to full traces when summaries 404', async () => {
@@ -143,6 +143,6 @@ describe('JaegerBackendLayer', () => {
     });
     const result = await runWithMockClient(handlers, effect);
     expect(result.length).toBeGreaterThan(0);
-    expect(result[0].traceId).toBeDefined();
+    expect(result[0]?.traceId).toBeDefined();
   });
 });

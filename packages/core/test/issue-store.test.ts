@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import assert from 'node:assert';
 import { unlinkSync } from 'node:fs';
 import { ConfigProvider, Effect, Layer } from 'effect';
 import { SqliteIssueStoreLayer } from '#/issues/sqlite-store.js';
@@ -59,10 +60,12 @@ describe('SqliteIssueStore', () => {
     );
 
     expect(first.length).toBe(1);
-    expect(first[0].occurrenceCount).toBe(1);
-    expect(first[0].status).toBe('unresolved');
+    expect(first[0]?.occurrenceCount).toBe(1);
+    expect(first[0]?.status).toBe('unresolved');
 
-    const issueId = first[0].id;
+    const firstIssue = first[0];
+    assert(firstIssue);
+    const issueId = firstIssue.id;
 
     await runStore(
       dbPath,
@@ -191,7 +194,7 @@ describe('SqliteIssueStore', () => {
     );
 
     expect(issues.length).toBe(1);
-    expect(issues[0].occurrenceCount).toBe(2);
+    expect(issues[0]?.occurrenceCount).toBe(2);
   });
 
   test('dedupes occurrences by issueId, traceId, and spanId', async () => {
@@ -227,7 +230,7 @@ describe('SqliteIssueStore', () => {
     );
 
     expect(issues.length).toBe(1);
-    expect(issues[0].occurrenceCount).toBe(1);
+    expect(issues[0]?.occurrenceCount).toBe(1);
   });
 
   test('keeps lastSeen monotonic when a late span arrives via overlap', async () => {
@@ -282,6 +285,7 @@ describe('SqliteIssueStore', () => {
       }),
     );
 
+    assert(issue);
     expect(issue.occurrenceCount).toBe(2);
     expect(issue.lastSeen.getTime()).toBe(later);
   });
@@ -318,9 +322,9 @@ describe('SqliteIssueStore', () => {
           traceId: 'trace-db',
           spanId: 'span-db',
         });
-        yield* store.resolveIssue(
-          (yield* store.listIssues({ service: 'db' }))[0].id,
-        );
+        const dbIssue = (yield* store.listIssues({ service: 'db' }))[0];
+        assert(dbIssue);
+        yield* store.resolveIssue(dbIssue.id);
       }),
     );
 
@@ -334,7 +338,7 @@ describe('SqliteIssueStore', () => {
 
     expect(unresolved.summary.totalCount).toBe(1);
     expect(unresolved.summary.serviceCount).toBe(1);
-    expect(unresolved.issues[0].service).toBe('api');
+    expect(unresolved.issues[0]?.service).toBe('api');
 
     const resolved = await runStore(
       dbPath,
@@ -345,7 +349,7 @@ describe('SqliteIssueStore', () => {
     );
 
     expect(resolved.summary.totalCount).toBe(1);
-    expect(resolved.issues[0].service).toBe('db');
+    expect(resolved.issues[0]?.service).toBe('db');
   });
 
   test('paginates occurrences and buckets histogram in SQL', async () => {
@@ -371,7 +375,9 @@ describe('SqliteIssueStore', () => {
           });
         }
         const issues = yield* store.listIssues({});
-        return issues[0].id;
+        const issue = issues[0];
+        assert(issue);
+        return issue.id;
       }),
     );
 
@@ -491,7 +497,9 @@ describe('SqliteIssueStore', () => {
           timestamp: startTime.getTime() + 3,
         });
         const issues = yield* store.listIssues({});
-        return issues[0].id;
+        const issue = issues[0];
+        assert(issue);
+        return issue.id;
       }),
     );
 
@@ -631,8 +639,8 @@ describe('SqliteIssueStore', () => {
     );
 
     expect(trend.length).toBe(2);
-    expect(trend[0].count).toBe(2);
-    expect(trend[1].count).toBe(1);
+    expect(trend[0]?.count).toBe(2);
+    expect(trend[1]?.count).toBe(1);
   });
 
   test('getTopUnresolvedIssues returns top issues by occurrence count', async () => {
@@ -687,9 +695,9 @@ describe('SqliteIssueStore', () => {
     );
 
     expect(top.length).toBe(2);
-    expect(top[0].occurrenceCount).toBe(2);
-    expect(top[0].title).toBe('HighCountError: many');
-    expect(top[1].occurrenceCount).toBe(1);
-    expect(top[1].title).toBe('LowCountError: few');
+    expect(top[0]?.occurrenceCount).toBe(2);
+    expect(top[0]?.title).toBe('HighCountError: many');
+    expect(top[1]?.occurrenceCount).toBe(1);
+    expect(top[1]?.title).toBe('LowCountError: few');
   });
 });

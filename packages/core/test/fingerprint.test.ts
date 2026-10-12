@@ -40,7 +40,7 @@ const SEED_EXCEPTIONS = [
     stacktrace:
       'TimeoutError: request timed out after 30000ms\n    at verify3DS (/app/payments/src/index.ts:14:2)',
   },
-];
+] as const;
 
 describe('normalizeExceptionMessage', () => {
   const cases: Array<{ input: string; expected: string }> = [
