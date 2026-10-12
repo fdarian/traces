@@ -4,17 +4,16 @@ import { Provider } from './provider.js';
 
 export { Provider };
 
-export const LogSourceKind = Schema.Literal('runtime', 'build', 'http');
+export const LogSourceKind = Schema.Literals(['runtime', 'build', 'http']);
 export type LogSourceKind = typeof LogSourceKind.Type;
 
-export const LogLevel = Schema.Literal(
+export const LogLevel = Schema.Literals([
   'debug',
   'info',
   'warn',
   'error',
   'fatal',
-  'unknown',
-);
+  'unknown']);
 export type LogLevel = typeof LogLevel.Type;
 
 export const LogRequest = Schema.Struct({
@@ -36,11 +35,11 @@ export const LogRecord = Schema.Struct({
   level: LogLevel,
   message: Schema.String,
   request: Schema.optional(LogRequest),
-  attrs: Schema.Record({ key: Schema.String, value: Schema.String }),
+  attrs: Schema.Record(Schema.String, Schema.String),
 });
 export type LogRecord = typeof LogRecord.Type;
 
-export const DeploymentStatus = Schema.Literal(
+export const DeploymentStatus = Schema.Literals([
   'queued',
   'building',
   'deploying',
@@ -50,8 +49,7 @@ export const DeploymentStatus = Schema.Literal(
   'crashed',
   'removed',
   'sleeping',
-  'unknown',
-);
+  'unknown']);
 export type DeploymentStatus = typeof DeploymentStatus.Type;
 
 export const DeploymentCommit = Schema.Struct({
@@ -97,7 +95,7 @@ export type ServiceTarget = RailwayTarget | VercelTarget;
  * Provider-specific paging state. `since` is carried so that a `more:` command
  * pages through a stable window even though relative `--since 1h` drifts.
  */
-export const Cursor = Schema.Union(
+export const Cursor = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal('railway-time'),
     since: Schema.optional(Schema.Number),
@@ -120,10 +118,10 @@ export const Cursor = Schema.Union(
     until: Schema.Number,
     seen: Schema.Array(Schema.String),
   }),
-);
+]);
 export type Cursor = typeof Cursor.Type;
 
-const CursorJson = Schema.parseJson(Cursor);
+const CursorJson = Schema.fromJsonString(Cursor);
 
 export const encodeCursor = (cursor: Cursor): string =>
   Buffer.from(Schema.encodeSync(CursorJson)(cursor), 'utf8').toString(
@@ -131,7 +129,7 @@ export const encodeCursor = (cursor: Cursor): string =>
   );
 
 export const decodeCursor = (encoded: string) =>
-  Schema.decodeUnknown(CursorJson)(
+  Schema.decodeUnknownEffect(CursorJson)(
     Buffer.from(encoded, 'base64url').toString('utf8'),
   ).pipe(Effect.mapError((cause) => new InvalidCursor({ cause })));
 

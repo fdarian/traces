@@ -1,6 +1,6 @@
-import { Command, CommandExecutor } from '@effect/platform';
-import type { PlatformError } from '@effect/platform/Error';
 import { Effect, Option, Schema, Stream } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import {
   ProviderAuthError,
   type ProviderError,
@@ -29,12 +29,17 @@ const looksUnauthorized = (text: string): boolean =>
 
 /** Runs GraphQL documents through the user's logged-in `railway api`; no token handling. */
 export const makeRailwayClient = Effect.gen(function* () {
-  const executor = yield* CommandExecutor.CommandExecutor;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
   const runCli = (args: ReadonlyArray<string>) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const process = yield* executor.start(Command.make('railway', ...args));
+        const process = yield* ChildProcess.make('railway', args).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
+          ),
+        );
         const [stdout, stderr, exitCode] = yield* Effect.all(
           [collect(process.stdout), collect(process.stderr), process.exitCode],
           { concurrency: 'unbounded' },
@@ -44,7 +49,7 @@ export const makeRailwayClient = Effect.gen(function* () {
     ).pipe(
       Effect.mapError(
         (error): ProviderError =>
-          error._tag === 'SystemError' && error.reason === 'NotFound'
+          error.reason._tag === 'NotFound'
             ? new ProviderAuthError({
                 provider: PROVIDER,
                 hint: INSTALL_HINT,
@@ -57,8 +62,8 @@ export const makeRailwayClient = Effect.gen(function* () {
     operation: string,
     document: string,
     variables: Variables,
-    schema: Schema.Schema<A, I>,
-  ): Effect.Effect<A, ProviderError> =>
+    schema: Schema.Codec<A, I>,
+  ): Effect.Effect<A, ProviderError, never> =>
     Effect.gen(function* () {
       const args = ['api', document, '--compact'];
       for (const [name, value] of Object.entries(variables.raw ?? {})) {
@@ -97,7 +102,9 @@ export const makeRailwayClient = Effect.gen(function* () {
           ),
         });
       }
-      return yield* Schema.decodeUnknown(schema)(envelope.value.data).pipe(
+      return yield* Schema.decodeUnknownEffect(schema)(
+        envelope.value.data,
+      ).pipe(
         Effect.mapError(
           (cause) =>
             new ProviderResponseInvalid({

@@ -13,7 +13,7 @@ export class ProviderRequestError extends Schema.TaggedError<ProviderRequestErro
   'ProviderRequestError',
   {
     provider: Provider,
-    cause: Schema.Defect,
+    cause: Schema.Defect(),
   },
 ) {}
 
@@ -22,7 +22,7 @@ export class ProviderResponseInvalid extends Schema.TaggedError<ProviderResponse
   {
     provider: Provider,
     operation: Schema.String,
-    cause: Schema.Defect,
+    cause: Schema.Defect(),
   },
 ) {}
 
@@ -38,7 +38,7 @@ export class ProviderNotFound extends Schema.TaggedError<ProviderNotFound>()(
 export class InvalidCursor extends Schema.TaggedError<InvalidCursor>()(
   'InvalidCursor',
   {
-    cause: Schema.Defect,
+    cause: Schema.Defect(),
   },
 ) {}
 

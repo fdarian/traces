@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 
-export const Envelope = Schema.parseJson(
+export const Envelope = Schema.fromJsonString(
   Schema.Struct({
     data: Schema.optional(Schema.NullOr(Schema.Unknown)),
     errors: Schema.optional(
@@ -9,8 +9,8 @@ export const Envelope = Schema.parseJson(
   }),
 );
 
-export const IsoTimestamp = Schema.String.pipe(
-  Schema.pattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/),
+export const IsoTimestamp = Schema.String.check(
+  Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/),
 );
 
 export const RailwayLogRow = Schema.Struct({

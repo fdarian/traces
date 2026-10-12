@@ -37,7 +37,7 @@ export const normalizeLevel = (raw: string | null | undefined): LogLevel => {
 export const shortHash = (text: string): string =>
   createHash('sha1').update(text).digest('hex').slice(0, 10);
 
-const UnknownFromJson = Schema.parseJson();
+const UnknownFromJson = Schema.fromJsonString(Schema.Unknown);
 
 /** Railway attribute values are JSON-encoded; non-string values keep their JSON text. */
 export const decodeJsonAttribute = (value: string): string => {
