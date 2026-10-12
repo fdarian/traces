@@ -1,6 +1,6 @@
-import { Args, Command, Options } from '@effect/cli';
 import { decodeCursor, encodeCursor } from '@traces/core';
 import { Console, Effect, Option } from 'effect';
+import { Argument, Command, Flag } from 'effect/cli';
 import { UsageError } from '#/errors.ts';
 import { DEPLOYS_LIMIT } from '#/limits.ts';
 import {
@@ -14,11 +14,9 @@ import { globalOptions, resolveService } from '#/resolve.ts';
 
 export const deploysOptions = {
   ...globalOptions,
-  service: Args.text({ name: 'service' }).pipe(Args.optional),
-  limit: Options.integer('limit').pipe(
-    Options.withDefault(DEPLOYS_LIMIT.default),
-  ),
-  cursor: Options.text('cursor').pipe(Options.optional),
+  service: Argument.String('service').pipe(Argument.optional),
+  limit: Flag.Int('limit').pipe(Flag.withDefault(DEPLOYS_LIMIT.default)),
+  cursor: Flag.String('cursor').pipe(Flag.optional),
 };
 
 export const deploysCommand = Command.make('deploys', deploysOptions, (args) =>

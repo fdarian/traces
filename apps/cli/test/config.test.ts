@@ -4,7 +4,7 @@ import { decodeConfig, defaultConfigPath } from '#/config.ts';
 
 const decode = (value: unknown) =>
   Effect.runPromise(
-    decodeConfig('/cfg.json', JSON.stringify(value)).pipe(Effect.either),
+    decodeConfig('/cfg.json', JSON.stringify(value)).pipe(Effect.result),
   );
 
 const valid = {
@@ -27,7 +27,7 @@ const valid = {
 describe('config decode', () => {
   test('accepts a vercel and a railway service', async () => {
     const result = await decode(valid);
-    expect(result._tag).toBe('Right');
+    expect(result._tag).toBe('Success');
   });
 
   test('rejects excess properties with the offending key', async () => {
@@ -41,8 +41,9 @@ describe('config decode', () => {
         },
       },
     });
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') expect(result.left.message).toContain('region');
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure')
+      expect(result.failure.message).toContain('region');
   });
 
   test('rejects a service without a provider', async () => {
@@ -54,7 +55,7 @@ describe('config decode', () => {
         },
       },
     });
-    expect(result._tag).toBe('Left');
+    expect(result._tag).toBe('Failure');
   });
 
   test('rejects railway services missing the service name', async () => {
@@ -66,7 +67,7 @@ describe('config decode', () => {
         },
       },
     });
-    expect(result._tag).toBe('Left');
+    expect(result._tag).toBe('Failure');
   });
 
   test('rejects relative path matchers', async () => {
@@ -78,9 +79,9 @@ describe('config decode', () => {
         },
       },
     });
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') {
-      expect(result.left.message).toContain('absolute');
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure.message).toContain('absolute');
     }
   });
 
@@ -88,7 +89,7 @@ describe('config decode', () => {
     const result = await decode({
       projects: { app: { matcher: valid.projects.app.matcher, services: {} } },
     });
-    expect(result._tag).toBe('Left');
+    expect(result._tag).toBe('Failure');
   });
 
   test('rejects names with spaces', async () => {
@@ -100,15 +101,16 @@ describe('config decode', () => {
         },
       },
     });
-    expect(result._tag).toBe('Left');
+    expect(result._tag).toBe('Failure');
   });
 
   test('reports malformed JSON as a config error carrying the path', async () => {
     const result = await Effect.runPromise(
-      decodeConfig('/cfg.json', '{nope').pipe(Effect.either),
+      decodeConfig('/cfg.json', '{nope').pipe(Effect.result),
     );
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') expect(result.left.path).toBe('/cfg.json');
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure')
+      expect(result.failure.path).toBe('/cfg.json');
   });
 });
 

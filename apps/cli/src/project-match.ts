@@ -1,8 +1,9 @@
 import { isIP } from 'node:net';
 import { homedir } from 'node:os';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { Command, CommandExecutor, FileSystem } from '@effect/platform';
 import { Effect, Option, Stream } from 'effect';
+import { FileSystem } from 'effect/FileSystem';
+import { ChildProcess } from 'effect/process';
 import type { ProjectConfig, TracesConfig } from '#/config.ts';
 import { UsageError } from '#/errors.ts';
 
@@ -152,11 +153,10 @@ export const matchProjects = (
 const readGitOrigin = (cwd: string) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const executor = yield* CommandExecutor.CommandExecutor;
-      const process = yield* executor.start(
-        Command.make('git', 'remote', 'get-url', 'origin').pipe(
-          Command.workingDirectory(cwd),
-        ),
+      const process = yield* ChildProcess.make(
+        'git',
+        ['remote', 'get-url', 'origin'],
+        { cwd },
       );
       const [stdout, exitCode] = yield* Effect.all(
         [
@@ -172,8 +172,8 @@ const readGitOrigin = (cwd: string) =>
         : Option.none<string>();
     }),
   ).pipe(
-    Effect.catchTag('SystemError', (error) =>
-      error.reason === 'NotFound'
+    Effect.catchTag('PlatformError', (error) =>
+      error.reason._tag === 'NotFound'
         ? Effect.succeed(Option.none<string>())
         : Effect.fail(error),
     ),
@@ -182,7 +182,7 @@ const readGitOrigin = (cwd: string) =>
 /** Canonical path per path-matcher project; a path that doesn't exist can't match, so it's left out. */
 export const resolveMatcherPaths = (config: TracesConfig) =>
   Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
+    const fileSystem = yield* FileSystem;
     const resolved = new Map<string, string>();
     for (const candidate of namedProjects(config)) {
       const matcher = candidate.project.matcher;
@@ -198,7 +198,7 @@ export const resolveMatcherPaths = (config: TracesConfig) =>
 
 export const captureInvocation = (cwd: string) =>
   Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
+    const fileSystem = yield* FileSystem;
     const canonicalCwd = yield* fileSystem.realPath(cwd);
     const origin = yield* readGitOrigin(canonicalCwd);
     return {

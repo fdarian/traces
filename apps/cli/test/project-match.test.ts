@@ -141,13 +141,13 @@ describe('selectProject', () => {
         ...base,
         invocation: { cwd: '/nowhere', repo: 'github.com/x/y' },
         projectFlag: Option.none(),
-      }).pipe(Effect.either),
+      }).pipe(Effect.result),
     );
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') {
-      expect(result.left.message).toContain('/cfg.json');
-      expect(result.left.message).toContain('github.com/x/y');
-      expect(result.left.hint).toContain('byGit');
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure.message).toContain('/cfg.json');
+      expect(result.failure.message).toContain('github.com/x/y');
+      expect(result.failure.hint).toContain('byGit');
     }
   });
 
@@ -157,9 +157,10 @@ describe('selectProject', () => {
         ...base,
         invocation: { cwd: '/code/app' },
         projectFlag: Option.some('missing'),
-      }).pipe(Effect.either),
+      }).pipe(Effect.result),
     );
-    expect(result._tag).toBe('Left');
-    if (result._tag === 'Left') expect(result.left.hint).toContain('narrow');
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure')
+      expect(result.failure.hint).toContain('narrow');
   });
 });

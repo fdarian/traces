@@ -3,7 +3,7 @@
 `traces` — unified logs/deploys CLI over Vercel and Railway, built for agents.
 
 ## Stack
-- Effect v3 + `@effect/cli` + `@effect/platform-bun`
+- Effect v4 (`effect/cli`, `effect/process`, `effect/http`, `effect/FileSystem`) + `@effect/platform-bun`
 
 ## Dev
 - `bun src/main.ts --help` — run the CLI

@@ -1,6 +1,6 @@
-import { Args, Command, Options } from '@effect/cli';
 import { type ErrorGroup, firstLine, groupErrors } from '@traces/core';
 import { Console, Effect, Option } from 'effect';
+import { Argument, Command, Flag } from 'effect/cli';
 import { DEFAULT_WINDOW, ERROR_CAP } from '#/limits.ts';
 import {
   commandLine,
@@ -31,9 +31,9 @@ interface ErrorGroupRecord extends ErrorGroup {
 
 export const errorsOptions = {
   ...globalOptions,
-  service: Args.text({ name: 'service' }).pipe(Args.optional),
-  since: Options.text('since').pipe(Options.optional),
-  until: Options.text('until').pipe(Options.optional),
+  service: Argument.String('service').pipe(Argument.optional),
+  since: Flag.String('since').pipe(Flag.optional),
+  until: Flag.String('until').pipe(Flag.optional),
 };
 
 export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
