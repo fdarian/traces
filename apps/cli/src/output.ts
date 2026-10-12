@@ -1,3 +1,4 @@
+import { ValidationError } from '@effect/cli';
 import {
   type Deployment,
   InvalidCursor,
@@ -93,6 +94,8 @@ export interface RenderedError {
   readonly message: string;
   readonly hint?: string;
   readonly code: number;
+  /** The CLI framework already printed this failure. */
+  readonly alreadyReported?: boolean;
 }
 
 const causeMessage = (cause: unknown): string => {
@@ -104,6 +107,14 @@ const causeMessage = (cause: unknown): string => {
 
 /** `unknown` because the CLI framework's own failures also land here. */
 export const renderError = (error: unknown): RenderedError => {
+  if (ValidationError.isValidationError(error)) {
+    return {
+      message: 'invalid command line',
+      hint: 'run `traces --help`, or `traces <command> --help` for that command',
+      code: EXIT_CODES.usage,
+      alreadyReported: true,
+    };
+  }
   if (error instanceof UsageError) {
     return { message: error.message, hint: error.hint, code: EXIT_CODES.usage };
   }
@@ -153,9 +164,11 @@ export const renderError = (error: unknown): RenderedError => {
 
 export const reportError = (rendered: RenderedError) =>
   Console.error(
-    rendered.hint === undefined
-      ? `error: ${rendered.message}`
-      : `error: ${rendered.message}\nhint: ${rendered.hint}`,
+    rendered.alreadyReported === true
+      ? `hint: ${rendered.hint}`
+      : rendered.hint === undefined
+        ? `error: ${rendered.message}`
+        : `error: ${rendered.message}\nhint: ${rendered.hint}`,
   );
 
 export class ExitWith extends Schema.TaggedError<ExitWith>()('ExitWith', {

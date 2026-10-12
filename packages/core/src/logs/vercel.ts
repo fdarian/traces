@@ -309,7 +309,7 @@ export const makeVercelSource = (
         if (response.status === 401 || response.status === 403) {
           return yield* new ProviderAuthError({
             provider: PROVIDER,
-            hint: `${LOGIN_HINT}; token lacks access to this ${target.team === undefined ? 'account' : `team "${target.team}"`}`,
+            hint: `${LOGIN_HINT} (the token was rejected for ${target.team === undefined ? 'this account' : `team "${target.team}"`})`,
           });
         }
         if (response.status === 404) {
