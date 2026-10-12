@@ -92,7 +92,9 @@ function TracesError(props: ErrorComponentProps) {
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-12">
       <p className="text-body text-status-error">failed to load traces</p>
       <p className="font-data text-data text-text-tertiary">
-        {props.error.message}
+        {props.error instanceof Error
+          ? props.error.message
+          : String(props.error)}
       </p>
     </div>
   );
