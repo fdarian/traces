@@ -10,6 +10,7 @@ import {
   decodeJsonAttribute,
   normalizeLevel,
   stripAnsi,
+  traceContextOf,
 } from '../normalize.js';
 import type {
   DeploymentNode,
@@ -48,12 +49,12 @@ export const mapRailwayLog = (
     readonly deploymentId?: string;
   },
 ): LogRecord => {
-  const attrs: Record<string, string> = {};
+  const attrs: Record<string, unknown> = {};
   let levelAttribute: string | undefined;
   for (const attribute of row.attributes) {
     const value = decodeJsonAttribute(attribute.value);
     if (attribute.key === 'level') {
-      levelAttribute = value;
+      levelAttribute = typeof value === 'string' ? value : attribute.value;
       continue;
     }
     attrs[attribute.key] = value;
@@ -76,6 +77,7 @@ export const mapRailwayLog = (
     source: context.source,
     level: normalizeLevel(severity),
     message: stripAnsi(row.message),
+    ...traceContextOf(attrs),
     attrs,
   };
 };

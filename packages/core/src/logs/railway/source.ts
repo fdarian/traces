@@ -45,6 +45,21 @@ import {
 export const RAILWAY_RETENTION_NOTE =
   'Railway keeps logs for 3 days (Free), 7 days (Hobby) or 30 days (Pro); older logs are gone, so an empty result past that window is not evidence of "no errors".';
 
+interface NamedEdge {
+  readonly node: { readonly id: string; readonly name: string };
+}
+
+/** An id is unambiguous, so it wins over a name that happens to equal another entry's id. */
+const findByIdOrName = (
+  edges: ReadonlyArray<NamedEdge>,
+  reference: string,
+): NamedEdge | undefined =>
+  edges.find((edge) => edge.node.id === reference) ??
+  edges.find((edge) => edge.node.name === reference);
+
+const describeNamed = (edges: ReadonlyArray<NamedEdge>): string =>
+  edges.map((edge) => `${edge.node.name} (${edge.node.id})`).join(', ');
+
 export const makeRailwaySource = (target: RailwayTarget) =>
   Effect.gen(function* () {
     const client = yield* makeRailwayClient;
@@ -66,24 +81,26 @@ export const makeRailwaySource = (target: RailwayTarget) =>
             hint: 'check `project` in the config against `railway list --json`',
           });
         }
-        const service = project.services.edges.find(
-          (edge) => edge.node.name === target.serviceName,
+        const service = findByIdOrName(
+          project.services.edges,
+          target.serviceName,
         );
         if (service === undefined) {
           return yield* new ProviderNotFound({
             provider: PROVIDER,
             what: `service "${target.serviceName}" in project ${target.project}`,
-            hint: `available services: ${project.services.edges.map((edge) => edge.node.name).join(', ')}`,
+            hint: `available services: ${describeNamed(project.services.edges)}`,
           });
         }
-        const environment = project.environments.edges.find(
-          (edge) => edge.node.name === target.environment,
+        const environment = findByIdOrName(
+          project.environments.edges,
+          target.environment,
         );
         if (environment === undefined) {
           return yield* new ProviderNotFound({
             provider: PROVIDER,
             what: `environment "${target.environment}" in project ${target.project}`,
-            hint: `available environments: ${project.environments.edges.map((edge) => edge.node.name).join(', ')}`,
+            hint: `available environments: ${describeNamed(project.environments.edges)}`,
           });
         }
         return {

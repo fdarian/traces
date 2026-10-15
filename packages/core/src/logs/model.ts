@@ -36,7 +36,9 @@ export const LogRecord = Schema.Struct({
   level: LogLevel,
   message: Schema.String,
   request: Schema.optional(LogRequest),
-  attrs: Schema.Record(Schema.String, Schema.String),
+  traceId: Schema.optional(Schema.String),
+  spanId: Schema.optional(Schema.String),
+  attrs: Schema.Record(Schema.String, Schema.Unknown),
 });
 export type LogRecord = typeof LogRecord.Type;
 

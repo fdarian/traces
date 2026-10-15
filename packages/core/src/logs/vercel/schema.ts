@@ -13,6 +13,7 @@ export const RequestLogLine = Schema.Struct({
 
 export const RequestLogRow = Schema.Struct({
   requestId: Schema.String,
+  traceId: Schema.optional(Schema.NullOr(Schema.String)),
   timestamp: Schema.String,
   deploymentId: Schema.String,
   environment: Schema.String,
