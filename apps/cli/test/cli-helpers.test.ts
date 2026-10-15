@@ -176,6 +176,16 @@ describe('formatLogLine', () => {
     expect(lines[1]).toBe('    second');
   });
 
+  test('shows a short trace id when the record has one', () => {
+    const line = formatLogLine(
+      { ...record('2026-10-14T02:55:09.123Z'), traceId: 'a'.repeat(32) },
+      false,
+    );
+    expect(line.split('\n')[0]).toBe(
+      '02:55:09.123Z ERROR api abcdef12 trace=aaaaaaaa first',
+    );
+  });
+
   test('prints UTC regardless of the local zone and prefixes the date on request', () => {
     expect(
       formatLogLine(record('2026-10-14T23:59:59.001+07:00'), true).split(

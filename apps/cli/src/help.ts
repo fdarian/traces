@@ -154,7 +154,7 @@ export const COMMAND_HELP = {
       },
     ],
     output:
-      'LogRecord per line: ts, service, provider, environment, deploymentId?, source (runtime | build | http), level (debug | info | warn | error | fatal | unknown), message, request? {method, path, status, durationMs?, requestId?}, attrs. Compact text on a TTY.',
+      'LogRecord per line: ts, service, provider, environment, deploymentId?, source (runtime | build | http), level (debug | info | warn | error | fatal | unknown), message, request? {method, path, status, durationMs?, requestId?}, traceId?, spanId?, attrs. Compact text on a TTY.',
     notes: [
       MORE_NOTE,
       EMPTY_NOTE,
@@ -165,6 +165,8 @@ export const COMMAND_HELP = {
       '--cursor continues the original window; repeat the original flags exactly as the `more:` line prints them.',
       '--grep is a literal substring match on the message only: it is not a regex and does not search attrs. Railway matches case-insensitively.',
       '`ts` is the provider receive time. A timestamp the app emitted itself, when present, is in `attrs.timestamp`.',
+      "`attrs` values are JSON-decoded once on Railway: Effect loggers' `annotations` and `spans` are real objects, and a value that is not valid JSON stays a string.",
+      '`traceId` / `spanId` are set only when the record carries a 32-hex trace id (16-hex span id): Vercel from the request row, Railway from `attrs.annotations.traceId` or a top-level `traceId` / `trace_id` attr. A TTY shows `trace=<first 8>`.',
       'On a TTY, times are UTC with a Z suffix, and the date is prefixed when the window spans more than one day. JSON `ts` is always the full ISO timestamp.',
       '-f prints `following <service> ...` once on stderr; stdout stays NDJSON.',
     ],
