@@ -1,5 +1,6 @@
 import {
   byFrequency,
+  coalesceMultiline,
   type ErrorGroup,
   firstLine,
   groupErrors,
@@ -179,7 +180,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
     );
     const mode = outputMode(args.json);
     const groups = [
-      ...groupErrors(records),
+      ...groupErrors(coalesceMultiline(records)),
       ...scanned.flatMap((o) => o.scan.groups),
     ].sort(byFrequency);
     const globalFlags = [

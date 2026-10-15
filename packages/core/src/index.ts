@@ -93,6 +93,7 @@ export {
   encodeCursor,
   LogRecord,
 } from './logs/model.js';
+export { coalesceMultiline } from './logs/multiline.js';
 export { normalizeLevel, shortHash, stripAnsi } from './logs/normalize.js';
 export type { BackwardPage, PageResume } from './logs/paging.js';
 export { pageBackwards } from './logs/paging.js';
