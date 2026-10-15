@@ -3,6 +3,7 @@ import { Effect, Exit, Layer } from 'effect';
 import { HttpClient, HttpClientResponse } from 'effect/http';
 import {
   JaegerBadResponse,
+  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
   TraceNotFound,
 } from '#/errors.js';
@@ -284,6 +285,28 @@ describe('searchTraces with attributes', () => {
       expect(error?._tag === 'Fail' && error.error._tag).toBe(
         'JaegerBadResponse',
       );
+    }
+  });
+
+  test.each([
+    404, 405,
+  ])('a legacy %d means attribute search is unavailable', async (status) => {
+    const { client } = recordingClient(status, { error: 'nope' });
+    const exit = await run(
+      client,
+      { url: 'https://host.example/~/jaeger', headers: {} },
+      (b) => b.searchTraces(query),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (!Exit.isFailure(exit)) return;
+    const reason = exit.cause.reasons[0];
+    expect(reason?._tag === 'Fail' && reason.error).toBeInstanceOf(
+      TraceAttributeSearchUnavailable,
+    );
+    if (reason?._tag === 'Fail') {
+      const error = reason.error as TraceAttributeSearchUnavailable;
+      expect(error.status).toBe(status);
+      expect(error.url).toBe('https://host.example/~/jaeger/api/traces');
     }
   });
 

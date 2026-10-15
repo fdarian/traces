@@ -7,6 +7,7 @@ export { TraceBackend } from './backend.js';
 export {
   JaegerBadResponse,
   JaegerUnreachable,
+  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
   TraceErrorCountsUnavailable,
   TraceNotFound,

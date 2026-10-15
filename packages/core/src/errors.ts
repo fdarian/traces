@@ -33,6 +33,15 @@ export class TraceBackendUnauthorized extends Schema.TaggedError<TraceBackendUna
   },
 ) {}
 
+/** The legacy `/api/traces` endpoint, the only one that filters by span attribute, is not served at this URL. */
+export class TraceAttributeSearchUnavailable extends Schema.TaggedError<TraceAttributeSearchUnavailable>()(
+  'TraceAttributeSearchUnavailable',
+  {
+    status: Schema.Number,
+    url: Schema.String,
+  },
+) {}
+
 /** The backend's trace summaries carry no error span count, so `--errors` cannot filter on them. */
 export class TraceErrorCountsUnavailable extends Schema.TaggedError<TraceErrorCountsUnavailable>()(
   'TraceErrorCountsUnavailable',

@@ -9,6 +9,7 @@ import {
   type PageResume,
   pageTraces,
   scanErrorTraces,
+  TraceAttributeSearchUnavailable,
   type TraceSummary,
   toTraceCursor,
   toTraceRow,
@@ -323,6 +324,58 @@ describe('scanErrorTraces', () => {
     expect(run.jaeger.requests.every((request) => request.serverFiltered)).toBe(
       true,
     );
+  });
+
+  describe('without the legacy search endpoint', () => {
+    const unavailable = new TraceAttributeSearchUnavailable({
+      status: 404,
+      url: 'https://host.example/api/traces',
+    });
+
+    test.each([
+      404, 405,
+    ])('a %d on the filtered pass degrades to the client scan', async (status) => {
+      const jaeger = fakeJaeger(store);
+      const requests: Array<boolean> = [];
+      const result = await Effect.runPromise(
+        scanErrorTraces({
+          limit: 10,
+          scanCap: 1000,
+          pageSize: 4,
+          fetchPage: (request) => {
+            requests.push(request.serverFiltered);
+            return request.serverFiltered
+              ? Effect.fail(
+                  new TraceAttributeSearchUnavailable({
+                    status,
+                    url: unavailable.url,
+                  }),
+                )
+              : jaeger.fetchPage(request);
+          },
+        }),
+      );
+      expect(ids(result.matches)).toEqual(['t0002', 't0005', 't0006', 't0009']);
+      expect(result.mode).toBe('client');
+      expect(requests).toEqual([true, false, false, false]);
+    });
+
+    test('a caller attribute filter still fails, because the client scan needs the same endpoint', async () => {
+      const requests: Array<boolean> = [];
+      const error = await Effect.runPromise(
+        scanErrorTraces({
+          limit: 10,
+          scanCap: 1000,
+          pageSize: 4,
+          fetchPage: (request) => {
+            requests.push(request.serverFiltered);
+            return Effect.fail(unavailable);
+          },
+        }).pipe(Effect.flip),
+      );
+      expect(error).toBe(unavailable);
+      expect(requests).toEqual([true, false]);
+    });
   });
 
   test('still verifies server matches against the summary error count', async () => {
