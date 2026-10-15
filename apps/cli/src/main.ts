@@ -7,6 +7,7 @@ import { hoistGlobalFlags } from '#/argv.ts';
 import { deploysCommand } from '#/commands/deploys.ts';
 import { errorsCommand } from '#/commands/errors.ts';
 import { logsCommand } from '#/commands/logs.ts';
+import { secretCommand } from '#/commands/secret.ts';
 import { servicesCommand } from '#/commands/services.ts';
 import { UsageError } from '#/errors.ts';
 import {
@@ -23,6 +24,7 @@ import {
   withoutFrameworkHelp,
   withPlainConsole,
 } from '#/output.ts';
+import { Secrets } from '#/secrets.ts';
 
 const root = Command.make('traces').pipe(
   Command.withSubcommands([
@@ -30,6 +32,7 @@ const root = Command.make('traces').pipe(
     logsCommand,
     deploysCommand,
     errorsCommand,
+    secretCommand,
   ]),
 );
 
@@ -65,7 +68,9 @@ const program = Effect.gen(function* () {
 program.pipe(
   withoutFrameworkHelp,
   withPlainConsole,
-  Effect.provide(Layer.mergeAll(BunServices.layer, FetchHttpClient.layer)),
+  Effect.provide(
+    Layer.mergeAll(BunServices.layer, FetchHttpClient.layer, Secrets.layer),
+  ),
   BunRuntime.runMain({
     disableErrorReporting: true,
     teardown: (exit, onExit) => {

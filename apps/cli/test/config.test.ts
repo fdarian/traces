@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect } from 'effect';
-import { decodeConfig, defaultConfigPath } from '#/config.ts';
+import {
+  decodeConfig,
+  defaultConfigPath,
+  hasLogProvider,
+  otelServiceName,
+} from '#/config.ts';
 
 const decode = (value: unknown) =>
   Effect.runPromise(
@@ -111,6 +116,164 @@ describe('config decode', () => {
     expect(result._tag).toBe('Failure');
     if (result._tag === 'Failure')
       expect(result.failure.path).toBe('/cfg.json');
+  });
+});
+
+const project = (extra: Record<string, unknown>) => ({
+  projects: {
+    app: {
+      matcher: valid.projects.app.matcher,
+      services: { web: { provider: 'vercel', project: 'p' } },
+      ...extra,
+    },
+  },
+});
+
+describe('config decode: tracing', () => {
+  test('accepts literal, env and keychain header values', async () => {
+    const result = await decode(
+      project({
+        tracing: {
+          provider: 'jaeger',
+          url: 'https://api.example.com/~/jaeger',
+          headers: {
+            'X-Literal': 'abc',
+            'X-Env': { env: 'JAEGER_TOKEN' },
+            'X-API-Key': { keychain: 'app.jaeger' },
+          },
+        },
+      }),
+    );
+    expect(result._tag).toBe('Success');
+    if (result._tag === 'Success') {
+      expect(result.success.projects.app?.tracing?.headers).toEqual({
+        'X-Literal': 'abc',
+        'X-Env': { env: 'JAEGER_TOKEN' },
+        'X-API-Key': { keychain: 'app.jaeger' },
+      });
+    }
+  });
+
+  test('headers are optional', async () => {
+    const result = await decode(
+      project({
+        tracing: { provider: 'jaeger', url: 'http://localhost:16686' },
+      }),
+    );
+    expect(result._tag).toBe('Success');
+  });
+
+  test.each([
+    'not a url',
+    '/relative/path',
+    'ftp://host/x',
+    'localhost:16686',
+    '',
+  ])('rejects tracing.url %p', async (url) => {
+    const result = await decode(
+      project({ tracing: { provider: 'jaeger', url } }),
+    );
+    expect(result._tag).toBe('Failure');
+  });
+
+  test('names the offending field for a bad url', async () => {
+    const result = await decode(
+      project({ tracing: { provider: 'jaeger', url: 'nope' } }),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure.message).toContain('absolute http(s) URL');
+    }
+  });
+
+  test.each([
+    ['both env and keychain', { env: 'A', keychain: 'b' }],
+    ['an unknown key', { vault: 'x' }],
+    ['an empty keychain name', { keychain: '' }],
+    ['a number', 5],
+  ])('rejects a header value with %s', async (_label, value) => {
+    const result = await decode(
+      project({
+        tracing: {
+          provider: 'jaeger',
+          url: 'https://j.example.com',
+          headers: { 'X-API-Key': value },
+        },
+      }),
+    );
+    expect(result._tag).toBe('Failure');
+  });
+
+  test('rejects an invalid header name and an unknown provider', async () => {
+    const badName = await decode(
+      project({
+        tracing: {
+          provider: 'jaeger',
+          url: 'https://j.example.com',
+          headers: { 'X API Key': 'v' },
+        },
+      }),
+    );
+    expect(badName._tag).toBe('Failure');
+    const badProvider = await decode(
+      project({ tracing: { provider: 'tempo', url: 'https://j.example.com' } }),
+    );
+    expect(badProvider._tag).toBe('Failure');
+  });
+});
+
+describe('config decode: otelService and trace-only services', () => {
+  const withServices = (services: Record<string, unknown>) => ({
+    projects: { app: { matcher: valid.projects.app.matcher, services } },
+  });
+
+  test('otelService is optional on provider services', async () => {
+    const result = await decode(
+      withServices({
+        web: { provider: 'vercel', project: 'p', otelService: 'app-web' },
+        api: { provider: 'railway', project: 'p', service: 'api' },
+      }),
+    );
+    expect(result._tag).toBe('Success');
+  });
+
+  test('an entry with only otelService is a trace-only service', async () => {
+    const result = await decode(
+      withServices({
+        web: { provider: 'vercel', project: 'p' },
+        x: { otelService: 'x-data' },
+      }),
+    );
+    expect(result._tag).toBe('Success');
+    if (result._tag === 'Success') {
+      const entry = result.success.projects.app?.services.x;
+      expect(entry !== undefined && hasLogProvider(entry)).toBe(false);
+      expect(entry?.otelService).toBe('x-data');
+    }
+  });
+
+  test('otelService defaults to the service key', () => {
+    expect(otelServiceName('web', { provider: 'vercel', project: 'p' })).toBe(
+      'web',
+    );
+    expect(
+      otelServiceName('web', {
+        provider: 'vercel',
+        project: 'p',
+        otelService: 'app-web',
+      }),
+    ).toBe('app-web');
+  });
+
+  test('rejects a trace-only entry that carries provider fields or is empty', async () => {
+    for (const entry of [
+      { otelService: 'x', project: 'p' },
+      { otelService: '' },
+      {},
+    ]) {
+      const result = await decode(withServices({ x: entry }));
+      expect(result._tag).toBe('Failure');
+    }
   });
 });
 

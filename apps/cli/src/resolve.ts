@@ -1,23 +1,32 @@
 import {
   type LogSource,
+  makeJaegerBackend,
   makeRailwaySource,
   makeVercelSource,
   type ServiceTarget,
 } from '@traces/core';
-import { Effect, Option } from 'effect';
+import { Config, Effect, Option } from 'effect';
 import { Flag } from 'effect/cli';
 import {
+  type HeaderValue,
+  hasLogProvider,
+  type LogServiceConfig,
   type ProjectConfig,
   readConfig,
   resolveDefaultConfigPath,
   type ServiceConfig,
 } from '#/config.ts';
-import { UsageError } from '#/errors.ts';
+import { EnvVarMissing, UsageError } from '#/errors.ts';
 import {
   captureInvocation,
   resolveMatcherPaths,
   selectProject,
 } from '#/project-match.ts';
+import {
+  type SecretMissing,
+  type SecretStoreError,
+  Secrets,
+} from '#/secrets.ts';
 import { findVercelToken } from '#/vercel-token.ts';
 
 export const globalOptions = {
@@ -103,11 +112,22 @@ export const selectService = (
   );
 };
 
+export const requireLogProvider = (
+  name: string,
+  config: ServiceConfig,
+): Effect.Effect<LogServiceConfig, UsageError> =>
+  hasLogProvider(config)
+    ? Effect.succeed(config)
+    : new UsageError({
+        message: `${name} has no log provider; it's trace-only`,
+        hint: `add a "provider" to its config entry to read logs and deploys; trace commands use its otelService "${config.otelService}"`,
+      });
+
 const VERCEL_TARGETS = ['production', 'preview'];
 
 export const buildTarget = (
   name: string,
-  config: ServiceConfig,
+  config: LogServiceConfig,
   envFlag: Option.Option<string>,
 ): Effect.Effect<ServiceTarget, UsageError> => {
   if (config.provider === 'railway') {
@@ -161,11 +181,8 @@ export const resolveService = (
   Effect.gen(function* () {
     const resolved = yield* resolveProject(flags);
     const selected = yield* selectService(resolved, service);
-    const target = yield* buildTarget(
-      selected.name,
-      selected.config,
-      flags.env,
-    );
+    const config = yield* requireLogProvider(selected.name, selected.config);
+    const target = yield* buildTarget(selected.name, config, flags.env);
     const source = yield* buildSource(target);
     return {
       resolved,
@@ -176,9 +193,10 @@ export const resolveService = (
   });
 
 /**
- * With a service requested, or a single-service project, fails like `resolveService`;
- * otherwise every service of the project. Each entry's `build` is deferred so one
- * service's missing token or bad target fails alone instead of aborting the others.
+ * With a service requested, fails like `resolveService` (a trace-only one is rejected);
+ * otherwise every log service of the project, trace-only ones skipped. Each entry's
+ * `build` is deferred so one service's missing token or bad target fails alone instead
+ * of aborting the others.
  */
 export const resolveServices = (
   flags: GlobalFlags,
@@ -186,13 +204,23 @@ export const resolveServices = (
 ) =>
   Effect.gen(function* () {
     const resolved = yield* resolveProject(flags);
-    const configs = Option.isSome(requested)
-      ? [yield* selectService(resolved, requested)]
-      : Object.entries(resolved.project.services).map(([name, config]) => ({
-          name,
-          config,
-        }));
-    const entries = configs.map((selected) => ({
+    const logServices: Array<{ name: string; config: LogServiceConfig }> = [];
+    if (Option.isSome(requested)) {
+      const selected = yield* selectService(resolved, requested);
+      const config = yield* requireLogProvider(selected.name, selected.config);
+      logServices.push({ name: selected.name, config });
+    } else {
+      for (const [name, config] of Object.entries(resolved.project.services)) {
+        if (hasLogProvider(config)) logServices.push({ name, config });
+      }
+    }
+    if (logServices.length === 0) {
+      return yield* new UsageError({
+        message: `project "${resolved.projectName}" has no log services; all are trace-only`,
+        hint: 'add a "provider" to a service entry in the config to read its logs',
+      });
+    }
+    const entries = logServices.map((selected) => ({
       name: selected.name,
       build: Effect.gen(function* () {
         const target = yield* buildTarget(
@@ -205,4 +233,54 @@ export const resolveServices = (
       }),
     }));
     return { resolved, entries };
+  });
+
+const TRACING_HINT_EXAMPLE =
+  '"tracing": {"provider":"jaeger","url":"https://jaeger.example.com","headers":{"X-API-Key":{"keychain":"<name>"}}}';
+
+const resolveHeaderValue = (
+  value: HeaderValue,
+): Effect.Effect<
+  string,
+  SecretMissing | SecretStoreError | EnvVarMissing | Config.ConfigError,
+  Secrets
+> => {
+  if (typeof value === 'string') return Effect.succeed(value);
+  if ('keychain' in value) {
+    return Secrets.use((secrets) => secrets.get(value.keychain));
+  }
+  return Config.String(value.env).pipe(
+    Config.option,
+    Effect.flatMap((found) =>
+      Option.isSome(found) && found.value !== ''
+        ? Effect.succeed(found.value)
+        : new EnvVarMissing({ name: value.env }),
+    ),
+  );
+};
+
+/** Reads keychain and env values only when called, so log commands never touch either. */
+export const resolveHeaders = (
+  headers: Readonly<Record<string, HeaderValue>> | undefined,
+) =>
+  Effect.forEach(
+    Object.entries(headers ?? {}),
+    ([name, value]) =>
+      resolveHeaderValue(value).pipe(
+        Effect.map((resolved) => [name, resolved] as const),
+      ),
+    { concurrency: 1 },
+  ).pipe(Effect.map((pairs) => Object.fromEntries(pairs)));
+
+export const resolveTraceBackend = (resolved: ResolvedProject) =>
+  Effect.gen(function* () {
+    const tracing = resolved.project.tracing;
+    if (tracing === undefined) {
+      return yield* new UsageError({
+        message: `project "${resolved.projectName}" has no tracing config`,
+        hint: `add to the project in ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces --help\``,
+      });
+    }
+    const headers = yield* resolveHeaders(tracing.headers);
+    return yield* makeJaegerBackend({ url: tracing.url, headers });
   });

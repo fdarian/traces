@@ -14,3 +14,9 @@ export class ConfigError extends Schema.TaggedError<ConfigError>()(
     hint: Schema.String,
   },
 ) {}
+
+/** A header value that names an environment variable which is unset or empty. */
+export class EnvVarMissing extends Schema.TaggedError<EnvVarMissing>()(
+  'EnvVarMissing',
+  { name: Schema.String },
+) {}
