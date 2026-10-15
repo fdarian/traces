@@ -39,11 +39,22 @@ export const pageTraces = (input: {
 export const traceFetchSize = (limit: number, resume?: PageResume): number =>
   limit + 1 + (resume?.seen.length ?? 0);
 
-export const toTraceCursor = (since: Date, next: PageResume): Cursor => ({
+/**
+ * How an error scan finds error traces: `filtered` asks Jaeger to filter by
+ * tag, `client` pages the unfiltered window and counts error spans itself.
+ */
+export type ErrorScanMode = 'filtered' | 'client';
+
+export const toTraceCursor = (
+  since: Date,
+  next: PageResume,
+  mode?: ErrorScanMode,
+): Cursor => ({
   kind: 'jaeger-time',
   since: since.getTime(),
   before: next.before,
   seen: next.seen,
+  ...(mode === undefined ? {} : { mode }),
 });
 
 export const fromTraceCursor = (cursor: Cursor) =>
@@ -54,6 +65,7 @@ export const fromTraceCursor = (cursor: Cursor) =>
           before: cursor.before,
           seen: cursor.seen,
         } satisfies PageResume,
+        mode: cursor.mode,
       })
     : Effect.fail(
         new InvalidCursor({
@@ -65,6 +77,8 @@ export interface ErrorTraceScan {
   /** Oldest to newest, like every other page. */
   readonly matches: ReadonlyArray<TraceSummary>;
   readonly next?: PageResume;
+  /** The mode that produced `next`; put it in the cursor so the next page does not retry the other one. */
+  readonly mode: ErrorScanMode;
   readonly scanned: number;
   /** True when scanning stopped at `scanCap` with older traces left unread. */
   readonly capped: boolean;
@@ -87,6 +101,8 @@ export interface ErrorScanInput<E, R> {
   readonly scanCap: number;
   readonly pageSize: number;
   readonly resume?: PageResume;
+  /** The mode of the pages before `resume`. Unset on a first page, which tries `filtered` and falls back to `client`. */
+  readonly mode?: ErrorScanMode;
   /** `serverFiltered` tells the search to ask Jaeger for error traces only (see `errorSearchAttributes`). */
   readonly fetchPage: (request: {
     readonly resume?: PageResume;
@@ -97,8 +113,9 @@ export interface ErrorScanInput<E, R> {
 
 const scanPages = <E, R>(
   input: ErrorScanInput<E, R>,
-  serverFiltered: boolean,
+  mode: ErrorScanMode,
 ): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> => {
+  const serverFiltered = mode === 'filtered';
   const step = (
     resume: PageResume | undefined,
     scanned: number,
@@ -144,6 +161,7 @@ const scanPages = <E, R>(
                   .map((hit) => shortHash(hit.traceId)),
               }
             : undefined,
+          mode,
           scanned: nowScanned,
           capped: false,
         } satisfies ErrorTraceScan;
@@ -151,6 +169,7 @@ const scanPages = <E, R>(
       if (page.next === undefined) {
         return {
           matches: [...total].reverse(),
+          mode,
           scanned: nowScanned,
           capped: false,
         } satisfies ErrorTraceScan;
@@ -159,6 +178,7 @@ const scanPages = <E, R>(
         return {
           matches: [...total].reverse(),
           next: page.next,
+          mode,
           scanned: nowScanned,
           capped: true,
         } satisfies ErrorTraceScan;
@@ -170,19 +190,22 @@ const scanPages = <E, R>(
 
 /**
  * Finds traces with `errorSpanCount > 0`, newest to oldest, until `limit`
- * matches, the window ends, or `scanCap` traces were read. It first asks
+ * matches, the window ends, or `scanCap` traces were read. A first page asks
  * Jaeger to filter, so errors older than a busy window's newest traces are
  * reachable. Jaeger's memory backend answers an error filter with nothing
  * (jaegertracing/jaeger#8553), so a filtered search that returns no traces
  * falls back to paging the unfiltered window and filtering on the client.
+ * A resumed page (`input.mode`) stays in the mode its first page settled on,
+ * so an empty tail of the window does not rerun the fallback.
  * Matches are always verified from the summaries, never trusted from the server.
  */
 export const scanErrorTraces = <E, R>(
   input: ErrorScanInput<E, R>,
 ): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> =>
   Effect.gen(function* () {
-    const filtered = yield* scanPages(input, true);
+    if (input.mode !== undefined) return yield* scanPages(input, input.mode);
+    const filtered = yield* scanPages(input, 'filtered');
     // A filter that returned traces but none with errors was ignored, so that pass already was a client scan.
     if (filtered.scanned > 0) return filtered;
-    return yield* scanPages(input, false);
+    return yield* scanPages(input, 'client');
   });

@@ -157,7 +157,7 @@ export {
   memoizeGetTrace,
   scanTraceErrors,
 } from './traces/error-scan.js';
-export type { ErrorTraceScan } from './traces/paging.js';
+export type { ErrorScanMode, ErrorTraceScan } from './traces/paging.js';
 export {
   errorSearchAttributes,
   fromTraceCursor,

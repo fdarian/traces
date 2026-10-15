@@ -115,6 +115,8 @@ export const Cursor = Schema.Union([
     since: Schema.Number,
     before: Schema.String,
     seen: Schema.Array(Schema.String),
+    // Only error scans set it: how their earlier pages found error traces.
+    mode: Schema.optional(Schema.Literals(['filtered', 'client'])),
   }),
   Schema.Struct({
     kind: Schema.Literal('vercel-page'),

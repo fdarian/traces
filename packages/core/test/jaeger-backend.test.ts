@@ -156,3 +156,139 @@ describe('makeJaegerBackend', () => {
     }
   });
 });
+
+const legacyTrace = (
+  traceID: string,
+  startMicros: number,
+  errorTag: { key: string; value: unknown } | undefined,
+) => ({
+  traceID,
+  spans: [
+    {
+      traceID,
+      spanID: 'root',
+      operationName: 'GET /',
+      references: [],
+      startTime: startMicros,
+      duration: 5_000,
+      tags: [],
+      processID: 'p1',
+    },
+    {
+      traceID,
+      spanID: 'child',
+      operationName: 'db.query',
+      references: [{ refType: 'CHILD_OF', traceID, spanID: 'root' }],
+      startTime: startMicros + 1_000,
+      duration: 9_000,
+      tags: errorTag === undefined ? [] : [errorTag],
+      processID: 'p2',
+    },
+  ],
+  processes: {
+    p1: { serviceName: 'web', tags: [] },
+    p2: { serviceName: 'db', tags: [] },
+  },
+});
+
+describe('searchTraces with attributes', () => {
+  const query = {
+    service: 'web',
+    startTimeMin: '2026-10-12T00:00:00.000Z',
+    startTimeMax: '2026-10-15T00:00:00.000Z',
+    attributes: { error: 'true' },
+    limit: 20,
+  };
+
+  test('asks the legacy API for the tags, because the v3 gateway ignores them', async () => {
+    const { client, requests } = recordingClient(200, {
+      data: [],
+      total: 0,
+      errors: null,
+    });
+    const exit = await run(
+      client,
+      { url: 'https://host.example/~/jaeger', headers: { 'X-API-Key': 'k' } },
+      (b) => b.searchTraces(query),
+    );
+    expect(Exit.isSuccess(exit)).toBe(true);
+    const request = requests[0];
+    expect(request?.url.pathname).toBe('/~/jaeger/api/traces');
+    expect(request?.url.searchParams.get('service')).toBe('web');
+    expect(request?.url.searchParams.get('tags')).toBe('{"error":"true"}');
+    expect(request?.url.searchParams.get('limit')).toBe('20');
+    expect(request?.url.searchParams.get('start')).toBe(
+      String(Date.parse(query.startTimeMin) * 1000),
+    );
+    expect(request?.url.searchParams.get('end')).toBe(
+      String(Date.parse(query.startTimeMax) * 1000),
+    );
+    expect(request?.headers['x-api-key']).toBe('k');
+  });
+
+  test('summarizes the legacy traces, counting error spans from either error tag', async () => {
+    const { client } = recordingClient(200, {
+      data: [
+        legacyTrace('a'.repeat(32), 1_791_947_255_896_280, {
+          key: 'otel.status_code',
+          value: 'ERROR',
+        }),
+        legacyTrace('b'.repeat(32), 1_791_947_000_000_000, {
+          key: 'error',
+          value: true,
+        }),
+        legacyTrace('c'.repeat(32), 1_791_946_000_000_000, undefined),
+      ],
+      total: 3,
+      errors: null,
+    });
+    const exit = await run(
+      client,
+      { url: 'http://localhost:16686', headers: {} },
+      (b) => b.searchTraces(query),
+    );
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (!Exit.isSuccess(exit)) return;
+    expect(exit.value.map((summary) => summary.errorSpanCount)).toEqual([
+      1, 1, 0,
+    ]);
+    expect(exit.value[0]).toEqual({
+      traceId: 'a'.repeat(32),
+      rootService: 'web',
+      rootOperation: 'GET /',
+      spanCount: 2,
+      errorSpanCount: 1,
+      services: [
+        { name: 'web', spanCount: 1 },
+        { name: 'db', spanCount: 1 },
+      ],
+      startTimeUnixNano: '1791947255896280000',
+      durationMs: 10,
+    });
+  });
+
+  test('a legacy answer that is not 200 is a bad response', async () => {
+    const { client } = recordingClient(500, { data: null, errors: [] });
+    const exit = await run(
+      client,
+      { url: 'http://localhost:16686', headers: {} },
+      (b) => b.searchTraces(query),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      const error = exit.cause.reasons[0];
+      expect(error?._tag === 'Fail' && error.error._tag).toBe(
+        'JaegerBadResponse',
+      );
+    }
+  });
+
+  test('searches without attributes stay on the v3 API', async () => {
+    const { client, requests } = recordingClient(200, { summaries: [] });
+    await run(client, { url: 'http://localhost:16686', headers: {} }, (b) =>
+      b.searchTraces({ ...query, attributes: undefined }),
+    );
+    expect(requests[0]?.url.pathname).toBe('/api/v3/trace-summaries');
+    expect(requests[0]?.url.searchParams.has('query.attributes')).toBe(false);
+  });
+});
