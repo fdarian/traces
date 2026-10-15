@@ -6,7 +6,7 @@ import type {
   LogRecord,
   VercelTarget,
 } from '../model.js';
-import { normalizeLevel, stripAnsi } from '../normalize.js';
+import { normalizeLevel, stripAnsi, traceContextOf } from '../normalize.js';
 import type { BuildEvent, RequestLogRow, VercelDeployment } from './schema.js';
 
 export const PROVIDER = 'vercel' as const;
@@ -87,6 +87,9 @@ const requestOf = (row: RequestLogRow) => ({
   requestId: row.requestId,
 });
 
+const rowTrace = (row: RequestLogRow) =>
+  traceContextOf({ traceId: row.traceId });
+
 const rowAttrs = (row: RequestLogRow): Record<string, string> => {
   const attrs: Record<string, string> = {};
   if (row.domain) attrs.domain = row.domain;
@@ -111,6 +114,7 @@ export const mapRuntimeRow = (
         level: normalizeLevel(line.level),
         message: stripAnsi(line.message),
         request: requestOf(row),
+        ...rowTrace(row),
         attrs: rowAttrs(row),
       }),
     )
@@ -134,6 +138,7 @@ export const mapHttpRow = (
         : ` ${row.requestDurationMs}ms`
     }`,
     request: requestOf(row),
+    ...rowTrace(row),
     attrs: rowAttrs(row),
   },
 ];

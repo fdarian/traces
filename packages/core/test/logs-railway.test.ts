@@ -55,9 +55,55 @@ describe('railway log mapping', () => {
       target,
       source: 'runtime',
     });
-    expect(record.attrs).toEqual({ fiberId: '#9', spans: '{}', count: '3' });
+    expect(record.attrs).toEqual({ fiberId: '#9', spans: {}, count: 3 });
+    expect(record.traceId).toBeUndefined();
     expect(record.level).toBe('info');
     expect(record.deploymentId).toBe('dep-1');
+  });
+
+  test('decodes nested Effect annotations and promotes well-formed trace ids', () => {
+    const traceId = 'a'.repeat(32);
+    const spanId = 'b'.repeat(16);
+    const row = {
+      timestamp: '2026-10-12T00:25:58.664Z',
+      message: 'hello',
+      attributes: [
+        {
+          key: 'annotations',
+          value: JSON.stringify({ traceId, spanId, userId: 7 }),
+        },
+        { key: 'raw', value: 'not json {' },
+      ],
+    };
+    const record = mapRailwayLog(row as never, { target, source: 'runtime' });
+    expect(record.traceId).toBe(traceId);
+    expect(record.spanId).toBe(spanId);
+    expect(record.attrs.annotations).toEqual({ traceId, spanId, userId: 7 });
+    expect(record.attrs.raw).toBe('not json {');
+  });
+
+  test('accepts top-level snake_case ids and ignores malformed ones', () => {
+    const encode = (attributes: Record<string, string>) => ({
+      timestamp: '2026-10-12T00:25:58.664Z',
+      message: 'hello',
+      attributes: Object.entries(attributes).map(([key, value]) => ({
+        key,
+        value: JSON.stringify(value),
+      })),
+    });
+    const good = mapRailwayLog(
+      encode({ trace_id: 'C'.repeat(32), span_id: 'd'.repeat(16) }) as never,
+      { target, source: 'runtime' },
+    );
+    expect(good.traceId).toBe('C'.repeat(32));
+    expect(good.spanId).toBe('d'.repeat(16));
+    const bad = mapRailwayLog(
+      encode({ traceId: 'req-123', spanId: 'abc' }) as never,
+      { target, source: 'runtime' },
+    );
+    expect(bad.traceId).toBeUndefined();
+    expect(bad.spanId).toBeUndefined();
+    expect(bad.attrs.traceId).toBe('req-123');
   });
 
   test('strips ANSI escapes from messages', () => {
@@ -179,8 +225,27 @@ describe('railway source', () => {
     const result = await run(missing);
     expect(result._tag).toBe('Failure');
     if (result._tag === 'Failure') {
-      expect(JSON.stringify(result.failure)).toContain('api, web');
+      expect(JSON.stringify(result.failure)).toContain(
+        'api (svc-api), web (svc-web)',
+      );
     }
+  });
+
+  test('resolves services and environments given by id', async () => {
+    const calls: Array<RailwayCall> = [];
+    await run(
+      makeRailwaySource({
+        ...target,
+        serviceName: 'svc-web',
+        environment: 'env-stg',
+      }).pipe(
+        Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
+        Effect.provide(fakeRailway(respondWith([]), calls)),
+      ),
+    );
+    const query = calls.find((c) => c.document.includes('environmentLogs'));
+    expect(query?.variables.e).toBe('env-stg');
+    expect(query?.variables.f).toBe('@service:svc-web');
   });
 
   test('lists deployments with commit info from meta and skips missing fields', async () => {

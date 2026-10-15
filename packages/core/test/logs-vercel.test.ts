@@ -66,6 +66,7 @@ describe('vercel row mapping', () => {
         status: 500,
         durationMs: 120,
       },
+      traceId: '0123456789abcdef0123456789abcdef',
       attrs: { domain: 'app.example.com', branch: 'main' },
     });
   });

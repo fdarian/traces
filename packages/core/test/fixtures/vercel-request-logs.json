@@ -2,6 +2,7 @@
   "rows": [
     {
       "requestId": "req-new",
+      "traceId": "0123456789abcdef0123456789abcdef",
       "timestamp": "2026-10-12T00:53:45.419Z",
       "deploymentId": "dpl_new",
       "environment": "production",
