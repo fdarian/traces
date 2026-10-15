@@ -15,7 +15,7 @@ lightweight observability dashboard — point it at an existing Jaeger (v2) and 
 - `apps/docs` — Blume documentation site
 - `packages/core` — domain model, `TraceBackend` interface, Jaeger adapter
 - `packages/react` — publishable React SDK (components from day one)
-- `apps/cli` — `traces` CLI: unified logs/deploys over Vercel and Railway for agents (provider adapters live in `packages/core/src/logs/`)
+- `apps/cli` — `traces` CLI for agents: unified logs/deploys over Vercel and Railway, and traces/error groups from Jaeger (provider adapters in `packages/core/src/logs/`, trace helpers in `packages/core/src/traces/`)
 
 ## Dev loop
 1. `docker compose up -d` — starts Jaeger v2 all-in-one (in-memory)
