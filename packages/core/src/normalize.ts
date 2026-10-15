@@ -12,6 +12,14 @@ export function normalizeTimestamp(value: string | number): string {
   return value.toString();
 }
 
+/** Fixed-width `YYYY-MM-DDTHH:mm:ss.nnnnnnnnnZ`, so the strings sort chronologically. */
+export function nanoToIso(unixNano: string): string {
+  const nanos = BigInt(unixNano);
+  const millis = new Date(Number(nanos / 1_000_000n)).toISOString();
+  const subMillis = String(nanos % 1_000_000n).padStart(6, '0');
+  return `${millis.slice(0, -1)}${subMillis}Z`;
+}
+
 export function normalizeTimestampToMs(value: string | number): number {
   const nanoStr = typeof value === 'string' ? value : value.toString();
   const nanos = BigInt(nanoStr);

@@ -1,3 +1,6 @@
+import { Schema } from 'effect';
+import { nanoToIso } from './normalize.js';
+
 export type StatusCode = 'ok' | 'error' | 'unset';
 
 export interface AttributeValue {
@@ -62,3 +65,30 @@ export interface TraceSummary {
   readonly startTimeUnixNano: string;
   readonly durationMs: number;
 }
+
+export const TraceRow = Schema.Struct({
+  traceId: Schema.String,
+  rootService: Schema.String,
+  rootOperation: Schema.String,
+  /** ISO timestamp with nanosecond precision, so it sorts and pages without loss. */
+  startTs: Schema.String,
+  durationMs: Schema.Number,
+  spanCount: Schema.Number,
+  /** Absent when the Jaeger backend does not report error spans. */
+  errorSpanCount: Schema.optional(Schema.Number),
+  services: Schema.Array(Schema.String),
+});
+export type TraceRow = typeof TraceRow.Type;
+
+export const toTraceRow = (summary: TraceSummary): TraceRow => ({
+  traceId: summary.traceId,
+  rootService: summary.rootService,
+  rootOperation: summary.rootOperation,
+  startTs: nanoToIso(summary.startTimeUnixNano),
+  durationMs: summary.durationMs,
+  spanCount: summary.spanCount,
+  ...(summary.errorSpanCount === undefined
+    ? {}
+    : { errorSpanCount: summary.errorSpanCount }),
+  services: summary.services.map((service) => service.name),
+});
