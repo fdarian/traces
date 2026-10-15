@@ -1,4 +1,5 @@
-import { Config, Console, Effect, Option } from 'effect';
+import { TraceBackendUnauthorized } from '@traces/core';
+import { Cause, Config, Console, Effect, Option } from 'effect';
 import { Command } from 'effect/cli';
 import {
   type AuthStatus,
@@ -12,8 +13,13 @@ import {
   type ServiceConfig,
   type TracingConfig,
 } from '#/config.ts';
-import { causeMessage, emitRecord, outputMode } from '#/output.ts';
-import { globalOptions, resolveProject } from '#/resolve.ts';
+import { causeMessage, emitRecord, outputMode, renderError } from '#/output.ts';
+import {
+  globalOptions,
+  type ResolvedProject,
+  resolveProject,
+  resolveTraceBackend,
+} from '#/resolve.ts';
 import { Secrets } from '#/secrets.ts';
 
 type SecretStatus =
@@ -28,10 +34,16 @@ type HeaderStatus =
       readonly ref: string;
     } & SecretStatus);
 
+type TracingCheck =
+  | { readonly status: 'reachable'; readonly services: ReadonlyArray<string> }
+  | { readonly status: 'unauthorized' }
+  | { readonly status: 'error'; readonly detail: string };
+
 interface TracingStatus {
   readonly provider: 'jaeger';
   readonly url: string;
   readonly headers: ReadonlyArray<HeaderStatus>;
+  readonly check: TracingCheck;
 }
 
 interface ServiceRecord {
@@ -46,6 +58,8 @@ interface ServiceRecord {
   readonly auth?: AuthStatus;
   /** The Jaeger service name; set only when the project has tracing or the entry names one. */
   readonly otelService?: string;
+  /** Set only when the tracing check reached Jaeger: whether it reports `otelService`. */
+  readonly otelInJaeger?: boolean;
   readonly tracing?: TracingStatus;
 }
 
@@ -103,15 +117,45 @@ const headerStatus = (name: string, value: HeaderValue) => {
   );
 };
 
-const tracingStatus = (tracing: TracingConfig) =>
-  Effect.forEach(Object.entries(tracing.headers ?? {}), ([name, value]) =>
-    headerStatus(name, value),
-  ).pipe(
+const CHECK_TIMEOUT_SECONDS = 5;
+
+/** One `listServices` call, run only for a project with `tracing`; every failure becomes a status rather than aborting the command. */
+const checkTracing = (resolved: ResolvedProject) =>
+  resolveTraceBackend(resolved).pipe(
+    Effect.flatMap((backend) =>
+      backend.listServices.pipe(
+        Effect.timeout(`${CHECK_TIMEOUT_SECONDS} seconds`),
+      ),
+    ),
+    Effect.map((services): TracingCheck => ({ status: 'reachable', services })),
+    Effect.catch((error) =>
+      Effect.succeed<TracingCheck>(
+        error instanceof TraceBackendUnauthorized
+          ? { status: 'unauthorized' }
+          : {
+              status: 'error',
+              detail: Cause.isTimeoutError(error)
+                ? `no answer within ${CHECK_TIMEOUT_SECONDS}s`
+                : renderError(error).message,
+            },
+      ),
+    ),
+  );
+
+const tracingStatus = (resolved: ResolvedProject, tracing: TracingConfig) =>
+  Effect.all({
+    headers: Effect.forEach(
+      Object.entries(tracing.headers ?? {}),
+      ([name, value]) => headerStatus(name, value),
+    ),
+    check: checkTracing(resolved),
+  }).pipe(
     Effect.map(
-      (headers): TracingStatus => ({
+      (status): TracingStatus => ({
         provider: tracing.provider,
         url: tracing.url,
-        headers,
+        headers: status.headers,
+        check: status.check,
       }),
     ),
   );
@@ -123,10 +167,27 @@ const formatHeader = (header: HeaderStatus): string => {
   return `${header.name}: ${header.source} ${header.ref} ${state}`;
 };
 
-const formatTracing = (tracing: TracingStatus): string =>
+const formatCheck = (check: TracingCheck): string => {
+  if (check.status === 'reachable') {
+    return `reachable (${check.services.length === 0 ? 'no services yet' : check.services.join(', ')})`;
+  }
+  return check.status === 'error' ? `error: ${check.detail}` : check.status;
+};
+
+export const formatTracing = (
+  tracing: TracingStatus,
+  missing: ReadonlyArray<{
+    readonly service: string;
+    readonly otelService: string;
+  }>,
+): string =>
   [
     `tracing ${tracing.provider} ${tracing.url}`,
     ...tracing.headers.map((header) => `  header ${formatHeader(header)}`),
+    `  status ${formatCheck(tracing.check)}`,
+    ...missing.map(
+      (entry) => `  ${entry.service} → ${entry.otelService}: not in Jaeger`,
+    ),
   ].join('\n');
 
 const formatService = (record: ServiceRecord): string => {
@@ -158,15 +219,32 @@ export const servicesCommand = Command.make(
       const tracing =
         resolved.project.tracing === undefined
           ? undefined
-          : yield* tracingStatus(resolved.project.tracing);
+          : yield* tracingStatus(resolved, resolved.project.tracing);
+      const jaegerServices =
+        tracing?.check.status === 'reachable'
+          ? tracing.check.services
+          : undefined;
+      const inJaeger = (otelService: string) =>
+        jaegerServices === undefined
+          ? undefined
+          : jaegerServices.includes(otelService);
       if (mode === 'human') {
         yield* Console.log(
           `config ${resolved.configPath}\nproject ${resolved.projectName} (matched by ${resolved.matchedBy})`,
         );
-        if (tracing !== undefined) yield* Console.log(formatTracing(tracing));
+        if (tracing !== undefined) {
+          const missing = Object.entries(resolved.project.services)
+            .map(([service, ref]) => ({
+              service,
+              otelService: otelServiceName(service, ref),
+            }))
+            .filter((entry) => inJaeger(entry.otelService) === false);
+          yield* Console.log(formatTracing(tracing, missing));
+        }
       }
       const authCache = new Map<'vercel' | 'railway', AuthStatus>();
       for (const [service, ref] of Object.entries(resolved.project.services)) {
+        const found = inJaeger(otelServiceName(service, ref));
         const common = {
           configPath: resolved.configPath,
           project: resolved.projectName,
@@ -177,6 +255,7 @@ export const servicesCommand = Command.make(
           ...(tracing === undefined && ref.otelService === undefined
             ? {}
             : { otelService: otelServiceName(service, ref) }),
+          ...(found === undefined ? {} : { otelInJaeger: found }),
         };
         if (!hasLogProvider(ref)) {
           yield* emitRecord(

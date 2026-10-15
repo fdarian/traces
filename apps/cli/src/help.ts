@@ -87,14 +87,15 @@ export const COMMAND_HELP = {
     tagline: 'matched project, services, provider auth status',
     synopsis: 'traces services [flags]',
     summary:
-      'Show the project matched for the current directory, its services, whether each provider is authenticated, and the tracing setup (URL, header secrets, otelService).',
+      'Show the project matched for the current directory, its services, whether each provider is authenticated, and the tracing setup (URL, header secrets, otelService) with a live reachability check of the tracing URL.',
     arguments: [],
     flags: [],
     output:
-      'one record per service: configPath, project, matchedBy (flag | path | git), service, provider (absent for trace-only), ref (the config entry), auth {status: ok | missing | invalid, detail} (absent for trace-only), otelService (the Jaeger service name; set when the project has tracing or the entry names one), tracing (when the project has it) {provider, url, headers[]}. Each tracing header is {name, source: literal | env | keychain, ref, status: present | missing | error, detail?}; literal headers carry no ref or status. Values are never printed.',
+      'one record per service: configPath, project, matchedBy (flag | path | git), service, provider (absent for trace-only), ref (the config entry), auth {status: ok | missing | invalid, detail} (absent for trace-only), otelService (the Jaeger service name; set when the project has tracing or the entry names one), tracing (when the project has it) {provider, url, headers[], check}, check being {status: reachable, services[]} (the Jaeger service names) | {status: unauthorized} | {status: error, detail}, and otelInJaeger (boolean, only when check is reachable): whether Jaeger reports the otelService. Each tracing header is {name, source: literal | env | keychain, ref, status: present | missing | error, detail?}; literal headers carry no ref or status. Values are never printed.',
     notes: [
       'Run this first when another command says no project matches or auth fails.',
       'Auth check: Railway runs `railway whoami`; Vercel validates the token against the API.',
+      'With a `tracing` block, one `/api/v3/services` request (5s timeout) checks the URL: reachable, unauthorized (credentials rejected), or error with a short reason (an HTML page, a redirect, a missing secret, no answer). A failed check still exits 0. Every service whose otelService Jaeger does not report is listed as `<service> → <otelService>: not in Jaeger`; a wrong name there is why `traces spans` comes back empty. Projects without `tracing` make no request.',
       'Tracing: `traces secret set <ref>` fixes a missing keychain secret; an env header is `missing` until that variable is exported. Reading keychain entries here may prompt macOS for access.',
     ],
     examples: ['traces services', 'traces services --project myapp --json'],
