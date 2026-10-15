@@ -116,6 +116,26 @@ describe('resolveHelpRequest', () => {
   });
 });
 
+describe('framework usage suppression', () => {
+  test('the usage block never reaches stdout and the failure is one stderr line', async () => {
+    const run = Bun.spawn(['bun', 'src/main.ts', 'logs', '--bogus'], {
+      cwd: import.meta.dir + '/..',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      run.stdout.text(),
+      run.stderr.text(),
+      run.exited,
+    ]);
+    expect(stdout).toBe('');
+    expect(stderr).toBe(
+      'error: Unrecognized flag: --bogus in command traces logs\nhint: run `traces logs --help`\n',
+    );
+    expect(code).toBe(2);
+  });
+});
+
 describe('plainWhenPiped', () => {
   const escape = String.fromCharCode(27);
   const capture = (tty: { stdout: boolean; stderr: boolean }) => {

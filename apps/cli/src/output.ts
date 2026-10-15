@@ -9,7 +9,7 @@ import {
   stripAnsi,
 } from '@traces/core';
 import { Console, Effect, Schema } from 'effect';
-import { CliError } from 'effect/cli';
+import { CliError, CliOutput } from 'effect/cli';
 import { ConfigError, UsageError } from '#/errors.ts';
 
 export type OutputMode = 'human' | 'ndjson';
@@ -95,8 +95,6 @@ export interface RenderedError {
   readonly message: string;
   readonly hint?: string;
   readonly code: number;
-  /** The CLI framework already printed this failure. */
-  readonly alreadyReported?: boolean;
 }
 
 const causeMessage = (cause: unknown): string => {
@@ -106,16 +104,32 @@ const causeMessage = (cause: unknown): string => {
   return cause instanceof Error ? cause.message : String(cause);
 };
 
-/** `unknown` because the CLI framework's own failures also land here. */
-export const renderError = (error: unknown): RenderedError => {
-  if (CliError.isCliError(error)) {
+/** Parse failures can span lines (suggestions) and echo user input; one line keeps stderr greppable. */
+const singleLine = (text: string): string =>
+  text.replace(/[\u0000-\u001f\u007f\s]+/g, ' ').trim();
+
+const renderCliError = (error: CliError.CliError): RenderedError => {
+  if (error._tag !== 'ShowHelp') {
     return {
-      message: 'invalid command line',
-      hint: 'run `traces --help`, or `traces <command> --help` for that command',
+      message: singleLine(error.message),
+      hint: 'run `traces --help`',
       code: EXIT_CODES.usage,
-      alreadyReported: true,
     };
   }
+  const command = error.commandPath.slice(1).join(' ');
+  return {
+    message:
+      error.errors.length === 0
+        ? 'invalid command line'
+        : error.errors.map((cause) => singleLine(cause.message)).join('; '),
+    hint: `run \`traces ${command === '' ? '' : `${command} `}--help\``,
+    code: EXIT_CODES.usage,
+  };
+};
+
+/** `unknown` because the CLI framework's own failures also land here. */
+export const renderError = (error: unknown): RenderedError => {
+  if (CliError.isCliError(error)) return renderCliError(error);
   if (error instanceof UsageError) {
     return { message: error.message, hint: error.hint, code: EXIT_CODES.usage };
   }
@@ -165,16 +179,27 @@ export const renderError = (error: unknown): RenderedError => {
 
 export const reportError = (rendered: RenderedError) =>
   Console.error(
-    rendered.alreadyReported === true
-      ? `hint: ${rendered.hint}`
-      : rendered.hint === undefined
-        ? `error: ${rendered.message}`
-        : `error: ${rendered.message}\nhint: ${rendered.hint}`,
+    rendered.hint === undefined
+      ? `error: ${rendered.message}`
+      : `error: ${rendered.message}\nhint: ${rendered.hint}`,
   );
 
 export class ExitWith extends Schema.TaggedError<ExitWith>()('ExitWith', {
   code: Schema.Number,
 }) {}
+
+/**
+ * The framework prints the full usage block (to stdout) before failing a parse.
+ * Its formatter returns this marker instead and `plainWhenPiped` drops it, so
+ * the failure surfaces only as the one-line error from `reportError`.
+ */
+const SUPPRESSED_HELP = '\u0000traces:suppressed-help';
+
+export const withoutFrameworkHelp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideService(effect, CliOutput.Formatter, {
+    ...CliOutput.defaultFormatter({ colors: false }),
+    formatHelpDoc: () => SUPPRESSED_HELP,
+  });
 
 const plainArgs = (args: ReadonlyArray<unknown>) =>
   args.map((arg) => (typeof arg === 'string' ? stripAnsi(arg) : arg));
@@ -185,7 +210,10 @@ export const plainWhenPiped = (
   tty: { readonly stdout: boolean; readonly stderr: boolean },
 ): Console.Console => ({
   ...base,
-  log: (...args) => base.log(...(tty.stdout ? args : plainArgs(args))),
+  log: (...args) => {
+    if (args.length === 1 && args[0] === SUPPRESSED_HELP) return;
+    base.log(...(tty.stdout ? args : plainArgs(args)));
+  },
   error: (...args) => base.error(...(tty.stderr ? args : plainArgs(args))),
   warn: (...args) => base.warn(...(tty.stderr ? args : plainArgs(args))),
 });

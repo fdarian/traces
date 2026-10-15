@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ProviderAuthError, ProviderNotFound } from '@traces/core';
 import { Effect } from 'effect';
+import { CliError } from 'effect/cli';
 import { ConfigError, UsageError } from '#/errors.ts';
 import { parseLevels } from '#/levels.ts';
 import {
@@ -94,6 +95,44 @@ describe('renderError', () => {
       ).code,
     ).toBe(EXIT_CODES.runtime);
     expect(renderError(new Error('boom')).code).toBe(EXIT_CODES.runtime);
+  });
+
+  test('parse failures render as one line pointing at the command help', () => {
+    const rendered = renderError(
+      new CliError.ShowHelp({
+        commandPath: ['traces', 'logs'],
+        errors: [
+          new CliError.UnrecognizedOption({
+            option: '--bogus',
+            command: ['traces', 'logs'],
+            suggestions: ['--json'],
+          }),
+        ],
+      }),
+    );
+    expect(rendered).toEqual({
+      message:
+        'Unrecognized flag: --bogus in command traces logs Did you mean this? --json',
+      hint: 'run `traces logs --help`',
+      code: EXIT_CODES.usage,
+    });
+  });
+
+  test('a parse failure at the root points at the top-level help', () => {
+    const rendered = renderError(
+      new CliError.ShowHelp({
+        commandPath: ['traces'],
+        errors: [
+          new CliError.UnknownSubcommand({
+            subcommand: 'foo',
+            parent: ['traces'],
+            suggestions: [],
+          }),
+        ],
+      }),
+    );
+    expect(rendered.hint).toBe('run `traces --help`');
+    expect(rendered.code).toBe(EXIT_CODES.usage);
   });
 
   test('auth errors carry the hint', () => {
