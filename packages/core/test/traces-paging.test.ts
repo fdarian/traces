@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 import {
   decodeCursor,
   encodeCursor,
+  errorSearchAttributes,
   fromTraceCursor,
   type PageResume,
   pageTraces,
@@ -29,14 +30,27 @@ const summary = (index: number, errors: number | undefined): TraceSummary => ({
 });
 
 /** Jaeger as the pager sees it: the newest `size` traces at or before the bound, in no particular order. */
-const fakeJaeger = (store: ReadonlyArray<TraceSummary>) => {
-  const requests: Array<{ size: number; bound: string | undefined }> = [];
+const fakeJaeger = (
+  store: ReadonlyArray<TraceSummary>,
+  /** What the server does with the error filter: apply it, answer nothing (#8553), or ignore it. */
+  errorFilter: 'honors' | 'empty' | 'ignores' = 'ignores',
+) => {
+  const requests: Array<{
+    size: number;
+    bound: string | undefined;
+    serverFiltered: boolean;
+  }> = [];
   const fetchPage = (request: {
     readonly resume?: PageResume;
     readonly size: number;
+    readonly serverFiltered: boolean;
   }) => {
     const bound = request.resume?.before;
-    requests.push({ size: request.size, bound });
+    requests.push({
+      size: request.size,
+      bound,
+      serverFiltered: request.serverFiltered,
+    });
     const asked = traceFetchSize(request.size, request.resume);
     const candidates = store
       .filter(
@@ -44,6 +58,10 @@ const fakeJaeger = (store: ReadonlyArray<TraceSummary>) => {
           bound === undefined ||
           nanoToIso(candidate.startTimeUnixNano) <= bound,
       )
+      .filter((candidate) => {
+        if (!request.serverFiltered || errorFilter === 'ignores') return true;
+        return errorFilter === 'honors' && (candidate.errorSpanCount ?? 0) > 0;
+      })
       .sort((left, right) =>
         right.startTimeUnixNano.localeCompare(left.startTimeUnixNano),
       )
@@ -147,9 +165,10 @@ describe('scanErrorTraces', () => {
       scanCap?: number;
       pageSize?: number;
       resume?: PageResume;
+      errorFilter?: 'honors' | 'empty' | 'ignores';
     },
   ) => {
-    const jaeger = fakeJaeger(store);
+    const jaeger = fakeJaeger(store, options.errorFilter);
     return {
       jaeger,
       run: Effect.runPromise(
@@ -213,6 +232,44 @@ describe('scanErrorTraces', () => {
     expect(result.next).toBeUndefined();
   });
 
+  test('asks Jaeger to filter first, so errors beyond the scan cap are found', async () => {
+    const result = await scan(store, {
+      limit: 10,
+      scanCap: 4,
+      errorFilter: 'honors',
+    }).run;
+    expect(ids(result.matches)).toEqual(['t0002', 't0005', 't0006', 't0009']);
+    expect(result.capped).toBe(false);
+    expect(result.next).toBeUndefined();
+  });
+
+  test('falls back to the client scan when the filtered search returns nothing', async () => {
+    const run = scan(store, { limit: 10, errorFilter: 'empty' });
+    const result = await run.run;
+    expect(ids(result.matches)).toEqual(['t0002', 't0005', 't0006', 't0009']);
+    expect(result.scanned).toBe(12);
+    expect(
+      run.jaeger.requests.map((request) => request.serverFiltered),
+    ).toEqual([true, false, false, false]);
+  });
+
+  test('a filter Jaeger ignores is not scanned twice', async () => {
+    const run = scan(store, { limit: 10, errorFilter: 'ignores' });
+    const result = await run.run;
+    expect(ids(result.matches)).toEqual(['t0002', 't0005', 't0006', 't0009']);
+    expect(run.jaeger.requests.every((request) => request.serverFiltered)).toBe(
+      true,
+    );
+  });
+
+  test('still verifies server matches against the summary error count', async () => {
+    const result = await scan([summary(1, 0), summary(2, 0)], {
+      limit: 5,
+      errorFilter: 'honors',
+    }).run;
+    expect(result.matches).toEqual([]);
+  });
+
   test('fails when the backend reports no error counts', async () => {
     const result = await Effect.runPromise(
       scanErrorTraces({
@@ -226,6 +283,18 @@ describe('scanErrorTraces', () => {
     if (result._tag === 'Failure') {
       expect(result.failure._tag).toBe('TraceErrorCountsUnavailable');
     }
+  });
+});
+
+describe('errorSearchAttributes', () => {
+  test('adds the error filter only to server-filtered passes and keeps the caller attributes', () => {
+    expect(errorSearchAttributes(false, undefined)).toBeUndefined();
+    expect(errorSearchAttributes(false, { a: 'b' })).toEqual({ a: 'b' });
+    expect(errorSearchAttributes(true, undefined)).toEqual({ error: 'true' });
+    expect(errorSearchAttributes(true, { a: 'b' })).toEqual({
+      a: 'b',
+      error: 'true',
+    });
   });
 });
 

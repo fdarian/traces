@@ -70,21 +70,35 @@ export interface ErrorTraceScan {
   readonly capped: boolean;
 }
 
-/**
- * Jaeger's error-tag search is unreliable, so errors are found by paging the
- * window newest to oldest and keeping traces with `errorSpanCount > 0`, until
- * `limit` matches, the window ends, or `scanCap` traces were read.
- */
-export const scanErrorTraces = <E, R>(input: {
+/** The search attribute that asks Jaeger for traces holding an error span. */
+export const ERROR_SEARCH_ATTRIBUTES = { error: 'true' } as const;
+
+/** Search attributes for one scan pass: the caller's own, plus the error filter when the pass is server-filtered. */
+export const errorSearchAttributes = (
+  serverFiltered: boolean,
+  attributes: Record<string, string> | undefined,
+): Record<string, string> | undefined => {
+  if (!serverFiltered) return attributes;
+  return { ...attributes, ...ERROR_SEARCH_ATTRIBUTES };
+};
+
+export interface ErrorScanInput<E, R> {
   readonly limit: number;
   readonly scanCap: number;
   readonly pageSize: number;
   readonly resume?: PageResume;
+  /** `serverFiltered` tells the search to ask Jaeger for error traces only (see `errorSearchAttributes`). */
   readonly fetchPage: (request: {
     readonly resume?: PageResume;
     readonly size: number;
+    readonly serverFiltered: boolean;
   }) => Effect.Effect<BackwardPage<TraceSummary>, E, R>;
-}): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> => {
+}
+
+const scanPages = <E, R>(
+  input: ErrorScanInput<E, R>,
+  serverFiltered: boolean,
+): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> => {
   const step = (
     resume: PageResume | undefined,
     scanned: number,
@@ -94,6 +108,7 @@ export const scanErrorTraces = <E, R>(input: {
       const page = yield* input.fetchPage({
         resume,
         size: Math.min(input.pageSize, input.scanCap - scanned),
+        serverFiltered,
       });
       const newestFirst = [...page.kept].reverse();
       const hits: Array<TraceSummary> = [];
@@ -152,3 +167,22 @@ export const scanErrorTraces = <E, R>(input: {
     });
   return step(input.resume, 0, []);
 };
+
+/**
+ * Finds traces with `errorSpanCount > 0`, newest to oldest, until `limit`
+ * matches, the window ends, or `scanCap` traces were read. It first asks
+ * Jaeger to filter, so errors older than a busy window's newest traces are
+ * reachable. Jaeger's memory backend answers an error filter with nothing
+ * (jaegertracing/jaeger#8553), so a filtered search that returns no traces
+ * falls back to paging the unfiltered window and filtering on the client.
+ * Matches are always verified from the summaries, never trusted from the server.
+ */
+export const scanErrorTraces = <E, R>(
+  input: ErrorScanInput<E, R>,
+): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> =>
+  Effect.gen(function* () {
+    const filtered = yield* scanPages(input, true);
+    // A filter that returned traces but none with errors was ignored, so that pass already was a client scan.
+    if (filtered.scanned > 0) return filtered;
+    return yield* scanPages(input, false);
+  });

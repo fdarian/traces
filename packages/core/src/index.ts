@@ -136,6 +136,7 @@ export {
 } from './traces/error-scan.js';
 export type { ErrorTraceScan } from './traces/paging.js';
 export {
+  errorSearchAttributes,
   fromTraceCursor,
   pageTraces,
   scanErrorTraces,

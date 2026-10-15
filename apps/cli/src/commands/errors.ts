@@ -258,7 +258,9 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
             : 'errors';
       yield* emptyNotice(
         what,
-        `for ${detail} since ${since.toISOString()}`,
+        partialTraceServices.size === 0
+          ? `for ${detail} since ${since.toISOString()}`
+          : `for ${detail} in the scanned range since ${since.toISOString()} (trace scan was capped; see note)`,
         retention,
       );
     }
@@ -275,7 +277,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
       if (!outcome.scan.partial) continue;
       const prefix = labelled ? `${outcome.name} (traces): ` : '';
       yield* Console.error(
-        `note: ${prefix}read ${outcome.scan.errorTraces} error traces out of ${outcome.scan.scanned} scanned and older ones remain unread (caps per service: ${ERROR_TRACE_CAP} error traces, ${TRACE_SCAN_CAP} scanned); counts are partial (newest first). Narrow --since for exact counts.`,
+        `note: ${prefix}trace scan was capped (${ERROR_TRACE_CAP} error traces or ${TRACE_SCAN_CAP} traces scanned per service) after reading ${outcome.scan.errorTraces} error traces out of ${outcome.scan.scanned} scanned; older traces remain unread, so counts are partial (newest first). Narrow the window with --since for exact counts.`,
       );
     }
     for (const failure of failures) {

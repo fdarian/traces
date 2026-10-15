@@ -8,7 +8,12 @@ import { byFrequency, type ErrorGroup } from '../logs/errors-group.js';
 import type { PageResume } from '../logs/paging.js';
 import type { Span, Trace } from '../model.js';
 import { extractExceptionInfo, nanoToIso } from '../normalize.js';
-import { pageTraces, scanErrorTraces, traceFetchSize } from './paging.js';
+import {
+  errorSearchAttributes,
+  pageTraces,
+  scanErrorTraces,
+  traceFetchSize,
+} from './paging.js';
 
 const SAMPLE_TRACES = 3;
 const FETCH_CONCURRENCY = 4;
@@ -141,7 +146,7 @@ export interface TraceErrorScanResult {
  * Pages the window newest to oldest like `spans --errors`, fetches the full
  * trace of up to `maxErrorTraces` of the ones with error spans, and groups
  * their error spans with the issue fingerprints. Error counts come from the
- * summaries, never from Jaeger's error-tag search (unreliable).
+ * summaries; the search is filtered server-side when Jaeger honors it.
  */
 export const scanTraceErrors = (input: {
   readonly backend: TraceBackend;
@@ -163,12 +168,17 @@ export const scanTraceErrors = (input: {
       fetchPage: (request: {
         readonly resume?: PageResume;
         readonly size: number;
+        readonly serverFiltered: boolean;
       }) =>
         input.backend
           .searchTraces({
             service: input.otelService,
             startTimeMin: input.since.toISOString(),
             startTimeMax: request.resume?.before ?? input.until.toISOString(),
+            attributes: errorSearchAttributes(
+              request.serverFiltered,
+              undefined,
+            ),
             limit: traceFetchSize(request.size, request.resume),
           })
           .pipe(

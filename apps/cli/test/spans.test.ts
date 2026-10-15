@@ -31,6 +31,14 @@ const fakeTraces = Array.from({ length: 12 }, (_, index) => {
   };
 });
 
+/** 1100 error-free traces, newest first by index, so a scan reaches its cap without finding an error. */
+const quietTraces = Array.from({ length: 1100 }, (_, index) => ({
+  ...fakeTraces[0],
+  traceId: index.toString(16).padStart(32, '0'),
+  errorSpanCount: 0,
+  minStartTimeUnixNano: (BASE_NANO + BigInt(index) * 1_000_000_000n).toString(),
+}));
+
 interface SeenRequest {
   readonly pathname: string;
   readonly params: Record<string, string>;
@@ -41,6 +49,7 @@ let server: Server;
 let dir: string;
 let seen: Array<SeenRequest> = [];
 let rejectAuth = false;
+let quietBacklog = false;
 
 const configFor = (tracing: unknown) => {
   const path = join(dir, `config-${Math.random().toString(36).slice(2)}.json`);
@@ -84,7 +93,7 @@ beforeAll(async () => {
     }
     const max = params['query.start_time_max'] ?? '';
     const asked = Number(params['query.num_traces'] ?? '20');
-    const summaries = fakeTraces
+    const summaries = (quietBacklog ? quietTraces : fakeTraces)
       .filter((trace) => nanoIso(BigInt(trace.minStartTimeUnixNano)) <= max)
       .sort((left, right) =>
         right.minStartTimeUnixNano.localeCompare(left.minStartTimeUnixNano),
@@ -149,6 +158,21 @@ const idsOf = (rows: ReadonlyArray<Record<string, unknown>>) =>
   rows.map((row) => String(row.traceId).slice(0, 2));
 
 describe('traces spans against a fake Jaeger', () => {
+  test('an empty capped error scan says it only covered part of the window', async () => {
+    quietBacklog = true;
+    try {
+      const page = await run([...WINDOW, '--errors', '--limit', '2']);
+      expect(page.rows).toEqual([]);
+      expect(page.stderr).toContain('no error traces for mockingbird-web');
+      expect(page.stderr).toContain('in the scanned range (');
+      expect(page.stderr).toContain('); more below');
+      expect(page.stderr).not.toContain('in 2026-10-01');
+      expect(page.more).toBeDefined();
+    } finally {
+      quietBacklog = false;
+    }
+  });
+
   test('emits TraceRow records, sends the header and the service, and pages backwards without gaps', async () => {
     const config = configFor(tracingBlock());
     const first = await run([...WINDOW, '--limit', '5'], config);

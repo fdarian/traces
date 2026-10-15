@@ -1,6 +1,7 @@
 import {
   decodeCursor,
   encodeCursor,
+  errorSearchAttributes,
   fromTraceCursor,
   type PageResume,
   pageTraces,
@@ -127,6 +128,7 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
     const fetchPage = (request: {
       readonly resume?: PageResume;
       readonly size: number;
+      readonly serverFiltered: boolean;
     }) =>
       service.backend
         .searchTraces({
@@ -140,8 +142,10 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
           maxDuration: Option.getOrUndefined(
             Option.map(maxDuration, (parsed) => parsed.text),
           ),
-          attributes:
+          attributes: errorSearchAttributes(
+            request.serverFiltered,
             Object.keys(attributes).length === 0 ? undefined : attributes,
+          ),
           limit: traceFetchSize(request.size, request.resume),
         })
         .pipe(
@@ -169,7 +173,11 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
             scanned: scan.scanned,
           })),
         )
-      : yield* fetchPage({ resume: resumed?.resume, size: args.limit }).pipe(
+      : yield* fetchPage({
+          resume: resumed?.resume,
+          size: args.limit,
+          serverFiltered: false,
+        }).pipe(
           Effect.map((page) => ({
             traces: page.kept,
             next: page.next,
@@ -186,9 +194,14 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
       );
     }
     if (result.traces.length === 0) {
+      // An empty page with a cursor is a capped scan, not an empty window.
+      const window =
+        result.next === undefined
+          ? `in ${since.toISOString()} to ${windowEnd}`
+          : `in the scanned range (${result.next.before} to ${resumed?.resume.before ?? windowEnd}); more below`;
       yield* emptyNotice(
         args.errors ? 'error traces' : 'traces',
-        `for ${service.otelService} (jaeger) in ${since.toISOString()} to ${windowEnd}`,
+        `for ${service.otelService} (jaeger) ${window}`,
       );
     }
     if (result.capped) {
