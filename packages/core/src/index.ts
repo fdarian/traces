@@ -104,14 +104,6 @@ export {
   RAILWAY_RETENTION_NOTE,
 } from './logs/railway/index.js';
 export type { LogSource } from './logs/source.js';
-export type { ErrorTraceScan } from './logs/trace-paging.js';
-export {
-  fromTraceCursor,
-  pageTraces,
-  scanErrorTraces,
-  toTraceCursor,
-  traceFetchSize,
-} from './logs/trace-paging.js';
 export {
   makeVercelSource,
   mapBuildEvent,
@@ -157,3 +149,11 @@ export type {
 export { serializeAttribute, serializeValue } from './serialize.js';
 export type { ServiceHealth } from './service-health.js';
 export { computeServiceHealth } from './service-health.js';
+export type { ErrorTraceScan } from './traces/paging.js';
+export {
+  fromTraceCursor,
+  pageTraces,
+  scanErrorTraces,
+  toTraceCursor,
+  traceFetchSize,
+} from './traces/paging.js';

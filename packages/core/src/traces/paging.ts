@@ -1,11 +1,15 @@
 import { Effect } from 'effect';
 import { TraceErrorCountsUnavailable } from '../errors.js';
+import { InvalidCursor } from '../logs/errors.js';
+import { type Cursor } from '../logs/model.js';
+import { shortHash } from '../logs/normalize.js';
+import {
+  type BackwardPage,
+  type PageResume,
+  pageBackwards,
+} from '../logs/paging.js';
 import type { TraceSummary } from '../model.js';
 import { nanoToIso } from '../normalize.js';
-import { InvalidCursor } from './errors.js';
-import { type Cursor } from './model.js';
-import { shortHash } from './normalize.js';
-import { type BackwardPage, type PageResume, pageBackwards } from './paging.js';
 
 const position = (summary: TraceSummary) =>
   nanoToIso(summary.startTimeUnixNano);
