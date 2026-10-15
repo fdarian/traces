@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { type Span, type Trace, toSpanRows } from '#/index.js';
+import {
+  normalizeSpanKind,
+  type Span,
+  type Trace,
+  toSpanRows,
+} from '#/index.js';
 
 const BASE_NANO = 1_791_800_000_000_000_000n;
 
@@ -221,5 +226,34 @@ describe('toSpanRows exception promotion', () => {
   test('a span with no exception event has no exception field', () => {
     const [row] = toSpanRows(trace([span('root', undefined, 0)]));
     expect(row).not.toHaveProperty('exception');
+  });
+});
+
+describe('span kind', () => {
+  test.each([
+    ['SPAN_KIND_SERVER', 'server'],
+    ['SPAN_KIND_CLIENT', 'client'],
+    ['SPAN_KIND_PRODUCER', 'producer'],
+    ['SPAN_KIND_CONSUMER', 'consumer'],
+    ['SPAN_KIND_INTERNAL', 'internal'],
+    ['SPAN_KIND_UNSPECIFIED', 'unspecified'],
+    ['0', 'unspecified'],
+    ['1', 'internal'],
+    ['2', 'server'],
+    ['3', 'client'],
+    ['4', 'producer'],
+    ['5', 'consumer'],
+    ['server', 'server'],
+    ['6', 'unspecified'],
+    ['bogus', 'unspecified'],
+  ])('%s becomes %s', (raw, expected) => {
+    expect(normalizeSpanKind(raw)).toBe(expected);
+  });
+
+  test('rows carry the normalized kind', () => {
+    const [row] = toSpanRows(
+      trace([span('root', undefined, 0, { kind: '3' })]),
+    );
+    expect(row?.kind).toBe('client');
   });
 });

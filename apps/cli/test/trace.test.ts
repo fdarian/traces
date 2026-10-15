@@ -215,7 +215,7 @@ describe('traces trace against a fake Jaeger', () => {
       depth: 0,
       service: 'mockingbird-web',
       name: 'op-root',
-      kind: 'SPAN_KIND_SERVER',
+      kind: 'server',
       startTs: '2026-10-12T10:13:20.000000000Z',
       durationMs: 412,
       status: 'unset',

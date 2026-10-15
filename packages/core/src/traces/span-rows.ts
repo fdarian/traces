@@ -15,6 +15,24 @@ const SpanException = Schema.Struct({
   stacktrace: Schema.optional(Schema.String),
 });
 
+const SPAN_KINDS = [
+  'unspecified',
+  'internal',
+  'server',
+  'client',
+  'producer',
+  'consumer',
+] as const;
+const SpanKind = Schema.Literals(SPAN_KINDS);
+export type SpanKind = typeof SpanKind.Type;
+
+/** OTLP-JSON carries the kind as an enum number or a `SPAN_KIND_*` string, depending on the exporter. */
+export const normalizeSpanKind = (raw: string): SpanKind => {
+  if (/^\d+$/.test(raw)) return SPAN_KINDS[Number(raw)] ?? 'unspecified';
+  const name = raw.replace(/^SPAN_KIND_/i, '').toLowerCase();
+  return SPAN_KINDS.find((kind) => kind === name) ?? 'unspecified';
+};
+
 export const SpanRow = Schema.Struct({
   traceId: Schema.String,
   spanId: Schema.String,
@@ -23,7 +41,7 @@ export const SpanRow = Schema.Struct({
   depth: Schema.Number,
   service: Schema.String,
   name: Schema.String,
-  kind: Schema.String,
+  kind: SpanKind,
   /** ISO timestamp with nanosecond precision. */
   startTs: Schema.String,
   durationMs: Schema.Number,
@@ -55,7 +73,7 @@ const toSpanRow = (span: Span, depth: number): SpanRow => {
     depth,
     service: span.resource.serviceName,
     name: span.name,
-    kind: span.kind,
+    kind: normalizeSpanKind(span.kind),
     startTs: nanoToIso(span.startTimeUnixNano),
     durationMs: span.durationMs,
     status: span.status.code,
