@@ -163,7 +163,7 @@ export const COMMAND_HELP = {
       'Vercel build logs: stderr lines are level error (tool warnings included); fatal events are fatal.',
       'Railway has no fatal level, so --level fatal alone matches nothing there.',
       '--cursor continues the original window; repeat the original flags exactly as the `more:` line prints them.',
-      '--grep is a literal substring match on the message only: it is not a regex and does not search attrs. Railway matches case-insensitively.',
+      '--grep is a literal substring match on the message only: it is not a regex and does not search attrs. Matching is case-insensitive on Railway and Vercel.',
       '`ts` is the provider receive time. A timestamp the app emitted itself, when present, is in `attrs.timestamp`.',
       "`attrs` values are JSON-decoded once on Railway: Effect loggers' `annotations` and `spans` are real objects, and a value that is not valid JSON stays a string.",
       '`traceId` / `spanId` are set only when the record carries a 32-hex trace id (16-hex span id): Vercel from the request row, Railway from `attrs.annotations.traceId` or a top-level `traceId` / `trace_id` attr. A TTY shows `trace=<first 8>`.',
