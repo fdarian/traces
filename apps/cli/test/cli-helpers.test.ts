@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { ProviderAuthError, ProviderNotFound } from '@traces/core';
+import {
+  type LogRecord,
+  ProviderAuthError,
+  ProviderNotFound,
+} from '@traces/core';
 import { Effect } from 'effect';
 import { CliError } from 'effect/cli';
 import { ConfigError, UsageError } from '#/errors.ts';
@@ -9,6 +13,8 @@ import {
   EXIT_CODES,
   formatLogLine,
   renderError,
+  retentionNoteFor,
+  windowSpansDays,
 } from '#/output.ts';
 import { parseWhen } from '#/time.ts';
 import { vercelAuthFilePath } from '#/vercel-token.ts';
@@ -148,9 +154,9 @@ describe('renderError', () => {
 });
 
 describe('formatLogLine', () => {
-  test('puts continuation lines under the first', () => {
-    const line = formatLogLine({
-      ts: new Date().toISOString(),
+  const record = (ts: string) =>
+    ({
+      ts,
       service: 'api',
       provider: 'railway',
       environment: 'production',
@@ -159,12 +165,62 @@ describe('formatLogLine', () => {
       level: 'error',
       message: 'first\nsecond',
       attrs: {},
-    });
-    const lines = line.split('\n');
-    expect(lines[0]).toMatch(
-      /^\d\d:\d\d:\d\d\.\d{3} ERROR api abcdef12 first$/,
-    );
+    }) satisfies LogRecord;
+
+  test('puts continuation lines under the first', () => {
+    const lines = formatLogLine(
+      record('2026-10-14T02:55:09.123Z'),
+      false,
+    ).split('\n');
+    expect(lines[0]).toBe('02:55:09.123Z ERROR api abcdef12 first');
     expect(lines[1]).toBe('    second');
+  });
+
+  test('prints UTC regardless of the local zone and prefixes the date on request', () => {
+    expect(
+      formatLogLine(record('2026-10-14T23:59:59.001+07:00'), true).split(
+        '\n',
+      )[0],
+    ).toBe('10-14 16:59:59.001Z ERROR api abcdef12 first');
+  });
+});
+
+describe('windowSpansDays', () => {
+  test('compares UTC calendar days', () => {
+    const at = (iso: string) => new Date(iso);
+    expect(
+      windowSpansDays(at('2026-10-14T01:00:00Z'), at('2026-10-14T23:00:00Z')),
+    ).toBe(false);
+    expect(
+      windowSpansDays(at('2026-10-14T23:30:00Z'), at('2026-10-15T00:10:00Z')),
+    ).toBe(true);
+  });
+});
+
+describe('retentionNoteFor', () => {
+  const now = new Date('2026-10-15T12:00:00Z');
+  const railway = {
+    provider: 'railway',
+    retentionNote: 'railway note',
+  } as const;
+  const vercel = { provider: 'vercel', retentionNote: 'vercel note' } as const;
+  const ago = (ms: number) => new Date(now.getTime() - ms);
+  const HOUR = 60 * 60 * 1000;
+
+  test('is omitted while the window starts inside the shortest retention', () => {
+    expect(retentionNoteFor(railway, ago(2 * 24 * HOUR), now)).toBeUndefined();
+    expect(retentionNoteFor(vercel, ago(HOUR), now)).toBeUndefined();
+  });
+
+  test('appears once the window starts past it', () => {
+    expect(retentionNoteFor(railway, ago(4 * 24 * HOUR), now)).toBe(
+      'railway note',
+    );
+    expect(retentionNoteFor(vercel, ago(2 * HOUR), now)).toBe('vercel note');
+  });
+
+  test('appears for an unbounded window', () => {
+    expect(retentionNoteFor(railway, undefined, now)).toBe('railway note');
   });
 });
 

@@ -7,6 +7,7 @@ import {
   emitRecord,
   emptyNotice,
   outputMode,
+  retentionNoteFor,
   shortId,
 } from '#/output.ts';
 import { globalOptions, resolveService } from '#/resolve.ts';
@@ -84,7 +85,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
       yield* emptyNotice(
         'error logs',
         `for ${resolved.target.service} (${resolved.target.provider}, ${resolved.target.environment}) since ${since.toISOString()}`,
-        resolved.source.retentionNote,
+        retentionNoteFor(resolved.source, since, now),
       );
     }
     if (partial) {
