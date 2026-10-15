@@ -43,7 +43,6 @@ export const deploysCommand = Command.make('deploys', deploysOptions, (args) =>
       yield* emptyNotice(
         'deployments',
         `for ${resolved.target.service} (${resolved.target.provider}, ${resolved.target.environment})`,
-        resolved.source.retentionNote,
       );
     }
     if (page.next !== undefined) {

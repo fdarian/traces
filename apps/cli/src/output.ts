@@ -2,6 +2,7 @@ import {
   type Deployment,
   InvalidCursor,
   type LogRecord,
+  type Provider,
   ProviderAuthError,
   ProviderNotFound,
   ProviderRequestError,
@@ -11,6 +12,7 @@ import {
 import { Console, Effect, Schema } from 'effect';
 import { CliError, CliOutput } from 'effect/cli';
 import { ConfigError, UsageError } from '#/errors.ts';
+import { SHORTEST_RETENTION_MS } from '#/limits.ts';
 
 export type OutputMode = 'human' | 'ndjson';
 
@@ -48,26 +50,26 @@ export const commandLine = (
 const pad = (value: number, width: number) =>
   String(value).padStart(width, '0');
 
-const formatTime = (iso: string): string => {
+const utcDate = (date: Date) =>
+  `${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
+
+const formatTime = (iso: string, withDate: boolean): string => {
   const date = new Date(iso);
-  const time = `${pad(date.getHours(), 2)}:${pad(date.getMinutes(), 2)}:${pad(date.getSeconds(), 2)}.${pad(date.getMilliseconds(), 3)}`;
-  const today = new Date();
-  const sameDay =
-    date.getFullYear() === today.getFullYear() &&
-    date.getMonth() === today.getMonth() &&
-    date.getDate() === today.getDate();
-  return sameDay
-    ? time
-    : `${pad(date.getMonth() + 1, 2)}-${pad(date.getDate(), 2)} ${time}`;
+  const time = `${pad(date.getUTCHours(), 2)}:${pad(date.getUTCMinutes(), 2)}:${pad(date.getUTCSeconds(), 2)}.${pad(date.getUTCMilliseconds(), 3)}Z`;
+  return withDate ? `${utcDate(date)} ${time}` : time;
 };
+
+/** True when the window touches more than one UTC calendar day, so bare times would be ambiguous. */
+export const windowSpansDays = (start: Date, end: Date): boolean =>
+  start.toISOString().slice(0, 10) !== end.toISOString().slice(0, 10);
 
 export const shortId = (id: string): string => id.slice(0, 8);
 
-export const formatLogLine = (record: LogRecord): string => {
+export const formatLogLine = (record: LogRecord, withDate: boolean): string => {
   const deployment =
     record.deploymentId === undefined ? '' : ` ${shortId(record.deploymentId)}`;
   const lines = record.message.split('\n');
-  const head = `${formatTime(record.ts)} ${record.level.toUpperCase().padEnd(5)} ${record.service}${deployment} ${lines.slice(0, 1).join('')}`;
+  const head = `${formatTime(record.ts, withDate)} ${record.level.toUpperCase().padEnd(5)} ${record.service}${deployment} ${lines.slice(0, 1).join('')}`;
   return [head, ...lines.slice(1).map((line) => `    ${line}`)].join('\n');
 };
 
@@ -77,7 +79,7 @@ export const formatDeploymentLine = (deployment: Deployment): string => {
   const branch = commit?.branch ?? '-';
   const message = commit?.message?.split('\n')[0] ?? '';
   const url = deployment.url === undefined ? '' : ` ${deployment.url}`;
-  return `${deployment.status.padEnd(9)} ${shortId(deployment.id)} ${sha} ${branch} ${formatTime(deployment.createdAt)} ${message}${url}`.trimEnd();
+  return `${deployment.status.padEnd(9)} ${shortId(deployment.id)} ${sha} ${branch} ${formatTime(deployment.createdAt, true)} ${message}${url}`.trimEnd();
 };
 
 export const emitRecord = <A>(
@@ -88,8 +90,23 @@ export const emitRecord = <A>(
 
 export const hint = (message: string) => Console.error(message);
 
-export const emptyNotice = (what: string, window: string, retention: string) =>
-  Console.error(`no ${what} ${window}\nnote: ${retention}`);
+/** The retention caveat only matters when the window reaches back past what the provider keeps; an unbounded window always does. */
+export const retentionNoteFor = (
+  source: { readonly provider: Provider; readonly retentionNote: string },
+  windowStart: Date | undefined,
+  now: Date,
+): string | undefined =>
+  windowStart === undefined ||
+  now.getTime() - windowStart.getTime() > SHORTEST_RETENTION_MS[source.provider]
+    ? source.retentionNote
+    : undefined;
+
+export const emptyNotice = (what: string, window: string, retention?: string) =>
+  Console.error(
+    retention === undefined
+      ? `no ${what} ${window}`
+      : `no ${what} ${window}\nnote: ${retention}`,
+  );
 
 export interface RenderedError {
   readonly message: string;

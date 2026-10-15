@@ -22,6 +22,8 @@ import {
   formatLogLine,
   type OutputMode,
   outputMode,
+  retentionNoteFor,
+  windowSpansDays,
 } from '#/output.ts';
 import { globalOptions, resolveService } from '#/resolve.ts';
 import { parseWhen } from '#/time.ts';
@@ -50,6 +52,7 @@ const follow = (input: {
   readonly kind: 'http' | 'runtime';
   readonly query: LogQuery;
   readonly mode: OutputMode;
+  readonly withDate: boolean;
   readonly initial: ReadonlyArray<LogRecord>;
 }) => {
   const lastRecord = input.initial[input.initial.length - 1];
@@ -72,7 +75,9 @@ const follow = (input: {
         (record.ts === lastTs && !seenAtLastTs.has(recordKey(record))),
     );
     for (const record of fresh) {
-      yield* emitRecord(input.mode, record, formatLogLine);
+      yield* emitRecord(input.mode, record, (r) =>
+        formatLogLine(r, input.withDate),
+      );
     }
     const newest = fresh[fresh.length - 1];
     if (newest === undefined) return;
@@ -159,14 +164,21 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
     };
     const mode = outputMode(args.json);
     const page = yield* fetchPage(resolved.source, kind, query);
+    const windowStart =
+      since ??
+      (page.records[0] === undefined
+        ? undefined
+        : new Date(page.records[0].ts));
+    const withDate =
+      windowStart !== undefined && windowSpansDays(windowStart, until ?? now);
     for (const record of page.records) {
-      yield* emitRecord(mode, record, formatLogLine);
+      yield* emitRecord(mode, record, (r) => formatLogLine(r, withDate));
     }
     if (page.records.length === 0) {
       yield* emptyNotice(
         kind === 'build' ? 'build logs' : kind === 'http' ? 'requests' : 'logs',
         windowText(query, resolved.target),
-        resolved.source.retentionNote,
+        retentionNoteFor(resolved.source, since, now),
       );
     }
     if (page.next !== undefined && !args.follow) {
@@ -193,11 +205,15 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
       );
     }
     if (args.follow && kind !== 'build') {
+      yield* Console.error(
+        `following ${resolved.name} (poll ${FOLLOW_INTERVAL_SECONDS}s, Ctrl-C to stop)…`,
+      );
       yield* follow({
         source: resolved.source,
         kind,
         query,
         mode,
+        withDate,
         initial: page.records,
       });
     }
