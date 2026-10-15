@@ -68,8 +68,10 @@ export const shortId = (id: string): string => id.slice(0, 8);
 export const formatLogLine = (record: LogRecord, withDate: boolean): string => {
   const deployment =
     record.deploymentId === undefined ? '' : ` ${shortId(record.deploymentId)}`;
+  const trace =
+    record.traceId === undefined ? '' : ` trace=${shortId(record.traceId)}`;
   const lines = record.message.split('\n');
-  const head = `${formatTime(record.ts, withDate)} ${record.level.toUpperCase().padEnd(5)} ${record.service}${deployment} ${lines.slice(0, 1).join('')}`;
+  const head = `${formatTime(record.ts, withDate)} ${record.level.toUpperCase().padEnd(5)} ${record.service}${deployment}${trace} ${lines.slice(0, 1).join('')}`;
   return [head, ...lines.slice(1).map((line) => `    ${line}`)].join('\n');
 };
 
