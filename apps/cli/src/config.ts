@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { Config, Effect, Option, Schema } from 'effect';
+import { Config, Effect, Option, Schema, type SchemaIssue } from 'effect';
 import { FileSystem } from 'effect/FileSystem';
 import { ConfigError } from '#/errors.ts';
 
@@ -124,8 +124,34 @@ export const resolveDefaultConfigPath = Effect.gen(function* () {
   return defaultConfigPath(homedir(), Option.getOrUndefined(xdg));
 });
 
-const CONFIG_HINT =
-  'create the file; `traces --help` shows a minimal example for each provider';
+const EXAMPLE_HINT =
+  '`traces --help` shows a minimal example for each provider';
+
+const CREATE_FILE_HINT = `create the file; ${EXAMPLE_HINT}`;
+
+const issuePath = (issue: SchemaIssue.Issue): ReadonlyArray<PropertyKey> => {
+  switch (issue._tag) {
+    case 'Pointer':
+      return [...issue.path, ...issuePath(issue.issue)];
+    case 'Filter':
+    case 'Encoding':
+      return issuePath(issue.issue);
+    case 'Composite':
+    case 'AnyOf': {
+      const first = issue.issues[0];
+      return first === undefined ? [] : issuePath(first);
+    }
+    default:
+      return [];
+  }
+};
+
+const invalidConfigHint = (issue: SchemaIssue.Issue) => {
+  const path = issuePath(issue);
+  return path.length === 0
+    ? `fix the file's JSON syntax; ${EXAMPLE_HINT}`
+    : `fix \`${path.map(String).join('.')}\` in the file; ${EXAMPLE_HINT}`;
+};
 
 export const decodeConfig = (path: string, content: string) =>
   Schema.decodeUnknownEffect(ConfigJson, { onExcessProperty: 'error' })(
@@ -136,7 +162,7 @@ export const decodeConfig = (path: string, content: string) =>
         new ConfigError({
           path,
           message: error.message,
-          hint: CONFIG_HINT,
+          hint: invalidConfigHint(error.issue),
         }),
     ),
   );
@@ -153,7 +179,10 @@ export const readConfig = (path: string) =>
               error.reason._tag === 'NotFound'
                 ? 'config file not found'
                 : `cannot read config file: ${error.message}`,
-            hint: CONFIG_HINT,
+            hint:
+              error.reason._tag === 'NotFound'
+                ? CREATE_FILE_HINT
+                : 'check the file permissions',
           }),
       ),
     );
