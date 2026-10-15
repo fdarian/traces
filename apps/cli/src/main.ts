@@ -3,6 +3,7 @@ import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Cause, Console, Effect, Exit, Layer, Option } from 'effect';
 import { Command } from 'effect/cli';
 import { FetchHttpClient } from 'effect/http';
+import { hoistGlobalFlags } from '#/argv.ts';
 import { deploysCommand } from '#/commands/deploys.ts';
 import { errorsCommand } from '#/commands/errors.ts';
 import { logsCommand } from '#/commands/logs.ts';
@@ -19,6 +20,7 @@ import {
   ExitWith,
   renderError,
   reportError,
+  withoutFrameworkHelp,
   withPlainConsole,
 } from '#/output.ts';
 
@@ -31,9 +33,9 @@ const root = Command.make('traces').pipe(
   ]),
 );
 
-const run = Command.runWith(root, { version: '0.0.0' });
+const run = Command.runWith(root, { version: '0.0.0', renderErrors: false });
 
-const rawArgs = process.argv.slice(2);
+const rawArgs = hoistGlobalFlags(process.argv.slice(2));
 const helpRequest = resolveHelpRequest(rawArgs);
 
 const program = Effect.gen(function* () {
@@ -59,6 +61,7 @@ const program = Effect.gen(function* () {
 );
 
 program.pipe(
+  withoutFrameworkHelp,
   withPlainConsole,
   Effect.provide(Layer.mergeAll(BunServices.layer, FetchHttpClient.layer)),
   BunRuntime.runMain({
