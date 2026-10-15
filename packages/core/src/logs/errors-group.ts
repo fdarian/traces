@@ -11,6 +11,8 @@ export interface ErrorGroup {
   readonly deploymentIds: ReadonlyArray<string>;
   /** Full message of the first record seen in the group. */
   readonly sample: string;
+  /** Trace id of the first record in the group that carries one, to jump into the trace. */
+  readonly traceId?: string;
 }
 
 export const firstLine = (message: string): string => {
@@ -24,7 +26,7 @@ export const errorFingerprint = (record: LogRecord): string =>
     normalizeExceptionMessage(firstLine(record.message)),
   ]);
 
-/** Groups by normalized first line (ids and numbers collapsed), most frequent first. */
+/** Groups by service and normalized first line (ids and numbers collapsed), most frequent first. Records of several services may be passed together. */
 export const groupErrors = (
   records: ReadonlyArray<LogRecord>,
 ): ReadonlyArray<ErrorGroup> => {
@@ -38,6 +40,7 @@ export const groupErrors = (
       lastSeen: string;
       deploymentIds: Set<string>;
       sample: string;
+      traceId?: string;
     }
   >();
   for (const record of records) {
@@ -54,6 +57,7 @@ export const groupErrors = (
           record.deploymentId === undefined ? [] : [record.deploymentId],
         ),
         sample: record.message,
+        ...(record.traceId === undefined ? {} : { traceId: record.traceId }),
       });
       continue;
     }
@@ -62,6 +66,9 @@ export const groupErrors = (
     if (record.ts > existing.lastSeen) existing.lastSeen = record.ts;
     if (record.deploymentId !== undefined) {
       existing.deploymentIds.add(record.deploymentId);
+    }
+    if (existing.traceId === undefined && record.traceId !== undefined) {
+      existing.traceId = record.traceId;
     }
   }
   return [...groups.values()]
