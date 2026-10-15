@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  JaegerBadResponse,
   type LogRecord,
   ProviderAuthError,
   ProviderNotFound,
@@ -139,6 +140,67 @@ describe('renderError', () => {
     );
     expect(rendered.hint).toBe('run `traces --help`');
     expect(rendered.code).toBe(EXIT_CODES.usage);
+  });
+
+  describe('JaegerBadResponse', () => {
+    const badResponse = (fields: {
+      status: number;
+      contentType?: string;
+      body: string;
+    }) =>
+      renderError(
+        new JaegerBadResponse({
+          cause: new Error('Expected a valid JSON string'),
+          ...fields,
+        }),
+      );
+
+    test('names the status, content-type and body', () => {
+      const rendered = badResponse({
+        status: 200,
+        contentType: 'text/plain',
+        body: 'pong',
+      });
+      expect(rendered.message).toBe(
+        'tracing backend returned an unexpected response (HTTP 200, text/plain): Expected a valid JSON string; body: "pong"',
+      );
+      expect(rendered.code).toBe(EXIT_CODES.runtime);
+    });
+
+    test('an empty body without a content-type says so', () => {
+      expect(badResponse({ status: 204, body: '' }).message).toContain(
+        '(HTTP 204): Expected a valid JSON string; body: (empty)',
+      );
+    });
+
+    test.each([
+      ['by content-type', 'text/html; charset=utf-8', 'welcome'],
+      ['by body', undefined, '<!DOCTYPE html><html>'],
+    ])('an HTML page is recognised %s', (_label, contentType, body) => {
+      expect(badResponse({ status: 200, contentType, body }).hint).toBe(
+        'the URL serves a web page, not the Jaeger API; point `tracing.url` at the Jaeger query host',
+      );
+    });
+
+    test('a redirect takes precedence over an HTML body', () => {
+      expect(
+        badResponse({
+          status: 301,
+          contentType: 'text/html',
+          body: '<html>Moved</html>',
+        }).hint,
+      ).toBe('the URL redirects; use the final URL as tracing.url');
+    });
+
+    test('anything else keeps the generic hint', () => {
+      expect(
+        badResponse({
+          status: 200,
+          contentType: 'application/json',
+          body: '{}',
+        }).hint,
+      ).toBe('the URL may not point at a Jaeger v2 query service (/api/v3)');
+    });
   });
 
   test('auth errors carry the hint', () => {

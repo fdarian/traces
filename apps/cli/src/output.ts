@@ -214,6 +214,18 @@ const renderCliError = (error: CliError.CliError): RenderedError => {
   };
 };
 
+const badResponseHint = (error: JaegerBadResponse): string => {
+  if (error.status >= 300 && error.status < 400) {
+    return 'the URL redirects; use the final URL as tracing.url';
+  }
+  const servesHtml =
+    /html/i.test(error.contentType ?? '') ||
+    /^<(!doctype|html)/i.test(error.body);
+  return servesHtml
+    ? 'the URL serves a web page, not the Jaeger API; point `tracing.url` at the Jaeger query host'
+    : 'the URL may not point at a Jaeger v2 query service (/api/v3)';
+};
+
 /** `unknown` because the CLI framework's own failures also land here. */
 export const renderError = (error: unknown): RenderedError => {
   if (CliError.isCliError(error)) return renderCliError(error);
@@ -290,9 +302,14 @@ export const renderError = (error: unknown): RenderedError => {
     };
   }
   if (error instanceof JaegerBadResponse) {
+    const received =
+      error.contentType === undefined
+        ? `HTTP ${error.status}`
+        : `HTTP ${error.status}, ${singleLine(error.contentType)}`;
+    const body = singleLine(error.body);
     return {
-      message: `tracing backend returned an unexpected response: ${causeMessage(error.cause)}`,
-      hint: 'the URL may not point at a Jaeger v2 query service (/api/v3)',
+      message: `tracing backend returned an unexpected response (${received}): ${causeMessage(error.cause)}; body: ${body === '' ? '(empty)' : `"${body}"`}`,
+      hint: badResponseHint(error),
       code: EXIT_CODES.runtime,
     };
   }

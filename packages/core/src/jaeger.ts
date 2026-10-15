@@ -259,20 +259,44 @@ export function mapLegacyTrace(trace: JaegerLegacyTrace): TraceSummary {
   };
 }
 
+export interface JaegerResponse {
+  readonly status: number;
+  readonly contentType?: string;
+  readonly body: string;
+}
+
+const BODY_SNIPPET_LENGTH = 120;
+
+export const bodySnippet = (body: string): string =>
+  body.replace(/\s+/g, ' ').trim().slice(0, BODY_SNIPPET_LENGTH);
+
+/** Never takes the request: the error must not carry request headers. */
+export const badResponse = (
+  response: JaegerResponse,
+  cause: unknown,
+): JaegerBadResponse =>
+  new JaegerBadResponse({
+    cause,
+    status: response.status,
+    contentType: response.contentType,
+    body: bodySnippet(response.body),
+  });
+
 export function parseJson(
-  body: string,
+  response: JaegerResponse,
 ): Effect.Effect<unknown, JaegerBadResponse, never> {
   return Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
-    body,
-  ).pipe(Effect.mapError((cause) => new JaegerBadResponse({ cause })));
+    response.body,
+  ).pipe(Effect.mapError((cause) => badResponse(response, cause)));
 }
 
 export function validate<A>(
   schema: Schema.Decoder<A>,
   data: unknown,
+  response: JaegerResponse,
 ): Effect.Effect<A, JaegerBadResponse, never> {
   return Schema.decodeUnknownEffect(schema)(data).pipe(
-    Effect.mapError((cause) => new JaegerBadResponse({ cause })),
+    Effect.mapError((cause) => badResponse(response, cause)),
   );
 }
 
@@ -301,7 +325,7 @@ function makeBackend(
     path: string,
     params?: URLSearchParams,
   ): Effect.Effect<
-    { readonly status: number; readonly body: string },
+    JaegerResponse,
     JaegerUnreachable | TraceBackendUnauthorized,
     never
   > => {
@@ -332,7 +356,11 @@ function makeBackend(
                     url: url.toString(),
                   }),
                 )
-              : Effect.succeed({ status: response.status, body }),
+              : Effect.succeed({
+                  status: response.status,
+                  contentType: response.headers['content-type'],
+                  body,
+                }),
           ),
         ),
       ),
@@ -341,8 +369,12 @@ function makeBackend(
 
   const listServices = Effect.gen(function* () {
     const response = yield* makeRequest('/api/v3/services');
-    const parsed = yield* parseJson(response.body);
-    const validated = yield* validate(OtelServicesResultSchema, parsed);
+    const parsed = yield* parseJson(response);
+    const validated = yield* validate(
+      OtelServicesResultSchema,
+      parsed,
+      response,
+    );
     return validated.services;
   });
 
@@ -357,8 +389,12 @@ function makeBackend(
       const params = new URLSearchParams();
       params.append('service', service);
       const response = yield* makeRequest('/api/v3/operations', params);
-      const parsed = yield* parseJson(response.body);
-      const validated = yield* validate(OtelOperationsResultSchema, parsed);
+      const parsed = yield* parseJson(response);
+      const validated = yield* validate(
+        OtelOperationsResultSchema,
+        parsed,
+        response,
+      );
       return validated.operations.map((op) => op.name);
     });
   };
@@ -380,8 +416,12 @@ function makeBackend(
       if (response.status === 404 || response.status === 400) {
         return yield* Effect.fail(new TraceNotFound({ traceId }));
       }
-      const parsed = yield* parseJson(response.body);
-      const validated = yield* validate(OtelTracesResultSchema, parsed);
+      const parsed = yield* parseJson(response);
+      const validated = yield* validate(
+        OtelTracesResultSchema,
+        parsed,
+        response,
+      );
       const resourceSpans = validated.result?.resourceSpans ?? [];
       if (resourceSpans.length === 0) {
         return yield* Effect.fail(new TraceNotFound({ traceId }));
@@ -402,13 +442,17 @@ function makeBackend(
       const response = yield* makeRequest('/api/v3/trace-summaries', params);
       if (response.status < 200 || response.status >= 300) {
         // Jaeger's error bodies decode as an empty summaries result, so a non-2xx must fail here
-        return yield* new JaegerBadResponse({
-          cause: new Error(`trace-summaries returned HTTP ${response.status}`),
-          status: response.status,
-        });
+        return yield* badResponse(
+          response,
+          new Error(`trace-summaries returned HTTP ${response.status}`),
+        );
       }
-      const parsed = yield* parseJson(response.body);
-      const validated = yield* validate(OtelTraceSummariesResultSchema, parsed);
+      const parsed = yield* parseJson(response);
+      const validated = yield* validate(
+        OtelTraceSummariesResultSchema,
+        parsed,
+        response,
+      );
       const summaries = validated.summaries ?? [];
       return summaries.map(mapTraceSummary);
     });
@@ -426,13 +470,17 @@ function makeBackend(
       const response = yield* makeRequest('/api/v3/traces', params);
       if (response.status < 200 || response.status >= 300) {
         // Jaeger's error bodies decode as an empty result, so a non-2xx must fail here
-        return yield* new JaegerBadResponse({
-          cause: new Error(`traces returned HTTP ${response.status}`),
-          status: response.status,
-        });
+        return yield* badResponse(
+          response,
+          new Error(`traces returned HTTP ${response.status}`),
+        );
       }
-      const parsed = yield* parseJson(response.body);
-      const validated = yield* validate(OtelTracesResultSchema, parsed);
+      const parsed = yield* parseJson(response);
+      const validated = yield* validate(
+        OtelTracesResultSchema,
+        parsed,
+        response,
+      );
       const resourceSpans = validated.result?.resourceSpans ?? [];
 
       const traceMap: Map<string, Array<OtelResourceSpan>> = new Map();
@@ -474,18 +522,21 @@ function makeBackend(
       );
       if (response.status !== 200) {
         return yield* Effect.fail(
-          new JaegerBadResponse({
-            cause: new Error(
-              `legacy trace search answered ${response.status}: ${response.body.slice(0, 200)}`,
-            ),
-          }),
+          badResponse(
+            response,
+            new Error(`legacy trace search answered ${response.status}`),
+          ),
         );
       }
-      const parsed = yield* parseJson(response.body);
-      const validated = yield* validate(JaegerLegacyTracesResultSchema, parsed);
+      const parsed = yield* parseJson(response);
+      const validated = yield* validate(
+        JaegerLegacyTracesResultSchema,
+        parsed,
+        response,
+      );
       return yield* Effect.try({
         try: () => validated.data.map(mapLegacyTrace),
-        catch: (cause) => new JaegerBadResponse({ cause }),
+        catch: (cause) => badResponse(response, cause),
       });
     });
   };
