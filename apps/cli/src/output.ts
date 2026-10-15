@@ -8,11 +8,13 @@ import {
   ProviderRequestError,
   ProviderResponseInvalid,
   stripAnsi,
+  TraceBackendUnauthorized,
 } from '@traces/core';
 import { Console, Effect, Schema } from 'effect';
 import { CliError, CliOutput } from 'effect/cli';
-import { ConfigError, UsageError } from '#/errors.ts';
+import { ConfigError, EnvVarMissing, UsageError } from '#/errors.ts';
 import { SHORTEST_RETENTION_MS } from '#/limits.ts';
+import { SecretMissing, SecretStoreError } from '#/secrets.ts';
 
 export type OutputMode = 'human' | 'ndjson';
 
@@ -116,7 +118,7 @@ export interface RenderedError {
   readonly code: number;
 }
 
-const causeMessage = (cause: unknown): string => {
+export const causeMessage = (cause: unknown): string => {
   if (Schema.isSchemaError(cause)) {
     return cause.message.slice(0, 600);
   }
@@ -184,6 +186,34 @@ export const renderError = (error: unknown): RenderedError => {
       message: `${error.provider}: unexpected ${error.operation} response shape: ${causeMessage(error.cause)}`,
       hint: 'the provider API may have changed; this is a bug in traces',
       code: EXIT_CODES.runtime,
+    };
+  }
+  if (error instanceof SecretMissing) {
+    return {
+      message: `secret "${error.name}" is not in the keychain`,
+      hint: `traces secret set ${error.name}`,
+      code: EXIT_CODES.auth,
+    };
+  }
+  if (error instanceof SecretStoreError) {
+    return {
+      message: `keychain ${error.operation} of "${error.name}" failed: ${causeMessage(error.cause)}`,
+      hint: 'unlock the keychain and retry',
+      code: EXIT_CODES.runtime,
+    };
+  }
+  if (error instanceof EnvVarMissing) {
+    return {
+      message: `environment variable ${error.name} is not set`,
+      hint: `export ${error.name}=<value> and retry`,
+      code: EXIT_CODES.auth,
+    };
+  }
+  if (error instanceof TraceBackendUnauthorized) {
+    return {
+      message: `tracing backend rejected the credentials (HTTP ${error.status})`,
+      hint: 'check the secret behind the tracing headers: `traces services` shows each one; reset with `traces secret set <name>`',
+      code: EXIT_CODES.auth,
     };
   }
   if (error instanceof InvalidCursor) {

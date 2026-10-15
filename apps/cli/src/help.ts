@@ -35,6 +35,8 @@ export interface CommandHelp {
   /** One bullet per entry; the renderer wraps them. */
   readonly notes: ReadonlyArray<string>;
   readonly examples: ReadonlyArray<string>;
+  /** The command takes none of the global flags, so help leaves out that section. */
+  readonly noGlobalFlags?: true;
 }
 
 export const GLOBAL_FLAGS: ReadonlyArray<FlagHelp> = [
@@ -82,14 +84,15 @@ export const COMMAND_HELP = {
     tagline: 'matched project, services, provider auth status',
     synopsis: 'traces services [flags]',
     summary:
-      'Show the project matched for the current directory, its services, and whether each provider is authenticated.',
+      'Show the project matched for the current directory, its services, whether each provider is authenticated, and the tracing setup (URL, header secrets, otelService).',
     arguments: [],
     flags: [],
     output:
-      'one record per service: configPath, project, matchedBy (flag | path | git), service, provider, ref (the config entry), auth {status: ok | missing | invalid, detail}.',
+      'one record per service: configPath, project, matchedBy (flag | path | git), service, provider (absent for trace-only), ref (the config entry), auth {status: ok | missing | invalid, detail} (absent for trace-only), otelService (the Jaeger service name; set when the project has tracing or the entry names one), tracing (when the project has it) {provider, url, headers[]}. Each tracing header is {name, source: literal | env | keychain, ref, status: present | missing | error, detail?}; literal headers carry no ref or status. Values are never printed.',
     notes: [
       'Run this first when another command says no project matches or auth fails.',
       'Auth check: Railway runs `railway whoami`; Vercel validates the token against the API.',
+      'Tracing: `traces secret set <ref>` fixes a missing keychain secret; an env header is `missing` until that variable is exported. Reading keychain entries here may prompt macOS for access.',
     ],
     examples: ['traces services', 'traces services --project myapp --json'],
   },
@@ -158,6 +161,7 @@ export const COMMAND_HELP = {
     notes: [
       MORE_NOTE,
       EMPTY_NOTE,
+      'A trace-only service (config entry with only `otelService`) has no logs: exit 2 with "<service> has no log provider; it\'s trace-only".',
       '--build and --http are mutually exclusive; --follow works with runtime and --http, not with --build or --cursor.',
       "Vercel: runtime records are the app's own log lines. A 5xx with no log line only shows up with --http; use `--http --level error` (on --http, level comes from the status: 5xx error, 4xx warn).",
       'Vercel build logs: stderr lines are level error (tool warnings included); fatal events are fatal.',
@@ -202,6 +206,7 @@ export const COMMAND_HELP = {
       'Deployment per line: id, service, provider, environment, status (queued | building | deploying | ready | failed | canceled | crashed | removed | sleeping | unknown), rawStatus, createdAt, url?, commit? {sha, message?, branch?}.',
     notes: [
       MORE_NOTE,
+      'A trace-only service (config entry with only `otelService`) has no deployments: exit 2.',
       '`commit` is absent when the provider did not record one, e.g. Railway deploys made from the CLI or from an image.',
       "Did a fix deploy? Compare the newest `ready` deployment's sha with `git rev-parse HEAD`. Without a commit, compare its `createdAt` with the time of the push.",
       "Vercel lists the deployments of --env (default production); Railway lists the service's environment.",
@@ -232,7 +237,7 @@ export const COMMAND_HELP = {
     output:
       'one group per line: fingerprint, service, count, firstSeen, lastSeen, deploymentIds, sample (full message of the first occurrence), traceId (optional; from the first record that has one), provider, environment, hint, partial. `hint` is a ready-to-run `traces logs ... --grep` command for that group.',
     notes: [
-      'Without a service, every service of the project is covered (fetched concurrently); each group keeps its `service` and all groups are sorted by count.',
+      'Without a service, every service of the project is covered (fetched concurrently); each group keeps its `service` and all groups are sorted by count. Trace-only services (no `provider`) are skipped; naming one explicitly exits 2.',
       'If one service fails (auth, provider error) while the others succeed, the successful groups are still printed, stderr gets `error: <service>: ...` per failed service, and the exit code is 1.',
       'Messages are grouped by their first line with ids, hex, quoted strings and numbers collapsed.',
       `At most ${ERROR_CAP} error logs are read. When the cap is hit, counts are partial (newest ${ERROR_CAP} only): every group of that service has \`partial: true\` and stderr says so (the cap is per service). Narrow --since for exact counts.`,
@@ -243,6 +248,31 @@ export const COMMAND_HELP = {
       'traces errors api --since 1h',
       'traces errors api --since 2d --json',
     ],
+  },
+  secret: {
+    tagline: 'store or remove a keychain secret for tracing headers',
+    synopsis: 'traces secret set|delete <name>',
+    summary:
+      'Manage the OS-keychain secrets that tracing headers refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged.',
+    arguments: [
+      ['name', 'the secret name used in the config, e.g. mockingbird.jaeger'],
+    ],
+    flags: [],
+    output: 'no records on stdout. stderr confirms what was stored or deleted.',
+    notes: [
+      '`set` reads the value from a hidden prompt on a terminal, or from stdin when piped (one trailing newline is dropped). An empty value is refused.',
+      'Agents cannot answer the hidden prompt: the user runs `traces secret set <name>` once; after that every trace command reads the secret itself.',
+      '`delete` of a name that does not exist exits 0 and says so on stderr.',
+      'There is no `list`: the keychain cannot be enumerated. `traces services` shows present or missing for every secret the config references.',
+      'A trace command with a missing secret exits 3 and prints the `traces secret set <name>` to run.',
+      'Takes no global flags.',
+    ],
+    examples: [
+      'traces secret set mockingbird.jaeger',
+      'pbpaste | traces secret set mockingbird.jaeger',
+      'traces secret delete mockingbird.jaeger',
+    ],
+    noGlobalFlags: true,
   },
 } as const satisfies Record<string, CommandHelp>;
 
@@ -327,7 +357,9 @@ export const renderCommandHelp = (name: CommandName): string => {
       ),
     ),
     ...section('FLAGS', renderFlags(help.flags)),
-    ...section('GLOBAL FLAGS', renderFlags(GLOBAL_FLAGS)),
+    ...(help.noGlobalFlags === true
+      ? []
+      : section('GLOBAL FLAGS', renderFlags(GLOBAL_FLAGS))),
     ...section('OUTPUT', [
       ...wrapText(
         `stdout is NDJSON when piped or with --json. ${help.output}`,
@@ -387,6 +419,20 @@ const TOP_LEVEL = (): string =>
     '  Railway "service" and "environment" accept a name or an id; "environment" defaults to',
     '  production. Auth: `railway login`; Vercel uses VERCEL_TOKEN or the token the',
     '  `vercel login` CLI stored.',
+    '  "otelService" (optional, any service entry) is the Jaeger service name; it defaults to the',
+    '  service key. An entry with only {"otelService": "x-data"} is trace-only: logs, deploys and',
+    '  the log side of errors reject it (exit 2).',
+    '',
+    'TRACING  (per project, optional; trace commands exit 2 without it)',
+    '  "tracing": { "provider": "jaeger", "url": "https://host/optional/base/path",',
+    '               "headers": { "X-API-Key": { "keychain": "myapp.jaeger" } } }',
+    '  url: absolute http(s) URL of a Jaeger v2 (a reverse-proxy path prefix is kept).',
+    '  Header values: a literal string, {"env": "NAME"} or {"keychain": "<name>"}. Secrets are',
+    '  read only when a trace command runs, never by log commands.',
+    '  One-time setup, run by the user (agents cannot answer the hidden prompt):',
+    '    traces secret set myapp.jaeger      (or: pbpaste | traces secret set myapp.jaeger)',
+    '  `traces services` shows the URL, each referenced secret as present or missing, and the',
+    '  otelService per service. A missing secret or env var exits 3 with the fix as a hint.',
     '',
     'COMMANDS  (details and examples: traces <command> --help)',
     ...indent(commandSummaries()),

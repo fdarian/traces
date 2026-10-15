@@ -3,6 +3,7 @@ import { Console, Effect } from 'effect';
 import { deploysOptions } from '#/commands/deploys.ts';
 import { errorsOptions } from '#/commands/errors.ts';
 import { logsOptions } from '#/commands/logs.ts';
+import { secretOptions } from '#/commands/secret.ts';
 import { servicesOptions } from '#/commands/services.ts';
 import {
   COMMAND_HELP,
@@ -21,11 +22,12 @@ const OPTIONS: Record<CommandName, Record<string, unknown>> = {
   logs: logsOptions,
   deploys: deploysOptions,
   errors: errorsOptions,
+  secret: secretOptions,
 };
 
 const names: Array<CommandName> = [...COMMAND_NAMES];
 
-const POSITIONALS = ['service'];
+const POSITIONALS = ['service', 'name'];
 
 const definedFlags = (name: CommandName) =>
   Object.keys(OPTIONS[name])
@@ -33,8 +35,12 @@ const definedFlags = (name: CommandName) =>
     .sort();
 
 const documentedFlags = (name: CommandName) => {
-  const help: { flags: ReadonlyArray<{ name: string }> } = COMMAND_HELP[name];
-  return [...help.flags, ...GLOBAL_FLAGS].map((flag) => flag.name).sort();
+  const help: {
+    flags: ReadonlyArray<{ name: string }>;
+    noGlobalFlags?: true;
+  } = COMMAND_HELP[name];
+  const globals = help.noGlobalFlags === true ? [] : GLOBAL_FLAGS;
+  return [...help.flags, ...globals].map((flag) => flag.name).sort();
 };
 
 describe('command help', () => {
