@@ -20,3 +20,11 @@ export class TraceNotFound extends Schema.TaggedError<TraceNotFound>()(
     traceId: Schema.String,
   },
 ) {}
+
+export class TraceBackendUnauthorized extends Schema.TaggedError<TraceBackendUnauthorized>()(
+  'TraceBackendUnauthorized',
+  {
+    status: Schema.Number,
+    url: Schema.String,
+  },
+) {}

@@ -1,6 +1,10 @@
 import { Config, Effect, Fiber, Layer, Ref, Schedule } from 'effect';
 import { TraceBackend } from '../backend.js';
-import type { JaegerBadResponse, JaegerUnreachable } from '../errors.js';
+import type {
+  JaegerBadResponse,
+  JaegerUnreachable,
+  TraceBackendUnauthorized,
+} from '../errors.js';
 import type { Span } from '../model.js';
 import { extractExceptionInfo } from '../normalize.js';
 import { serializeAttribute } from '../serialize.js';
@@ -48,7 +52,10 @@ const ingestService = (
   windowScaleRef: Ref.Ref<Map<string, number>>,
 ): Effect.Effect<
   void,
-  JaegerUnreachable | JaegerBadResponse | IssueStoreError,
+  | JaegerUnreachable
+  | JaegerBadResponse
+  | TraceBackendUnauthorized
+  | IssueStoreError,
   TraceBackend | IssueStore
 > => {
   return Effect.gen(function* () {
@@ -179,7 +186,10 @@ const ingestTick = (
   windowScaleRef: Ref.Ref<Map<string, number>>,
 ): Effect.Effect<
   void,
-  JaegerUnreachable | JaegerBadResponse | IssueStoreError,
+  | JaegerUnreachable
+  | JaegerBadResponse
+  | TraceBackendUnauthorized
+  | IssueStoreError,
   TraceBackend | IssueStore
 > => {
   return Effect.gen(function* () {
