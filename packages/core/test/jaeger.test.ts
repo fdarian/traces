@@ -141,15 +141,17 @@ describe('mapTraceSummary', () => {
   });
 });
 
+const ok = (body: string) => ({ status: 200, body });
+
 describe('parseJson', () => {
   test('parses valid JSON', async () => {
-    const program = parseJson('{"hello":"world"}');
+    const program = parseJson(ok('{"hello":"world"}'));
     const result = await Effect.runPromise(program);
     expect(result).toEqual({ hello: 'world' });
   });
 
   test('fails on invalid JSON', async () => {
-    const program = parseJson('not-json');
+    const program = parseJson(ok('not-json'));
     const exit = await Effect.runPromiseExit(program);
     expect(Exit.isFailure(exit)).toBe(true);
   });
@@ -159,8 +161,9 @@ describe('validate', () => {
   test('validates traces schema from fixture', async () => {
     const data = traceMultiSpan;
     const program = Effect.gen(function* () {
-      const parsed = yield* parseJson(JSON.stringify(data));
-      return yield* validate(OtelTracesResultSchema, parsed);
+      const response = ok(JSON.stringify(data));
+      const parsed = yield* parseJson(response);
+      return yield* validate(OtelTracesResultSchema, parsed, response);
     });
     const result = await Effect.runPromise(program);
     expect(result.result.resourceSpans.length).toBe(2);
@@ -169,8 +172,9 @@ describe('validate', () => {
   test('validates trace summaries schema from fixture', async () => {
     const data = traceSummaries;
     const program = Effect.gen(function* () {
-      const parsed = yield* parseJson(JSON.stringify(data));
-      return yield* validate(OtelTraceSummariesResultSchema, parsed);
+      const response = ok(JSON.stringify(data));
+      const parsed = yield* parseJson(response);
+      return yield* validate(OtelTraceSummariesResultSchema, parsed, response);
     });
     const result = await Effect.runPromise(program);
     expect(result.summaries.length).toBeGreaterThan(0);

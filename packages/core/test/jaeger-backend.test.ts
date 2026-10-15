@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect, Exit, Layer } from 'effect';
 import { HttpClient, HttpClientResponse } from 'effect/http';
-import { TraceBackendUnauthorized, TraceNotFound } from '#/errors.js';
+import {
+  JaegerBadResponse,
+  TraceBackendUnauthorized,
+  TraceNotFound,
+} from '#/errors.js';
 import { joinUrl, makeJaegerBackend } from '#/jaeger.js';
 import servicesFixture from './fixtures/services.json';
 import traceDetailFixture from './fixtures/trace-detail.json';
@@ -290,5 +294,76 @@ describe('searchTraces with attributes', () => {
     );
     expect(requests[0]?.url.pathname).toBe('/api/v3/trace-summaries');
     expect(requests[0]?.url.searchParams.has('query.attributes')).toBe(false);
+  });
+});
+
+function rawClient(
+  status: number,
+  body: string,
+  headers: Readonly<Record<string, string>>,
+): HttpClient.HttpClient {
+  return HttpClient.make((request) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        new Response(body, { status, headers }),
+      ),
+    ),
+  );
+}
+
+describe('JaegerBadResponse', () => {
+  const failure = async (
+    client: HttpClient.HttpClient,
+    headers: Readonly<Record<string, string>> = {},
+  ) => {
+    const exit = await run(
+      client,
+      { url: 'http://localhost:16686', headers },
+      (b) => b.listServices,
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (!Exit.isFailure(exit)) throw new Error('expected a failure');
+    const reason = exit.cause.reasons[0];
+    if (reason?._tag !== 'Fail') throw new Error('expected a typed failure');
+    expect(reason.error).toBeInstanceOf(JaegerBadResponse);
+    return reason.error as JaegerBadResponse;
+  };
+
+  test('carries the status, content-type and a whitespace-collapsed body prefix', async () => {
+    const page = `<!doctype html>\n<html>\n  <head><title>${'x'.repeat(300)}</title></head></html>`;
+    const error = await failure(
+      rawClient(200, page, { 'content-type': 'text/html; charset=utf-8' }),
+    );
+    expect(error.status).toBe(200);
+    expect(error.contentType).toBe('text/html; charset=utf-8');
+    expect(error.body).toHaveLength(120);
+    expect(
+      error.body.startsWith('<!doctype html> <html> <head><title>xxx'),
+    ).toBe(true);
+  });
+
+  test('a response without a content-type leaves it unset', async () => {
+    const error = await failure(rawClient(302, '', {}));
+    expect(error.status).toBe(302);
+    expect(error.body).toBe('');
+  });
+
+  test('never carries the request headers', async () => {
+    const error = await failure(
+      rawClient(200, 'plain text', { 'content-type': 'text/plain' }),
+      { 'X-API-Key': 'super-secret-token' },
+    );
+    expect(JSON.stringify(error)).not.toContain('super-secret-token');
+    expect(String(error.cause)).not.toContain('super-secret-token');
+  });
+
+  test('a body that is valid JSON of the wrong shape still reports the response', async () => {
+    const error = await failure(
+      rawClient(200, '{"unexpected":true}', {
+        'content-type': 'application/json',
+      }),
+    );
+    expect(error.body).toBe('{"unexpected":true}');
   });
 });

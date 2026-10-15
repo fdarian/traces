@@ -11,6 +11,10 @@ export class JaegerBadResponse extends Schema.TaggedError<JaegerBadResponse>()(
   'JaegerBadResponse',
   {
     cause: Schema.Defect(),
+    status: Schema.Number,
+    contentType: Schema.optional(Schema.String),
+    /** The first characters of the body, whitespace-collapsed (see `bodySnippet`). */
+    body: Schema.String,
   },
 ) {}
 
