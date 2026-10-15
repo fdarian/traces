@@ -119,6 +119,35 @@ describe('config decode', () => {
   });
 });
 
+describe('config error hints', () => {
+  test('a bad field is named, and the hint does not say to create the file', async () => {
+    const result = await decode({
+      projects: {
+        app: {
+          matcher: valid.projects.app.matcher,
+          tracing: { provider: 'jaeger', url: 'not a url' },
+          services: { web: { provider: 'vercel', project: 'p' } },
+        },
+      },
+    });
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure.hint).toContain('projects.app.tracing.url');
+      expect(result.failure.hint).not.toContain('create the file');
+    }
+  });
+
+  test('malformed JSON points at the syntax', async () => {
+    const result = await Effect.runPromise(
+      decodeConfig('/cfg.json', '{nope').pipe(Effect.result),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure.hint).toContain('JSON syntax');
+    }
+  });
+});
+
 const project = (extra: Record<string, unknown>) => ({
   projects: {
     app: {
