@@ -53,6 +53,8 @@ const program = Effect.gen(function* () {
   }
 }).pipe(
   Effect.catch((error) => {
+    // Already reported by the command (partial failures); only the exit code is left to carry.
+    if (error instanceof ExitWith) return Effect.fail(error);
     const rendered = renderError(error);
     return reportError(rendered).pipe(
       Effect.andThen(Effect.fail(new ExitWith({ code: rendered.code }))),

@@ -174,3 +174,35 @@ export const resolveService = (
       source,
     } satisfies ResolvedService;
   });
+
+/**
+ * With a service requested, or a single-service project, fails like `resolveService`;
+ * otherwise every service of the project. Each entry's `build` is deferred so one
+ * service's missing token or bad target fails alone instead of aborting the others.
+ */
+export const resolveServices = (
+  flags: GlobalFlags,
+  requested: Option.Option<string>,
+) =>
+  Effect.gen(function* () {
+    const resolved = yield* resolveProject(flags);
+    const configs = Option.isSome(requested)
+      ? [yield* selectService(resolved, requested)]
+      : Object.entries(resolved.project.services).map(([name, config]) => ({
+          name,
+          config,
+        }));
+    const entries = configs.map((selected) => ({
+      name: selected.name,
+      build: Effect.gen(function* () {
+        const target = yield* buildTarget(
+          selected.name,
+          selected.config,
+          flags.env,
+        );
+        const source = yield* buildSource(target);
+        return { target, source };
+      }),
+    }));
+    return { resolved, entries };
+  });
