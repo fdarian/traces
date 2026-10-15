@@ -12,6 +12,8 @@ import {
   ERROR_CAP,
   FOLLOW_INTERVAL_SECONDS,
   LOGS_LIMIT,
+  SPANS_LIMIT,
+  TRACE_SCAN_CAP,
 } from '#/limits.ts';
 
 export interface FlagHelp {
@@ -249,6 +251,79 @@ export const COMMAND_HELP = {
       'traces errors api --since 2d --json',
     ],
   },
+  spans: {
+    tagline: 'search traces of a service in Jaeger, oldest to newest',
+    synopsis: 'traces spans [service] [flags]',
+    summary: `List traces that touch a service's otelService, one summary per trace. Default: the last ${DEFAULT_WINDOW}. Needs a \`tracing\` block in the config (see TRACING in \`traces --help\`).`,
+    arguments: [SERVICE_ARGUMENT],
+    flags: [
+      {
+        name: 'since',
+        usage: '--since <when>',
+        description: `30m | 1h | 2d | ISO timestamp (default ${DEFAULT_WINDOW})`,
+      },
+      {
+        name: 'until',
+        usage: '--until <when>',
+        description: 'window end, same formats (default now)',
+      },
+      {
+        name: 'op',
+        usage: '--op <name>',
+        description: 'only traces with this operation name (exact match)',
+      },
+      {
+        name: 'min-duration',
+        usage: '--min-duration <dur>',
+        description:
+          'only traces at least this long: 500ms | 1s | 1.5s | 2m | 1h',
+      },
+      {
+        name: 'max-duration',
+        usage: '--max-duration <dur>',
+        description: 'only traces at most this long, same formats',
+      },
+      {
+        name: 'errors',
+        usage: '--errors',
+        description: 'only traces with at least one error span',
+      },
+      {
+        name: 'attr',
+        usage: '--attr <k=v>',
+        description:
+          'only traces with a span attribute equal to the value; repeat for several',
+      },
+      {
+        name: 'limit',
+        usage: '--limit <n>',
+        description: `traces per page, 1-${SPANS_LIMIT.max} (default ${SPANS_LIMIT.default})`,
+      },
+      {
+        name: 'cursor',
+        usage: '--cursor <c>',
+        description: 'continue backwards from a `more:` line',
+      },
+    ],
+    output:
+      'TraceRow per line: traceId, rootService, rootOperation, startTs (ISO, nanosecond precision), durationMs, spanCount, errorSpanCount (absent when the backend does not report it), services[]. On a TTY: `02:55:09.123Z 412ms ERR×2 mockingbird-web GET /api/x  a042d0ba…` (ERR×n only when the trace has error spans; the last column is the first 8 of the traceId).',
+    notes: [
+      MORE_NOTE,
+      "Searches the service's `otelService` (default: the service key); a trace-only service works. Traces are summarised whole: `services` lists every service in the trace, not just the one searched.",
+      'Pages go backwards: each page is the newest traces left in the window, printed oldest to newest. The `more:` cursor carries the window start, so a relative --since cannot drift; repeat the other flags exactly as the line prints them.',
+      `--errors filters on the client (errorSpanCount > 0), because Jaeger's error-tag search is unreliable. It reads pages until --limit error traces are found, the window ends, or ${TRACE_SCAN_CAP} traces were read; at the cap stderr says so and \`more:\` continues the scan. A backend that reports no error counts fails with exit 1.`,
+      'An empty result exits 0 and says so on stderr. An empty result for a service Jaeger has never seen usually means a wrong otelService: `traces services` shows the name searched.',
+      'Jaeger keeps traces only as long as its storage backend does (in-memory Jaeger drops them on restart): an empty old window is not proof of no traffic.',
+      'On a TTY, times are UTC with a Z suffix, and the date is prefixed when the window spans more than one day. JSON `startTs` is always the full ISO timestamp.',
+    ],
+    examples: [
+      'traces spans web --since 3d',
+      'traces spans web --min-duration 1s           # slow requests',
+      'traces spans web --errors --since 1d',
+      'traces spans web --op "GET /api/x" --attr http.status_code=500',
+      'traces spans web --limit 50 --json',
+    ],
+  },
   secret: {
     tagline: 'store or remove a keychain secret for tracing headers',
     synopsis: 'traces secret set|delete <name>',
@@ -440,6 +515,7 @@ const TOP_LEVEL = (): string =>
     '  global flags: ' + GLOBAL_FLAGS.map((flag) => flag.usage).join('  '),
     '',
     'RECIPES',
+    '  slow endpoint             traces spans web --min-duration 1s',
     '  what is failing anywhere  traces errors --since 1d   (all services, one list)',
     '  why is prod 500ing        traces errors api --since 1h',
     '                            traces logs api --level error --grep "<sample from above>"',

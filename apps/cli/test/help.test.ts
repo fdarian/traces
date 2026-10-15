@@ -5,6 +5,7 @@ import { errorsOptions } from '#/commands/errors.ts';
 import { logsOptions } from '#/commands/logs.ts';
 import { secretOptions } from '#/commands/secret.ts';
 import { servicesOptions } from '#/commands/services.ts';
+import { spansOptions } from '#/commands/spans.ts';
 import {
   COMMAND_HELP,
   COMMAND_NAMES,
@@ -22,6 +23,7 @@ const OPTIONS: Record<CommandName, Record<string, unknown>> = {
   logs: logsOptions,
   deploys: deploysOptions,
   errors: errorsOptions,
+  spans: spansOptions,
   secret: secretOptions,
 };
 

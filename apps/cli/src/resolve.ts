@@ -11,6 +11,7 @@ import {
   type HeaderValue,
   hasLogProvider,
   type LogServiceConfig,
+  otelServiceName,
   type ProjectConfig,
   readConfig,
   resolveDefaultConfigPath,
@@ -283,4 +284,21 @@ export const resolveTraceBackend = (resolved: ResolvedProject) =>
     }
     const headers = yield* resolveHeaders(tracing.headers);
     return yield* makeJaegerBackend({ url: tracing.url, headers });
+  });
+
+/** Like `resolveService` for trace commands: the service needs no log provider, only an otelService. */
+export const resolveTraceService = (
+  flags: GlobalFlags,
+  service: Option.Option<string>,
+) =>
+  Effect.gen(function* () {
+    const resolved = yield* resolveProject(flags);
+    const selected = yield* selectService(resolved, service);
+    const backend = yield* resolveTraceBackend(resolved);
+    return {
+      resolved,
+      name: selected.name,
+      otelService: otelServiceName(selected.name, selected.config),
+      backend,
+    };
   });
