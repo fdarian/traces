@@ -72,4 +72,30 @@ describe('groupErrors', () => {
     ]);
     expect(groups[0]?.deploymentIds).toEqual([]);
   });
+
+  test('samples the first trace id found in the group', () => {
+    const trace = 'a'.repeat(32);
+    const groups = groupErrors([
+      record('boom', '2026-10-12T00:00:01Z'),
+      record('boom', '2026-10-12T00:00:02Z', { traceId: trace }),
+      record('boom', '2026-10-12T00:00:03Z', { traceId: 'b'.repeat(32) }),
+      record('quiet', '2026-10-12T00:00:04Z'),
+    ]);
+    expect(groups.find((g) => g.sample === 'boom')?.traceId).toBe(trace);
+    expect(groups.find((g) => g.sample === 'quiet')?.traceId).toBeUndefined();
+  });
+
+  test('merges records of several services into one count-ordered list', () => {
+    const groups = groupErrors([
+      record('db down', '2026-10-12T00:00:01Z', { service: 'web' }),
+      record('db down', '2026-10-12T00:00:02Z', { service: 'web' }),
+      record('db down', '2026-10-12T00:00:03Z', { service: 'worker' }),
+      record('db down', '2026-10-12T00:00:04Z', { service: 'worker' }),
+      record('db down', '2026-10-12T00:00:05Z', { service: 'worker' }),
+    ]);
+    expect(groups.map((g) => [g.service, g.count])).toEqual([
+      ['worker', 3],
+      ['web', 2],
+    ]);
+  });
 });
