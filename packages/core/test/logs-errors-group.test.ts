@@ -29,6 +29,7 @@ describe('groupErrors', () => {
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({
+      source: 'logs',
       count: 3,
       firstSeen: '2026-10-12T00:00:01Z',
       lastSeen: '2026-10-12T00:00:09Z',

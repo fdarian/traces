@@ -3,6 +3,8 @@ import { normalizeExceptionMessage } from '../issues/normalize-message.js';
 import type { LogRecord } from './model.js';
 
 export interface ErrorGroup {
+  /** Log and trace groups never merge: their fingerprints come from different inputs. */
+  readonly source: 'logs' | 'traces';
   readonly fingerprint: string;
   readonly service: string;
   readonly count: number;
@@ -13,7 +15,12 @@ export interface ErrorGroup {
   readonly sample: string;
   /** Trace id of the first record in the group that carries one, to jump into the trace. */
   readonly traceId?: string;
+  /** Trace groups only: up to a few distinct traces that hit this error, `traceId` first. */
+  readonly traceIds?: ReadonlyArray<string>;
 }
+
+export const byFrequency = (left: ErrorGroup, right: ErrorGroup): number =>
+  right.count - left.count || right.lastSeen.localeCompare(left.lastSeen);
 
 export const firstLine = (message: string): string => {
   const line = message.split('\n').find((candidate) => candidate.trim() !== '');
@@ -33,6 +40,7 @@ export const groupErrors = (
   const groups = new Map<
     string,
     {
+      source: 'logs';
       fingerprint: string;
       service: string;
       count: number;
@@ -48,6 +56,7 @@ export const groupErrors = (
     const existing = groups.get(fingerprint);
     if (existing === undefined) {
       groups.set(fingerprint, {
+        source: 'logs',
         fingerprint,
         service: record.service,
         count: 1,
@@ -76,8 +85,5 @@ export const groupErrors = (
       ...group,
       deploymentIds: [...group.deploymentIds],
     }))
-    .sort(
-      (left, right) =>
-        right.count - left.count || right.lastSeen.localeCompare(left.lastSeen),
-    );
+    .sort(byFrequency);
 };
