@@ -5,6 +5,7 @@ import { TraceBackend } from './backend.js';
 import {
   JaegerBadResponse,
   JaegerUnreachable,
+  TraceBackendUnauthorized,
   TraceNotFound,
 } from './errors.js';
 import {
@@ -201,24 +202,40 @@ export function validate<A>(
   );
 }
 
+export interface JaegerBackendOptions {
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
+}
+
+// URL(path, base) would drop the base's path prefix (e.g. a reverse proxy
+// mounted at /~/jaeger), so the path is appended to it manually.
+export function joinUrl(base: URL, path: string): URL {
+  const url = new URL(base);
+  url.pathname = `${base.pathname.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+  url.search = '';
+  url.hash = '';
+  return url;
+}
+
 function makeBackend(
   client: HttpClient.HttpClient,
   baseURL: URL,
+  headers: Readonly<Record<string, string>>,
   summariesAvailable: Ref.Ref<boolean>,
-) {
+): TraceBackend {
   const makeRequest = (
     path: string,
     params?: URLSearchParams,
   ): Effect.Effect<
     { readonly status: number; readonly body: string },
-    JaegerUnreachable,
+    JaegerUnreachable | TraceBackendUnauthorized,
     never
   > => {
-    const url = new URL(path, baseURL);
+    const url = joinUrl(baseURL, path);
     if (params !== undefined) {
       url.search = params.toString();
     }
-    return client.get(url.toString()).pipe(
+    return client.get(url.toString(), { headers }).pipe(
       Effect.mapError(
         (cause) =>
           new JaegerUnreachable({
@@ -233,7 +250,16 @@ function makeBackend(
                 cause,
               }),
           ),
-          Effect.map((body) => ({ status: response.status, body })),
+          Effect.flatMap((body) =>
+            response.status === 401 || response.status === 403
+              ? Effect.fail(
+                  new TraceBackendUnauthorized({
+                    status: response.status,
+                    url: url.toString(),
+                  }),
+                )
+              : Effect.succeed({ status: response.status, body }),
+          ),
         ),
       ),
     );
@@ -250,7 +276,7 @@ function makeBackend(
     service: string,
   ): Effect.Effect<
     ReadonlyArray<string>,
-    JaegerUnreachable | JaegerBadResponse,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   > => {
     return Effect.gen(function* () {
@@ -267,11 +293,16 @@ function makeBackend(
     traceId: string,
   ): Effect.Effect<
     Trace,
-    JaegerUnreachable | JaegerBadResponse | TraceNotFound,
+    | JaegerUnreachable
+    | JaegerBadResponse
+    | TraceNotFound
+    | TraceBackendUnauthorized,
     never
   > => {
     return Effect.gen(function* () {
-      const response = yield* makeRequest(`/api/v3/traces/${traceId}`);
+      const response = yield* makeRequest(
+        `/api/v3/traces/${encodeURIComponent(traceId)}`,
+      );
       if (response.status === 404 || response.status === 400) {
         return yield* Effect.fail(new TraceNotFound({ traceId }));
       }
@@ -289,7 +320,7 @@ function makeBackend(
     query: TraceQuery,
   ): Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    JaegerUnreachable | JaegerBadResponse,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   > => {
     return Effect.gen(function* () {
@@ -313,7 +344,7 @@ function makeBackend(
     query: TraceQuery,
   ): Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    JaegerUnreachable | JaegerBadResponse,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   > => {
     return Effect.gen(function* () {
@@ -359,7 +390,7 @@ function makeBackend(
     query: TraceQuery,
   ): Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    JaegerUnreachable | JaegerBadResponse,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   > => {
     return Effect.gen(function* () {
@@ -392,15 +423,26 @@ function makeBackend(
   };
 }
 
+export const makeJaegerBackend = (
+  options: JaegerBackendOptions,
+): Effect.Effect<TraceBackend, never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const summariesAvailable = yield* Ref.make(true);
+    return makeBackend(
+      client,
+      new URL(options.url),
+      options.headers,
+      summariesAvailable,
+    );
+  });
+
 export const JaegerBackendLayer = Layer.effect(
   TraceBackend,
   Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
     const jaegerUrl = yield* Config.String('JAEGER_URL').pipe(
       Config.withDefault('http://localhost:16686'),
     );
-    const baseURL = new URL(jaegerUrl);
-    const summariesAvailable = yield* Ref.make(true);
-    return makeBackend(client, baseURL, summariesAvailable);
+    return yield* makeJaegerBackend({ url: jaegerUrl, headers: {} });
   }),
 );

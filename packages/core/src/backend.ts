@@ -2,6 +2,7 @@ import { Context, type Effect } from 'effect';
 import type {
   JaegerBadResponse,
   JaegerUnreachable,
+  TraceBackendUnauthorized,
   TraceNotFound,
 } from './errors.js';
 import type { Trace, TraceSummary } from './model.js';
@@ -20,28 +21,31 @@ export interface TraceQuery {
 export interface TraceBackend {
   readonly listServices: Effect.Effect<
     ReadonlyArray<string>,
-    JaegerUnreachable | JaegerBadResponse,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   >;
   readonly listOperations: (
     service: string,
   ) => Effect.Effect<
     ReadonlyArray<string>,
-    JaegerUnreachable | JaegerBadResponse,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   >;
   readonly searchTraces: (
     query: TraceQuery,
   ) => Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    JaegerUnreachable | JaegerBadResponse,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   >;
   readonly getTrace: (
     traceId: string,
   ) => Effect.Effect<
     Trace,
-    JaegerUnreachable | JaegerBadResponse | TraceNotFound,
+    | JaegerUnreachable
+    | JaegerBadResponse
+    | TraceNotFound
+    | TraceBackendUnauthorized,
     never
   >;
 }

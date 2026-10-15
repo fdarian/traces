@@ -6,6 +6,7 @@ import {
   type JaegerBadResponse,
   type JaegerUnreachable,
   type Span,
+  type TraceBackendUnauthorized,
   serializeAttribute,
   TraceBackend,
 } from '@traces/core';
@@ -50,7 +51,10 @@ const ingestService = (
   windowScaleRef: Ref.Ref<Map<string, number>>,
 ): Effect.Effect<
   void,
-  JaegerUnreachable | JaegerBadResponse | IssueStoreError,
+  | JaegerUnreachable
+  | JaegerBadResponse
+  | TraceBackendUnauthorized
+  | IssueStoreError,
   TraceBackend | IssueStore
 > => {
   return Effect.gen(function* () {
@@ -189,7 +193,10 @@ const ingestTick = (
   windowScaleRef: Ref.Ref<Map<string, number>>,
 ): Effect.Effect<
   void,
-  JaegerUnreachable | JaegerBadResponse | IssueStoreError,
+  | JaegerUnreachable
+  | JaegerBadResponse
+  | TraceBackendUnauthorized
+  | IssueStoreError,
   TraceBackend | IssueStore
 > => {
   return Effect.gen(function* () {

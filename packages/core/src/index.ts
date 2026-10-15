@@ -7,6 +7,7 @@ export { TraceBackend } from './backend.js';
 export {
   JaegerBadResponse,
   JaegerUnreachable,
+  TraceBackendUnauthorized,
   TraceNotFound,
 } from './errors.js';
 export {
@@ -35,7 +36,8 @@ export { OCCURRENCES_PAGE_SIZE } from './issues/model.js';
 export { normalizeExceptionMessage } from './issues/normalize-message.js';
 export { isRegressedIssue } from './issues/regression.js';
 export { parseTopInAppStackFrame } from './issues/stack-frame.js';
-export { JaegerBackendLayer } from './jaeger.js';
+export type { JaegerBackendOptions } from './jaeger.js';
+export { JaegerBackendLayer, makeJaegerBackend } from './jaeger.js';
 export type { ProviderError } from './logs/errors.js';
 export {
   InvalidCursor,
