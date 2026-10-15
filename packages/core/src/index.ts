@@ -49,6 +49,7 @@ export {
 } from './logs/errors.js';
 export type { ErrorGroup } from './logs/errors-group.js';
 export {
+  byFrequency,
   errorFingerprint,
   firstLine,
   groupErrors,
@@ -126,6 +127,12 @@ export type {
   SerializableJson,
 } from './serialize.js';
 export { serializeAttribute, serializeValue } from './serialize.js';
+export type { TraceErrorScanResult } from './traces/error-scan.js';
+export {
+  groupTraceErrors,
+  memoizeGetTrace,
+  scanTraceErrors,
+} from './traces/error-scan.js';
 export type { ErrorTraceScan } from './traces/paging.js';
 export {
   fromTraceCursor,
