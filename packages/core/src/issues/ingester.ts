@@ -3,6 +3,7 @@ import { TraceBackend } from '../backend.js';
 import type {
   JaegerBadResponse,
   JaegerUnreachable,
+  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
 } from '../errors.js';
 import type { Span } from '../model.js';
@@ -54,6 +55,7 @@ const ingestService = (
   void,
   | JaegerUnreachable
   | JaegerBadResponse
+  | TraceAttributeSearchUnavailable
   | TraceBackendUnauthorized
   | IssueStoreError,
   TraceBackend | IssueStore
@@ -188,6 +190,7 @@ const ingestTick = (
   void,
   | JaegerUnreachable
   | JaegerBadResponse
+  | TraceAttributeSearchUnavailable
   | TraceBackendUnauthorized
   | IssueStoreError,
   TraceBackend | IssueStore

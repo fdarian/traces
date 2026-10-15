@@ -1,5 +1,8 @@
 import { Effect } from 'effect';
-import { TraceErrorCountsUnavailable } from '../errors.js';
+import {
+  TraceAttributeSearchUnavailable,
+  TraceErrorCountsUnavailable,
+} from '../errors.js';
 import { InvalidCursor } from '../logs/errors.js';
 import { type Cursor } from '../logs/model.js';
 import { shortHash } from '../logs/normalize.js';
@@ -195,6 +198,9 @@ const scanPages = <E, R>(
  * reachable. Jaeger's memory backend answers an error filter with nothing
  * (jaegertracing/jaeger#8553), so a filtered search that returns no traces
  * falls back to paging the unfiltered window and filtering on the client.
+ * So does a backend without the legacy `/api/traces` endpoint
+ * (`TraceAttributeSearchUnavailable`); a caller's own attribute filter still
+ * needs that endpoint, so the client pass then fails with the same error.
  * A resumed page (`input.mode`) stays in the mode its first page settled on,
  * so an empty tail of the window does not rerun the fallback.
  * Matches are always verified from the summaries, never trusted from the server.
@@ -204,8 +210,14 @@ export const scanErrorTraces = <E, R>(
 ): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> =>
   Effect.gen(function* () {
     if (input.mode !== undefined) return yield* scanPages(input, input.mode);
-    const filtered = yield* scanPages(input, 'filtered');
+    const filtered = yield* scanPages(input, 'filtered').pipe(
+      Effect.catchIf(
+        (error): error is Extract<E, TraceAttributeSearchUnavailable> =>
+          error instanceof TraceAttributeSearchUnavailable,
+        () => Effect.succeed(undefined),
+      ),
+    );
     // A filter that returned traces but none with errors was ignored, so that pass already was a client scan.
-    if (filtered.scanned > 0) return filtered;
+    if (filtered !== undefined && filtered.scanned > 0) return filtered;
     return yield* scanPages(input, 'client');
   });

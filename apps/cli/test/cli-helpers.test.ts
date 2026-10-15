@@ -4,6 +4,7 @@ import {
   type LogRecord,
   ProviderAuthError,
   ProviderNotFound,
+  TraceAttributeSearchUnavailable,
 } from '@traces/core';
 import { Effect } from 'effect';
 import { CliError } from 'effect/cli';
@@ -201,6 +202,20 @@ describe('renderError', () => {
         }).hint,
       ).toBe('the URL may not point at a Jaeger v2 query service (/api/v3)');
     });
+  });
+
+  test('missing attribute search names the endpoint and the flag', () => {
+    const rendered = renderError(
+      new TraceAttributeSearchUnavailable({
+        status: 404,
+        url: 'https://host.example/api/traces',
+      }),
+    );
+    expect(rendered.message).toBe(
+      'attribute filters need the Jaeger legacy /api/traces endpoint, which answered HTTP 404 at https://host.example/api/traces',
+    );
+    expect(rendered.hint).toContain('drop --attr');
+    expect(rendered.code).toBe(EXIT_CODES.runtime);
   });
 
   test('auth errors carry the hint', () => {

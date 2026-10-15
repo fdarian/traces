@@ -12,6 +12,7 @@ import {
   ProviderResponseInvalid,
   type SpanRow,
   stripAnsi,
+  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
   TraceErrorCountsUnavailable,
   TraceNotFound,
@@ -310,6 +311,13 @@ export const renderError = (error: unknown): RenderedError => {
     return {
       message: `tracing backend returned an unexpected response (${received}): ${causeMessage(error.cause)}; body: ${body === '' ? '(empty)' : `"${body}"`}`,
       hint: badResponseHint(error),
+      code: EXIT_CODES.runtime,
+    };
+  }
+  if (error instanceof TraceAttributeSearchUnavailable) {
+    return {
+      message: `attribute filters need the Jaeger legacy /api/traces endpoint, which answered HTTP ${error.status} at ${error.url}`,
+      hint: 'drop --attr, or point tracing.url at a Jaeger query host that serves /api/traces',
       code: EXIT_CODES.runtime,
     };
   }

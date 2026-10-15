@@ -2,6 +2,7 @@ import { Context, type Effect } from 'effect';
 import type {
   JaegerBadResponse,
   JaegerUnreachable,
+  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
   TraceNotFound,
 } from './errors.js';
@@ -35,7 +36,10 @@ export interface TraceBackend {
     query: TraceQuery,
   ) => Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    | JaegerUnreachable
+    | JaegerBadResponse
+    | TraceBackendUnauthorized
+    | TraceAttributeSearchUnavailable,
     never
   >;
   readonly getTrace: (

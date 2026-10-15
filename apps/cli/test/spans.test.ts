@@ -54,6 +54,7 @@ let dir: string;
 let seen: Array<SeenRequest> = [];
 let rejectAuth = false;
 let quietBacklog = false;
+let legacyStatus: number | undefined;
 
 const configFor = (tracing: unknown) => {
   const path = join(dir, `config-${Math.random().toString(36).slice(2)}.json`);
@@ -92,6 +93,10 @@ beforeAll(async () => {
       return;
     }
     const legacy = url.pathname === '/proxy/api/traces';
+    if (legacy && legacyStatus !== undefined) {
+      response.writeHead(legacyStatus).end('no legacy');
+      return;
+    }
     if (!legacy && url.pathname !== '/proxy/api/v3/trace-summaries') {
       response.writeHead(404).end('not found');
       return;
@@ -246,6 +251,69 @@ describe('traces spans against a fake Jaeger', () => {
     expect(
       seen.every((request) => request.pathname === '/proxy/api/traces'),
     ).toBe(true);
+  });
+
+  describe.each([404, 405])('when /api/traces answers %d', (status) => {
+    const withoutLegacy = async <A>(use: () => Promise<A>) => {
+      legacyStatus = status;
+      try {
+        return await use();
+      } finally {
+        legacyStatus = undefined;
+      }
+    };
+
+    test('--errors degrades to the client scan and says nothing is wrong', async () => {
+      const config = configFor(tracingBlock());
+      const first = await withoutLegacy(() =>
+        run([...WINDOW, '--errors', '--limit', '2'], config),
+      );
+      expect(first.code).toBe(0);
+      expect(idsOf(first.rows)).toEqual(['09', '11']);
+      expect(
+        JSON.parse(Buffer.from(first.cursor ?? '', 'base64url').toString())
+          .mode,
+      ).toBe('client');
+      const second = await withoutLegacy(() =>
+        run(
+          [
+            ...WINDOW,
+            '--errors',
+            '--limit',
+            '2',
+            '--cursor',
+            first.cursor ?? '',
+          ],
+          config,
+        ),
+      );
+      expect(idsOf(second.rows)).toEqual(['05', '06']);
+      expect(
+        seen.every(
+          (request) => request.pathname === '/proxy/api/v3/trace-summaries',
+        ),
+      ).toBe(true);
+    });
+
+    test('--attr fails and names the endpoint', async () => {
+      const result = await withoutLegacy(() =>
+        run([...WINDOW, '--attr', 'tenant=a']),
+      );
+      expect(result.code).toBe(1);
+      expect(result.rows).toEqual([]);
+      expect(result.stderr).toContain(
+        `attribute filters need the Jaeger legacy /api/traces endpoint, which answered HTTP ${status}`,
+      );
+      expect(result.stderr).toContain('hint: drop --attr');
+    });
+
+    test('--errors with --attr fails the same way', async () => {
+      const result = await withoutLegacy(() =>
+        run([...WINDOW, '--errors', '--attr', 'tenant=a']),
+      );
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('attribute filters need');
+    });
   });
 
   test('passes op, durations and attributes to Jaeger', async () => {

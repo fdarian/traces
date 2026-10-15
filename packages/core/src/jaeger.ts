@@ -5,6 +5,7 @@ import { TraceBackend } from './backend.js';
 import {
   JaegerBadResponse,
   JaegerUnreachable,
+  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
   TraceNotFound,
 } from './errors.js';
@@ -505,7 +506,10 @@ function makeBackend(
     query: TraceQuery,
   ): Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    | JaegerUnreachable
+    | JaegerBadResponse
+    | TraceBackendUnauthorized
+    | TraceAttributeSearchUnavailable,
     never
   > => {
     return Effect.gen(function* () {
@@ -513,6 +517,12 @@ function makeBackend(
         '/api/traces',
         buildLegacySearchParams(query),
       );
+      if (response.status === 404 || response.status === 405) {
+        return yield* new TraceAttributeSearchUnavailable({
+          status: response.status,
+          url: joinUrl(baseURL, '/api/traces').toString(),
+        });
+      }
       if (response.status !== 200) {
         return yield* Effect.fail(
           badResponse(
@@ -538,7 +548,10 @@ function makeBackend(
     query: TraceQuery,
   ): Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    | JaegerUnreachable
+    | JaegerBadResponse
+    | TraceBackendUnauthorized
+    | TraceAttributeSearchUnavailable,
     never
   > => {
     return Effect.gen(function* () {
