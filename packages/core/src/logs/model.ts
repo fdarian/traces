@@ -111,6 +111,12 @@ export const Cursor = Schema.Union([
     after: Schema.String,
   }),
   Schema.Struct({
+    kind: Schema.Literal('jaeger-time'),
+    since: Schema.Number,
+    before: Schema.String,
+    seen: Schema.Array(Schema.String),
+  }),
+  Schema.Struct({
     kind: Schema.Literal('vercel-page'),
     since: Schema.Number,
     until: Schema.Number,

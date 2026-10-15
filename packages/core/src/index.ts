@@ -8,6 +8,7 @@ export {
   JaegerBadResponse,
   JaegerUnreachable,
   TraceBackendUnauthorized,
+  TraceErrorCountsUnavailable,
   TraceNotFound,
 } from './errors.js';
 export {
@@ -92,6 +93,7 @@ export {
   LogRecord,
 } from './logs/model.js';
 export { normalizeLevel, shortHash, stripAnsi } from './logs/normalize.js';
+export type { BackwardPage, PageResume } from './logs/paging.js';
 export { pageBackwards } from './logs/paging.js';
 export { Provider } from './logs/provider.js';
 export {
@@ -102,6 +104,14 @@ export {
   RAILWAY_RETENTION_NOTE,
 } from './logs/railway/index.js';
 export type { LogSource } from './logs/source.js';
+export type { ErrorTraceScan } from './logs/trace-paging.js';
+export {
+  fromTraceCursor,
+  pageTraces,
+  scanErrorTraces,
+  toTraceCursor,
+  traceFetchSize,
+} from './logs/trace-paging.js';
 export {
   makeVercelSource,
   mapBuildEvent,
@@ -123,6 +133,7 @@ export type {
   TraceSummary,
   TraceSummaryService,
 } from './model.js';
+export { TraceRow, toTraceRow } from './model.js';
 export {
   extractExceptionInfo,
   normalizeAttribute,

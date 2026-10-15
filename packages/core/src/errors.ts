@@ -28,3 +28,11 @@ export class TraceBackendUnauthorized extends Schema.TaggedError<TraceBackendUna
     url: Schema.String,
   },
 ) {}
+
+/** The backend's trace summaries carry no error span count, so `--errors` cannot filter on them. */
+export class TraceErrorCountsUnavailable extends Schema.TaggedError<TraceErrorCountsUnavailable>()(
+  'TraceErrorCountsUnavailable',
+  {
+    traceId: Schema.String,
+  },
+) {}
