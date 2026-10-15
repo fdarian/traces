@@ -181,7 +181,7 @@ describe('toSpanRows exception promotion', () => {
     ],
   });
 
-  test('promotes the first exception event and keeps it in events', () => {
+  test('moves the first exception event out of events and keeps later ones', () => {
     const [row] = toSpanRows(
       trace([
         span('root', undefined, 0, {
@@ -205,8 +205,8 @@ describe('toSpanRows exception promotion', () => {
     expect(row?.events.map((event) => event.name)).toEqual([
       'log',
       'exception',
-      'exception',
     ]);
+    expect(row?.events[1]?.attrs['exception.type']).toBe('RangeError');
   });
 
   test('omits the stacktrace when the event has none', () => {

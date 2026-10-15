@@ -337,7 +337,7 @@ export const COMMAND_HELP = {
     ],
     flags: [],
     output:
-      'SpanRow per line, depth first with children by start time: traceId, spanId, parentSpanId (absent on roots), depth, service, name, kind, startTs (ISO, nanosecond precision), durationMs, status (ok | error | unset), statusMessage (optional), attrs (span attributes as an object), events[] ({name, ts, attrs}), exception ({type, message, stacktrace?}, optional; copied from the first exception event, which also stays in events). On a TTY: an indented tree, `+offset duration service name`, offset from the earliest span; error spans add ERR, then the exception type and message and its top 3 stack frames.',
+      'SpanRow per line, depth first with children by start time: traceId, spanId, parentSpanId (absent on roots), depth, service, name, kind, startTs (ISO, nanosecond precision), durationMs, status (ok | error | unset), statusMessage (optional), attrs (span attributes as an object), events[] ({name, ts, attrs}), exception ({type, message, stacktrace?}, optional; moved out of the first exception event, so events does not repeat the stacktrace; later exception events stay in events). On a TTY: an indented tree, `+offset duration service name`, offset from the earliest span; error spans add ERR, then the exception type and message and its top 3 stack frames.',
     notes: [
       'A span whose parent is not in the trace (partly retained or still arriving) is a root at depth 0 and keeps its parentSpanId.',
       'Span durations are whole milliseconds: spans under 1ms show 0ms.',
