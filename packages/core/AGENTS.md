@@ -23,3 +23,4 @@ domain model, `TraceBackend` interface, Jaeger adapter (over Jaeger's `/api/v3` 
 - Jaeger v2's v3 gateway ignores `query.attributes`, so `TraceQuery.attributes` is searched through the legacy `/api/traces` (`tags`), and its traces are summarized from spans in `mapLegacyTrace`
 - `LogRecord.attrs` values are JSON-decoded and typed `unknown`; narrow before use, don't assume strings
 - `LogRecord.traceId` / `spanId` are optional: set only when the attributes carry well-formed ids (`traceId`/`trace_id`, `spanId`/`span_id`; see `src/logs/normalize.ts`)
+- `LogRecord.ts` is the provider's receive time and drives paging; `appTs` is the app's own clock (from `attrs.timestamp`), optional, and the one to compare with span times

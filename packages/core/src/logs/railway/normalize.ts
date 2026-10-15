@@ -7,6 +7,7 @@ import type {
   RailwayTarget,
 } from '../model.js';
 import {
+  appTimestampOf,
   decodeJsonAttribute,
   normalizeLevel,
   stripAnsi,
@@ -70,6 +71,7 @@ export const mapRailwayLog = (
       : row.severity;
   return {
     ts: row.timestamp,
+    ...appTimestampOf(attrs),
     service: context.target.service,
     provider: PROVIDER,
     environment: context.target.environment,
