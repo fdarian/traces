@@ -157,3 +157,4 @@ export {
   toTraceCursor,
   traceFetchSize,
 } from './traces/paging.js';
+export { SpanRow, toSpanRows } from './traces/span-rows.js';
