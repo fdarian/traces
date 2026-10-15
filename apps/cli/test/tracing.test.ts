@@ -13,8 +13,8 @@ import { EXIT_CODES, renderError } from '#/output.ts';
 import {
   type ResolvedProject,
   requireLogProvider,
+  resolveErrorScope,
   resolveHeaders,
-  resolveServices,
   resolveTraceBackend,
 } from '#/resolve.ts';
 import { SecretMissing, SecretStoreError, Secrets } from '#/secrets.ts';
@@ -229,7 +229,7 @@ describe('trace-only services', () => {
     }
   });
 
-  const configFile = (services: Record<string, unknown>) => {
+  const configFile = (services: Record<string, unknown>, tracing = true) => {
     const dir = mkdtempSync(join(tmpdir(), 'traces-cli-'));
     const path = join(dir, 'config.json');
     writeFileSync(
@@ -238,7 +238,11 @@ describe('trace-only services', () => {
         projects: {
           app: {
             matcher: { type: 'git', repo: 'acme/app' },
-            tracing: { provider: 'jaeger', url: 'https://j.example.com' },
+            ...(tracing
+              ? {
+                  tracing: { provider: 'jaeger', url: 'https://j.example.com' },
+                }
+              : {}),
             services,
           },
         },
@@ -262,25 +266,72 @@ describe('trace-only services', () => {
     x: { otelService: 'x-data' },
   };
 
-  test('errors across all services skips them instead of failing', async () => {
-    const result = await run(
-      resolveServices(flags(configFile(services)), Option.none()).pipe(
+  const scope = (
+    config: string,
+    service: Option.Option<string>,
+    source: Option.Option<'logs' | 'traces'>,
+  ) =>
+    run(
+      resolveErrorScope(flags(config), service, source).pipe(
         Effect.provide(BunServices.layer),
       ),
     );
-    expect(result._tag).toBe('Success');
-    if (result._tag === 'Success') {
-      expect(result.success.entries.map((entry) => entry.name)).toEqual([
-        'web',
-      ]);
-    }
+
+  const logNames = (result: Awaited<ReturnType<typeof scope>>) =>
+    result._tag === 'Success' ? result.success.entries.map((e) => e.name) : [];
+  const traceNames = (result: Awaited<ReturnType<typeof scope>>) =>
+    result._tag === 'Success'
+      ? (result.success.traces?.services.map((s) => s.name) ?? [])
+      : [];
+
+  test('errors across all services reads logs from log services and traces from every service', async () => {
+    const result = await scope(
+      configFile(services),
+      Option.none(),
+      Option.none(),
+    );
+    expect(logNames(result)).toEqual(['web']);
+    expect(traceNames(result)).toEqual(['web', 'x']);
   });
 
-  test('errors naming one is a usage error', async () => {
-    const result = await run(
-      resolveServices(flags(configFile(services)), Option.some('x')).pipe(
-        Effect.provide(BunServices.layer),
-      ),
+  test('without tracing, a trace-only service is skipped for logs and there is no trace side', async () => {
+    const result = await scope(
+      configFile(services, false),
+      Option.none(),
+      Option.none(),
+    );
+    expect(logNames(result)).toEqual(['web']);
+    expect(traceNames(result)).toEqual([]);
+  });
+
+  test('--source logs skips the trace side, --source traces the log side', async () => {
+    const config = configFile(services);
+    const logs = await scope(config, Option.none(), Option.some('logs'));
+    expect(logNames(logs)).toEqual(['web']);
+    expect(traceNames(logs)).toEqual([]);
+    const traces = await scope(config, Option.none(), Option.some('traces'));
+    expect(logNames(traces)).toEqual([]);
+    expect(traceNames(traces)).toEqual(['web', 'x']);
+  });
+
+  test('naming a trace-only service works when tracing covers it', async () => {
+    const result = await scope(
+      configFile(services),
+      Option.some('x'),
+      Option.none(),
+    );
+    expect(logNames(result)).toEqual([]);
+    expect(traceNames(result)).toEqual(['x']);
+  });
+
+  test.each([
+    ['no tracing config', false, Option.none<'logs' | 'traces'>()],
+    ['--source logs', true, Option.some<'logs' | 'traces'>('logs')],
+  ])('naming a trace-only service is a usage error with %s', async (_label, tracing, source) => {
+    const result = await scope(
+      configFile(services, tracing),
+      Option.some('x'),
+      source,
     );
     expect(result._tag).toBe('Failure');
     if (result._tag === 'Failure') {
@@ -288,17 +339,50 @@ describe('trace-only services', () => {
     }
   });
 
-  test('a project with only trace-only services has nothing to read logs from', async () => {
-    const result = await run(
-      resolveServices(
-        flags(configFile({ x: { otelService: 'x-data' } })),
-        Option.none(),
-      ).pipe(Effect.provide(BunServices.layer)),
+  test('--source traces without a tracing block exits 2 with the config hint', async () => {
+    const result = await scope(
+      configFile(services, false),
+      Option.none(),
+      Option.some('traces'),
     );
     expect(result._tag).toBe('Failure');
     if (result._tag === 'Failure') {
-      expect(renderError(result.failure).code).toBe(EXIT_CODES.usage);
+      const rendered = renderError(result.failure);
+      expect(rendered.code).toBe(EXIT_CODES.usage);
+      expect(rendered.message).toContain('no tracing config');
     }
+  });
+
+  test('only trace-only services: the trace side covers them, but with no tracing there is nothing to read', async () => {
+    const onlyTraceOnly = { x: { otelService: 'x-data' } };
+    const covered = await scope(
+      configFile(onlyTraceOnly),
+      Option.none(),
+      Option.none(),
+    );
+    expect(logNames(covered)).toEqual([]);
+    expect(traceNames(covered)).toEqual(['x']);
+    const bare = await scope(
+      configFile(onlyTraceOnly, false),
+      Option.none(),
+      Option.none(),
+    );
+    expect(bare._tag).toBe('Failure');
+    if (bare._tag === 'Failure') {
+      expect(renderError(bare.failure).code).toBe(EXIT_CODES.usage);
+    }
+  });
+
+  test('two services on one otelService are scanned once', async () => {
+    const result = await scope(
+      configFile({
+        a: { otelService: 'same' },
+        b: { otelService: 'same' },
+      }),
+      Option.none(),
+      Option.none(),
+    );
+    expect(traceNames(result)).toEqual(['a']);
   });
 });
 

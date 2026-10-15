@@ -193,49 +193,6 @@ export const resolveService = (
     } satisfies ResolvedService;
   });
 
-/**
- * With a service requested, fails like `resolveService` (a trace-only one is rejected);
- * otherwise every log service of the project, trace-only ones skipped. Each entry's
- * `build` is deferred so one service's missing token or bad target fails alone instead
- * of aborting the others.
- */
-export const resolveServices = (
-  flags: GlobalFlags,
-  requested: Option.Option<string>,
-) =>
-  Effect.gen(function* () {
-    const resolved = yield* resolveProject(flags);
-    const logServices: Array<{ name: string; config: LogServiceConfig }> = [];
-    if (Option.isSome(requested)) {
-      const selected = yield* selectService(resolved, requested);
-      const config = yield* requireLogProvider(selected.name, selected.config);
-      logServices.push({ name: selected.name, config });
-    } else {
-      for (const [name, config] of Object.entries(resolved.project.services)) {
-        if (hasLogProvider(config)) logServices.push({ name, config });
-      }
-    }
-    if (logServices.length === 0) {
-      return yield* new UsageError({
-        message: `project "${resolved.projectName}" has no log services; all are trace-only`,
-        hint: 'add a "provider" to a service entry in the config to read its logs',
-      });
-    }
-    const entries = logServices.map((selected) => ({
-      name: selected.name,
-      build: Effect.gen(function* () {
-        const target = yield* buildTarget(
-          selected.name,
-          selected.config,
-          flags.env,
-        );
-        const source = yield* buildSource(target);
-        return { target, source };
-      }),
-    }));
-    return { resolved, entries };
-  });
-
 const TRACING_HINT_EXAMPLE =
   '"tracing": {"provider":"jaeger","url":"https://jaeger.example.com","headers":{"X-API-Key":{"keychain":"<name>"}}}';
 
@@ -273,14 +230,17 @@ export const resolveHeaders = (
     { concurrency: 1 },
   ).pipe(Effect.map((pairs) => Object.fromEntries(pairs)));
 
+const noTracingConfig = (resolved: ResolvedProject) =>
+  new UsageError({
+    message: `project "${resolved.projectName}" has no tracing config`,
+    hint: `add to the project in ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces --help\``,
+  });
+
 export const resolveTraceBackend = (resolved: ResolvedProject) =>
   Effect.gen(function* () {
     const tracing = resolved.project.tracing;
     if (tracing === undefined) {
-      return yield* new UsageError({
-        message: `project "${resolved.projectName}" has no tracing config`,
-        hint: `add to the project in ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces --help\``,
-      });
+      return yield* noTracingConfig(resolved);
     }
     const headers = yield* resolveHeaders(tracing.headers);
     return yield* makeJaegerBackend({ url: tracing.url, headers });
@@ -300,5 +260,96 @@ export const resolveTraceService = (
       name: selected.name,
       otelService: otelServiceName(selected.name, selected.config),
       backend,
+    };
+  });
+
+export type ErrorSource = 'logs' | 'traces';
+
+/**
+ * Which services `errors` reads, per side. Without `--source` both sides run, the
+ * trace side only when the project has `tracing`. A trace-only service takes part in the
+ * trace side; naming one when no trace side will run fails like `resolveService`. Each log
+ * entry's `build` is deferred so one service's missing token or bad target fails alone
+ * instead of aborting the others; the trace backend is resolved once, lazily, because it
+ * reads the keychain.
+ */
+export const resolveErrorScope = (
+  flags: GlobalFlags,
+  requested: Option.Option<string>,
+  sourceFlag: Option.Option<ErrorSource>,
+) =>
+  Effect.gen(function* () {
+    const resolved = yield* resolveProject(flags);
+    const wantLogs = Option.isNone(sourceFlag) || sourceFlag.value === 'logs';
+    const wantTraces =
+      Option.isNone(sourceFlag) || sourceFlag.value === 'traces';
+    if (
+      Option.isSome(sourceFlag) &&
+      sourceFlag.value === 'traces' &&
+      resolved.project.tracing === undefined
+    ) {
+      return yield* noTracingConfig(resolved);
+    }
+    const traceSide = wantTraces && resolved.project.tracing !== undefined;
+
+    const candidates: Array<{ name: string; config: ServiceConfig }> =
+      Option.isSome(requested)
+        ? [yield* selectService(resolved, requested)]
+        : Object.entries(resolved.project.services).map(([name, config]) => ({
+            name,
+            config,
+          }));
+    if (Option.isSome(requested) && !traceSide) {
+      const only = candidates[0];
+      if (only !== undefined) yield* requireLogProvider(only.name, only.config);
+    }
+
+    const logServices = wantLogs
+      ? candidates.flatMap((candidate) =>
+          hasLogProvider(candidate.config)
+            ? [{ name: candidate.name, config: candidate.config }]
+            : [],
+        )
+      : [];
+    const traceServices: Array<{ name: string; otelService: string }> = [];
+    if (traceSide) {
+      for (const candidate of candidates) {
+        const otelService = otelServiceName(candidate.name, candidate.config);
+        if (traceServices.some((known) => known.otelService === otelService)) {
+          continue;
+        }
+        traceServices.push({ name: candidate.name, otelService });
+      }
+    }
+    if (logServices.length === 0 && traceServices.length === 0) {
+      return yield* new UsageError({
+        message: `project "${resolved.projectName}" has no log services; all are trace-only`,
+        hint: 'add a "provider" to a service entry in the config to read its logs, or a "tracing" block to read its traces',
+      });
+    }
+
+    const logEntries = logServices.map((selected) => ({
+      name: selected.name,
+      build: Effect.gen(function* () {
+        const target = yield* buildTarget(
+          selected.name,
+          selected.config,
+          flags.env,
+        );
+        const source = yield* buildSource(target);
+        return { target, source };
+      }),
+    }));
+    const traceBackend =
+      traceServices.length === 0
+        ? undefined
+        : yield* Effect.cached(resolveTraceBackend(resolved));
+    return {
+      resolved,
+      entries: logEntries,
+      traces:
+        traceBackend === undefined
+          ? undefined
+          : { services: traceServices, backend: traceBackend },
     };
   });

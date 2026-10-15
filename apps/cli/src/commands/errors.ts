@@ -1,12 +1,21 @@
 import {
+  byFrequency,
   type ErrorGroup,
   firstLine,
   groupErrors,
   type LogRecord,
+  memoizeGetTrace,
+  scanTraceErrors,
 } from '@traces/core';
 import { Console, Effect, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
-import { DEFAULT_WINDOW, ERROR_CAP } from '#/limits.ts';
+import {
+  DEFAULT_WINDOW,
+  ERROR_CAP,
+  ERROR_TRACE_CAP,
+  TRACE_SCAN_CAP,
+  TRACE_SCAN_PAGE,
+} from '#/limits.ts';
 import {
   commandLine,
   EXIT_CODES,
@@ -18,7 +27,7 @@ import {
   retentionNoteFor,
   shortId,
 } from '#/output.ts';
-import { globalOptions, resolveServices } from '#/resolve.ts';
+import { globalOptions, resolveErrorScope } from '#/resolve.ts';
 import { parseWhen } from '#/time.ts';
 
 const formatGroup = (record: ErrorGroupRecord): string => {
@@ -28,26 +37,39 @@ const formatGroup = (record: ErrorGroupRecord): string => {
       : ` deploys ${record.deploymentIds.map(shortId).join(',')}`;
   const trace =
     record.traceId === undefined ? '' : ` trace=${shortId(record.traceId)}`;
+  const origin = record.source === 'traces' ? ' [traces]' : '';
   const sample = record.sample.split('\n').slice(0, 1).join('');
-  return `${String(record.count).padStart(5)}x ${record.service} ${record.firstSeen} -> ${record.lastSeen}${deploys}${trace}\n       ${sample}\n       $ ${record.hint}`;
+  return `${String(record.count).padStart(5)}x ${record.service}${origin} ${record.firstSeen} -> ${record.lastSeen}${deploys}${trace}\n       ${sample}\n       $ ${record.hint}`;
 };
 
 interface ErrorGroupRecord extends ErrorGroup {
   readonly provider: string;
-  readonly environment: string;
+  /** Absent for trace groups: Jaeger has no environment. */
+  readonly environment?: string;
   readonly hint: string;
-  /** True when the fetch cap was hit, so counts undercount. */
+  /** True when a cap was hit, so counts undercount. */
   readonly partial: boolean;
 }
 
 const SERVICE_CONCURRENCY = 4;
+
+const SOURCES = ['logs', 'traces'] as const;
 
 export const errorsOptions = {
   ...globalOptions,
   service: Argument.String('service').pipe(Argument.optional),
   since: Flag.String('since').pipe(Flag.optional),
   until: Flag.String('until').pipe(Flag.optional),
+  source: Flag.Literals('source', SOURCES).pipe(Flag.optional),
 };
+
+interface Failure {
+  readonly label: string;
+  readonly error: unknown;
+}
+
+const failed = (label: string) => (error: unknown) =>
+  Effect.succeed({ _tag: 'failed' as const, label, error });
 
 export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
   Effect.gen(function* () {
@@ -57,14 +79,14 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
     const until = Option.isSome(args.until)
       ? yield* parseWhen('--until', args.until.value, now)
       : undefined;
-    const selection = yield* resolveServices(args, args.service);
+    const scope = yield* resolveErrorScope(args, args.service, args.source);
     const query = {
       since,
       until,
       levels: ['error', 'fatal'] as const,
       limit: ERROR_CAP,
     };
-    const fetchService = (entry: (typeof selection.entries)[number]) =>
+    const fetchLogs = (entry: (typeof scope.entries)[number]) =>
       Effect.gen(function* () {
         const built = yield* entry.build;
         const page = yield* built.source.logs({
@@ -72,36 +94,82 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
           levels: [...query.levels],
         });
         return { name: entry.name, ...built, page };
-      });
-    const outcomes = yield* Effect.forEach(
-      selection.entries,
-      (entry) =>
-        fetchService(entry).pipe(
-          Effect.map((service) => ({ _tag: 'fetched' as const, service })),
-          Effect.catch((error) =>
-            Effect.succeed({
-              _tag: 'failed' as const,
-              name: entry.name,
-              error,
-            }),
+      }).pipe(
+        Effect.map((service) => ({ _tag: 'fetched' as const, service })),
+        Effect.catch(failed(entry.name)),
+      );
+    const scanTraces = Effect.gen(function* () {
+      if (scope.traces === undefined) return [];
+      const traceScope = scope.traces;
+      const backendResult = yield* traceScope.backend.pipe(Effect.result);
+      if (backendResult._tag === 'Failure') {
+        return [
+          {
+            _tag: 'failed' as const,
+            label: 'tracing',
+            error: backendResult.failure,
+          },
+        ];
+      }
+      const backend = backendResult.success;
+      const getTrace = memoizeGetTrace(backend);
+      return yield* Effect.forEach(
+        traceScope.services,
+        (service) =>
+          scanTraceErrors({
+            backend,
+            getTrace,
+            service: service.name,
+            otelService: service.otelService,
+            since,
+            until: until ?? now,
+            maxErrorTraces: ERROR_TRACE_CAP,
+            scanCap: TRACE_SCAN_CAP,
+            pageSize: TRACE_SCAN_PAGE,
+          }).pipe(
+            Effect.map((scan) => ({
+              _tag: 'scanned' as const,
+              name: service.name,
+              scan,
+            })),
+            Effect.catch(failed(`${service.name} (traces)`)),
           ),
-        ),
-      { concurrency: SERVICE_CONCURRENCY },
+        { concurrency: SERVICE_CONCURRENCY },
+      );
+    });
+
+    const [logOutcomes, traceOutcomes] = yield* Effect.all(
+      [
+        Effect.forEach(scope.entries, fetchLogs, {
+          concurrency: SERVICE_CONCURRENCY,
+        }),
+        scanTraces,
+      ],
+      { concurrency: 2 },
     );
-    const only = outcomes[0];
+    const outcomes = [...logOutcomes, ...traceOutcomes];
+    const single = outcomes[0];
     // One service has nothing to degrade to: its error keeps its own message and exit code.
-    if (outcomes.length === 1 && only?._tag === 'failed') {
-      return yield* Effect.fail(only.error);
+    if (outcomes.length === 1 && single?._tag === 'failed') {
+      return yield* Effect.fail(single.error);
     }
-    const fetched = outcomes.flatMap((o) =>
+    const fetched = logOutcomes.flatMap((o) =>
       o._tag === 'fetched' ? [o.service] : [],
     );
-    const failures = outcomes.flatMap((o) => (o._tag === 'failed' ? [o] : []));
+    const scanned = traceOutcomes.flatMap((o) =>
+      o._tag === 'scanned' ? [o] : [],
+    );
+    const failures: ReadonlyArray<Failure> = outcomes.flatMap((o) =>
+      o._tag === 'failed' ? [o] : [],
+    );
 
     const partialServices = new Set(
       fetched
         .filter((service) => service.page.next !== undefined)
         .map((service) => service.name),
+    );
+    const partialTraceServices = new Set(
+      scanned.filter((o) => o.scan.partial).map((o) => o.name),
     );
     const environments = new Map(
       fetched.map((service) => [service.name, service.target] as const),
@@ -110,8 +178,34 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
       (service) => service.page.records,
     );
     const mode = outputMode(args.json);
-    const groups = groupErrors(records);
+    const groups = [
+      ...groupErrors(records),
+      ...scanned.flatMap((o) => o.scan.groups),
+    ].sort(byFrequency);
+    const globalFlags = [
+      ['project', Option.getOrUndefined(args.project)],
+      ['config', Option.getOrUndefined(args.config)],
+    ] as const;
     for (const group of groups) {
+      if (group.source === 'traces') {
+        const traceId = group.traceId;
+        if (traceId === undefined) {
+          throw new Error(
+            `trace error group "${group.fingerprint}" has no trace`,
+          );
+        }
+        yield* emitRecord(
+          mode,
+          {
+            ...group,
+            provider: 'jaeger',
+            hint: commandLine('trace', [traceId], globalFlags),
+            partial: partialTraceServices.has(group.service),
+          } satisfies ErrorGroupRecord,
+          formatGroup,
+        );
+        continue;
+      }
       const target = environments.get(group.service);
       if (target === undefined) {
         throw new Error(`error group for unknown service "${group.service}"`);
@@ -141,33 +235,54 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
         formatGroup,
       );
     }
-    if (groups.length === 0 && fetched.length > 0) {
-      const scope =
-        fetched.length === 1
+    if (groups.length === 0 && fetched.length + scanned.length > 0) {
+      const names = [
+        ...new Set([
+          ...fetched.map((service) => service.name),
+          ...scanned.map((o) => o.name),
+        ]),
+      ];
+      const detail =
+        fetched.length === 1 && scanned.length === 0
           ? `${fetched[0]?.target.service} (${fetched[0]?.target.provider}, ${fetched[0]?.target.environment})`
-          : fetched.map((service) => service.name).join(', ');
+          : names.join(', ');
       const retention = fetched
         .map((service) => retentionNoteFor(service.source, since, now))
         .find((note) => note !== undefined);
+      const what =
+        scanned.length === 0
+          ? 'error logs'
+          : fetched.length === 0
+            ? 'error spans'
+            : 'errors';
       yield* emptyNotice(
-        'error logs',
-        `for ${scope} since ${since.toISOString()}`,
+        what,
+        `for ${detail} since ${since.toISOString()}`,
         retention,
       );
     }
+    const labelled =
+      scope.entries.length + (scope.traces?.services.length ?? 0) > 1;
     for (const service of fetched) {
       if (!partialServices.has(service.name)) continue;
-      const prefix = selection.entries.length === 1 ? '' : `${service.name}: `;
+      const prefix = labelled ? `${service.name}: ` : '';
       yield* Console.error(
         `note: ${prefix}hit the ${ERROR_CAP}-log cap; counts are partial (newest ${ERROR_CAP} error logs only). Narrow --since for exact counts.`,
+      );
+    }
+    for (const outcome of scanned) {
+      if (!outcome.scan.partial) continue;
+      const prefix = labelled ? `${outcome.name} (traces): ` : '';
+      yield* Console.error(
+        `note: ${prefix}read ${outcome.scan.errorTraces} error traces out of ${outcome.scan.scanned} scanned and older ones remain unread (caps per service: ${ERROR_TRACE_CAP} error traces, ${TRACE_SCAN_CAP} scanned); counts are partial (newest first). Narrow --since for exact counts.`,
       );
     }
     for (const failure of failures) {
       const rendered = renderError(failure.error);
       yield* Console.error(
         rendered.hint === undefined
-          ? `error: ${failure.name}: ${rendered.message}`
-          : `error: ${failure.name}: ${rendered.message}\nhint: ${rendered.hint}`,
+          ? `error: ${failure.label}: ${rendered.message}`
+          : `error: ${failure.label}: ${rendered.message}\nhint: ${rendered.hint}`,
       );
     }
     if (failures.length > 0) {

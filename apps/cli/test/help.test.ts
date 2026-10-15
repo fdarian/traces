@@ -16,7 +16,13 @@ import {
   renderCommandHelp,
   resolveHelpRequest,
 } from '#/help.ts';
-import { DEPLOYS_LIMIT, ERROR_CAP, LOGS_LIMIT } from '#/limits.ts';
+import {
+  DEPLOYS_LIMIT,
+  ERROR_CAP,
+  ERROR_TRACE_CAP,
+  LOGS_LIMIT,
+  TRACE_SCAN_CAP,
+} from '#/limits.ts';
 import { plainWhenPiped } from '#/output.ts';
 
 const OPTIONS: Record<CommandName, Record<string, unknown>> = {
@@ -98,6 +104,17 @@ describe('command help', () => {
       renderCommandHelp(name).replace(/\s+/g, ' ');
     expect(flat('logs')).toContain('only shows up with --http');
     expect(flat('errors')).toContain('counts are partial');
+  });
+
+  test('errors help documents --source, trace groups and both caps', () => {
+    const text = renderCommandHelp('errors').replace(/\s+/g, ' ');
+    expect(text).toContain('--source <logs|traces>');
+    expect(text).toContain('traces trace <traceId>');
+    expect(text).toContain(`At most ${ERROR_TRACE_CAP} error traces`);
+    expect(text).toContain(`${TRACE_SCAN_CAP} traces are read`);
+    expect(HELP_TEXT).toContain(
+      `fetches at most ${ERROR_TRACE_CAP} error traces per service`,
+    );
   });
 });
 
