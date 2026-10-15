@@ -230,11 +230,12 @@ export const COMMAND_HELP = {
       },
     ],
     output:
-      'one group per line: fingerprint, service, count, firstSeen, lastSeen, deploymentIds, sample (full message of the first occurrence), provider, environment, hint, partial. `hint` is a ready-to-run `traces logs ... --grep` command for that group.',
+      'one group per line: fingerprint, service, count, firstSeen, lastSeen, deploymentIds, sample (full message of the first occurrence), traceId (optional; from the first record that has one), provider, environment, hint, partial. `hint` is a ready-to-run `traces logs ... --grep` command for that group.',
     notes: [
-      'Without a service, every service of the project is covered and each group keeps its `service`.',
+      'Without a service, every service of the project is covered (fetched concurrently); each group keeps its `service` and all groups are sorted by count.',
+      'If one service fails (auth, provider error) while the others succeed, the successful groups are still printed, stderr gets `error: <service>: ...` per failed service, and the exit code is 1.',
       'Messages are grouped by their first line with ids, hex, quoted strings and numbers collapsed.',
-      `At most ${ERROR_CAP} error logs are read. When the cap is hit, counts are partial (newest ${ERROR_CAP} only): every group has \`partial: true\` and stderr says so. Narrow --since for exact counts.`,
+      `At most ${ERROR_CAP} error logs are read. When the cap is hit, counts are partial (newest ${ERROR_CAP} only): every group of that service has \`partial: true\` and stderr says so (the cap is per service). Narrow --since for exact counts.`,
       EMPTY_NOTE,
       'Vercel: only logged errors are counted; 5xx responses without a log line are not (see `traces logs --http`).',
     ],
@@ -393,6 +394,7 @@ const TOP_LEVEL = (): string =>
     '  global flags: ' + GLOBAL_FLAGS.map((flag) => flag.usage).join('  '),
     '',
     'RECIPES',
+    '  what is failing anywhere  traces errors --since 1d   (all services, one list)',
     '  why is prod 500ing        traces errors api --since 1h',
     '                            traces logs api --level error --grep "<sample from above>"',
     '                            traces logs api --http --level error     (5xx requests)',
