@@ -9,6 +9,7 @@ import { errorsCommand } from '#/commands/errors.ts';
 import { logsCommand } from '#/commands/logs.ts';
 import { secretCommand } from '#/commands/secret.ts';
 import { servicesCommand } from '#/commands/services.ts';
+import { spansCommand } from '#/commands/spans.ts';
 import { UsageError } from '#/errors.ts';
 import {
   COMMAND_NAMES,
@@ -32,6 +33,7 @@ const root = Command.make('traces').pipe(
     logsCommand,
     deploysCommand,
     errorsCommand,
+    spansCommand,
     secretCommand,
   ]),
 );

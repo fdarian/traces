@@ -1,6 +1,8 @@
 import {
   type Deployment,
   InvalidCursor,
+  JaegerBadResponse,
+  JaegerUnreachable,
   type LogRecord,
   type Provider,
   ProviderAuthError,
@@ -9,6 +11,8 @@ import {
   ProviderResponseInvalid,
   stripAnsi,
   TraceBackendUnauthorized,
+  TraceErrorCountsUnavailable,
+  type TraceRow,
 } from '@traces/core';
 import { Console, Effect, Schema } from 'effect';
 import { CliError, CliOutput } from 'effect/cli';
@@ -75,6 +79,14 @@ export const formatLogLine = (record: LogRecord, withDate: boolean): string => {
   const lines = record.message.split('\n');
   const head = `${formatTime(record.ts, withDate)} ${record.level.toUpperCase().padEnd(5)} ${record.service}${deployment}${trace} ${lines.slice(0, 1).join('')}`;
   return [head, ...lines.slice(1).map((line) => `    ${line}`)].join('\n');
+};
+
+export const formatTraceLine = (row: TraceRow, withDate: boolean): string => {
+  const errors =
+    row.errorSpanCount === undefined || row.errorSpanCount === 0
+      ? ''
+      : ` ERR×${row.errorSpanCount}`;
+  return `${formatTime(row.startTs, withDate)} ${row.durationMs}ms${errors} ${row.rootService} ${row.rootOperation}  ${shortId(row.traceId)}…`;
 };
 
 export const formatDeploymentLine = (deployment: Deployment): string => {
@@ -214,6 +226,27 @@ export const renderError = (error: unknown): RenderedError => {
       message: `tracing backend rejected the credentials (HTTP ${error.status})`,
       hint: 'check the secret behind the tracing headers: `traces services` shows each one; reset with `traces secret set <name>`',
       code: EXIT_CODES.auth,
+    };
+  }
+  if (error instanceof JaegerUnreachable) {
+    return {
+      message: `tracing backend unreachable: ${causeMessage(error.cause)}`,
+      hint: 'check tracing.url in the config and the network; `traces services` shows the URL',
+      code: EXIT_CODES.runtime,
+    };
+  }
+  if (error instanceof JaegerBadResponse) {
+    return {
+      message: `tracing backend returned an unexpected response: ${causeMessage(error.cause)}`,
+      hint: 'the URL may not point at a Jaeger v2 query service (/api/v3)',
+      code: EXIT_CODES.runtime,
+    };
+  }
+  if (error instanceof TraceErrorCountsUnavailable) {
+    return {
+      message: `the tracing backend reports no error span counts (trace ${shortId(error.traceId)}), so --errors cannot filter`,
+      hint: 'drop --errors and look for ERR in the output, or use `traces trace <id>` on a suspect trace',
+      code: EXIT_CODES.runtime,
     };
   }
   if (error instanceof InvalidCursor) {
