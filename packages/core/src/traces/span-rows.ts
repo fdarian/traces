@@ -31,7 +31,7 @@ export const SpanRow = Schema.Struct({
   statusMessage: Schema.optional(Schema.String),
   attrs: Schema.Record(Schema.String, Schema.Unknown),
   events: Schema.Array(SpanEventRow),
-  /** Copied from the first exception event, which also stays in `events`. */
+  /** Moved out of the first exception event, so `events` does not repeat the stacktrace; later exception events stay. */
   exception: Schema.optional(SpanException),
 });
 export type SpanRow = typeof SpanRow.Type;
@@ -43,6 +43,9 @@ const toRecord = (attributes: ReadonlyArray<AttributeValue>) =>
 
 const toSpanRow = (span: Span, depth: number): SpanRow => {
   const exception = extractExceptionInfo(span.events)[0];
+  const promotedIndex = span.events.findIndex(
+    (event) => event.name === 'exception',
+  );
   return {
     traceId: span.traceId,
     spanId: span.spanId,
@@ -60,11 +63,13 @@ const toSpanRow = (span: Span, depth: number): SpanRow => {
       ? {}
       : { statusMessage: span.status.message }),
     attrs: toRecord(span.attributes),
-    events: span.events.map((event) => ({
-      name: event.name,
-      ts: new Date(event.timestamp).toISOString(),
-      attrs: toRecord(event.attributes),
-    })),
+    events: span.events
+      .filter((_, index) => index !== promotedIndex)
+      .map((event) => ({
+        name: event.name,
+        ts: new Date(event.timestamp).toISOString(),
+        attrs: toRecord(event.attributes),
+      })),
     ...(exception === undefined
       ? {}
       : {
