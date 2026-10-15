@@ -164,11 +164,13 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
           scanCap: TRACE_SCAN_CAP,
           pageSize: TRACE_SCAN_PAGE,
           resume: resumed?.resume,
+          mode: resumed?.mode,
           fetchPage,
         }).pipe(
           Effect.map((scan) => ({
             traces: scan.matches,
             next: scan.next,
+            mode: scan.mode,
             capped: scan.capped,
             scanned: scan.scanned,
           })),
@@ -181,6 +183,7 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
           Effect.map((page) => ({
             traces: page.kept,
             next: page.next,
+            mode: undefined,
             capped: false,
             scanned: page.kept.length,
           })),
@@ -227,7 +230,10 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
             ['errors', args.errors],
             ...args.attr.map((pair) => ['attr', pair] as const),
             ['limit', String(args.limit)],
-            ['cursor', encodeCursor(toTraceCursor(since, result.next))],
+            [
+              'cursor',
+              encodeCursor(toTraceCursor(since, result.next, result.mode)),
+            ],
           ],
         )}`,
       );

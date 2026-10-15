@@ -4,6 +4,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { legacyTraceOf, matchesLegacyTags } from './legacy-jaeger.ts';
 
 const BASE_NANO = 1_791_800_000_000_000_000n;
 const INDEXES = [0, 1, 2, 3];
@@ -134,7 +135,10 @@ beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'traces-errors-'));
   server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://fake');
-    const service = url.searchParams.get('query.service_name') ?? undefined;
+    const legacy = url.pathname === '/proxy/api/traces';
+    const service =
+      url.searchParams.get(legacy ? 'service' : 'query.service_name') ??
+      undefined;
     seen.push({
       service,
       apiKey:
@@ -142,20 +146,31 @@ beforeAll(async () => {
           ? null
           : String(request.headers['x-api-key']),
     });
-    if (url.pathname === '/proxy/api/v3/trace-summaries') {
+    if (legacy || url.pathname === '/proxy/api/v3/trace-summaries') {
       if (service === failingService) {
         response.writeHead(500).end('boom');
         return;
       }
-      const max =
-        BigInt(Date.parse(url.searchParams.get('query.start_time_max') ?? '')) *
-        1_000_000n;
-      const summaries = INDEXES.map(summaryOf).filter(
-        (summary) => BigInt(summary.minStartTimeUnixNano) <= max,
-      );
+      const max = legacy
+        ? BigInt(url.searchParams.get('end') ?? '0') * 1000n
+        : BigInt(
+            Date.parse(url.searchParams.get('query.start_time_max') ?? ''),
+          ) * 1_000_000n;
+      const summaries = INDEXES.map(summaryOf)
+        .filter((summary) => BigInt(summary.minStartTimeUnixNano) <= max)
+        .filter(
+          (summary) =>
+            !legacy || matchesLegacyTags(summary, url.searchParams.get('tags')),
+        );
       response
         .writeHead(200, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ summaries }));
+        .end(
+          JSON.stringify(
+            legacy
+              ? { data: summaries.map(legacyTraceOf), errors: null }
+              : { summaries },
+          ),
+        );
       return;
     }
     const match = /\/proxy\/api\/v3\/traces\/(\w+)$/.exec(url.pathname);

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { Effect } from 'effect';
 import { formatTraceLine } from '#/output.ts';
 import { parseDuration } from '#/time.ts';
+import { legacyTraceOf, matchesLegacyTags } from './legacy-jaeger.ts';
 
 const BASE_NANO = 1_791_800_000_000_000_000n;
 const ERROR_INDEXES = [2, 5, 6, 9, 11];
@@ -14,30 +15,33 @@ const ERROR_INDEXES = [2, 5, 6, 9, 11];
 const nanoIso = (nanos: bigint) =>
   `${new Date(Number(nanos / 1_000_000n)).toISOString().slice(0, -1)}${String(nanos % 1_000_000n).padStart(6, '0')}Z`;
 
-/** Trace `index` starts `index` seconds after BASE_NANO, so a higher index is newer. */
-const fakeTraces = Array.from({ length: 12 }, (_, index) => {
+const traceAt = (index: number, traceId: string, errorSpanCount: number) => {
   const start = BASE_NANO + BigInt(index) * 1_000_000_000n;
   return {
-    traceId: `${String(index).padStart(2, '0')}`.repeat(16),
+    traceId,
     rootServiceName: 'mockingbird-web',
     rootOperationName: 'GET /api/x',
     spanCount: 3,
-    ...(ERROR_INDEXES.includes(index)
-      ? { errorSpanCount: 2 }
-      : { errorSpanCount: 0 }),
+    errorSpanCount,
     services: [{ name: 'mockingbird-web', spanCount: 3 }],
     minStartTimeUnixNano: start.toString(),
     maxEndTimeUnixNano: (start + 412_000_000n).toString(),
   };
-});
+};
+
+/** Trace `index` starts `index` seconds after BASE_NANO, so a higher index is newer. */
+const fakeTraces = Array.from({ length: 12 }, (_, index) =>
+  traceAt(
+    index,
+    `${String(index).padStart(2, '0')}`.repeat(16),
+    ERROR_INDEXES.includes(index) ? 2 : 0,
+  ),
+);
 
 /** 1100 error-free traces, newest first by index, so a scan reaches its cap without finding an error. */
-const quietTraces = Array.from({ length: 1100 }, (_, index) => ({
-  ...fakeTraces[0],
-  traceId: index.toString(16).padStart(32, '0'),
-  errorSpanCount: 0,
-  minStartTimeUnixNano: (BASE_NANO + BigInt(index) * 1_000_000_000n).toString(),
-}));
+const quietTraces = Array.from({ length: 1100 }, (_, index) =>
+  traceAt(index, index.toString(16).padStart(32, '0'), 0),
+);
 
 interface SeenRequest {
   readonly pathname: string;
@@ -87,21 +91,35 @@ beforeAll(async () => {
       response.writeHead(401).end('no');
       return;
     }
-    if (url.pathname !== '/proxy/api/v3/trace-summaries') {
+    const legacy = url.pathname === '/proxy/api/traces';
+    if (!legacy && url.pathname !== '/proxy/api/v3/trace-summaries') {
       response.writeHead(404).end('not found');
       return;
     }
-    const max = params['query.start_time_max'] ?? '';
-    const asked = Number(params['query.num_traces'] ?? '20');
+    const max = legacy
+      ? nanoIso(BigInt(params.end ?? '0') * 1000n)
+      : (params['query.start_time_max'] ?? '');
+    const asked = Number(
+      (legacy ? params.limit : params['query.num_traces']) ?? '20',
+    );
     const summaries = (quietBacklog ? quietTraces : fakeTraces)
       .filter((trace) => nanoIso(BigInt(trace.minStartTimeUnixNano)) <= max)
+      .filter(
+        (trace) => !legacy || matchesLegacyTags(trace, params.tags ?? null),
+      )
       .sort((left, right) =>
         right.minStartTimeUnixNano.localeCompare(left.minStartTimeUnixNano),
       )
       .slice(0, asked);
     response
       .writeHead(200, { 'content-type': 'application/json' })
-      .end(JSON.stringify({ summaries }));
+      .end(
+        JSON.stringify(
+          legacy
+            ? { data: summaries.map(legacyTraceOf), errors: null }
+            : { summaries },
+        ),
+      );
   });
   await new Promise<void>((resolve) => server.listen(0, resolve));
 });
@@ -211,6 +229,9 @@ describe('traces spans against a fake Jaeger', () => {
     const first = await run([...WINDOW, '--errors', '--limit', '2'], config);
     expect(idsOf(first.rows)).toEqual(['09', '11']);
     expect(first.more).toContain('--errors');
+    expect(
+      JSON.parse(Buffer.from(first.cursor ?? '', 'base64url').toString()).mode,
+    ).toBe('filtered');
     const second = await run(
       [...WINDOW, '--errors', '--limit', '2', '--cursor', first.cursor ?? ''],
       config,
@@ -221,6 +242,10 @@ describe('traces spans against a fake Jaeger', () => {
       config,
     );
     expect(idsOf(third.rows)).toEqual(['02']);
+    // A resumed page keeps asking Jaeger to filter instead of rerunning the unfiltered fallback.
+    expect(
+      seen.every((request) => request.pathname === '/proxy/api/traces'),
+    ).toBe(true);
   });
 
   test('passes op, durations and attributes to Jaeger', async () => {
@@ -239,10 +264,11 @@ describe('traces spans against a fake Jaeger', () => {
     ]);
     expect(result.code).toBe(0);
     const params = seen[0]?.params ?? {};
-    expect(params['query.operation_name']).toBe('GET /api/x');
-    expect(params['query.duration_min']).toBe('1s');
-    expect(params['query.duration_max']).toBe('2m');
-    expect(JSON.parse(params['query.attributes'] ?? '{}')).toEqual({
+    expect(seen[0]?.pathname).toBe('/proxy/api/traces');
+    expect(params.operation).toBe('GET /api/x');
+    expect(params.minDuration).toBe('1s');
+    expect(params.maxDuration).toBe('2m');
+    expect(JSON.parse(params.tags ?? '{}')).toEqual({
       'http.status_code': '500',
       tenant: 'a=b',
     });

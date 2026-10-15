@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Effect } from 'effect';
 import {
   decodeCursor,
+  type ErrorScanMode,
   encodeCursor,
   errorSearchAttributes,
   fromTraceCursor,
@@ -144,6 +145,7 @@ describe('trace cursor', () => {
     const decoded = await Effect.runPromise(decodeCursor(encodeCursor(cursor)));
     const resumed = await Effect.runPromise(fromTraceCursor(decoded));
     expect(resumed.since).toEqual(since);
+    expect(resumed.mode).toBeUndefined();
     expect(resumed.resume).toEqual({
       before: '2026-10-12T00:25:58.664085257Z',
       seen: ['abc'],
@@ -154,6 +156,20 @@ describe('trace cursor', () => {
       ),
     );
     expect(wrong._tag).toBe('Failure');
+  });
+
+  test('carries the scan mode', async () => {
+    const next = { before: '2026-10-12T00:25:58.664085257Z', seen: [] };
+    for (const mode of ['filtered', 'client'] as const) {
+      const decoded = await Effect.runPromise(
+        decodeCursor(
+          encodeCursor(toTraceCursor(new Date('2026-10-12'), next, mode)),
+        ),
+      );
+      expect((await Effect.runPromise(fromTraceCursor(decoded))).mode).toBe(
+        mode,
+      );
+    }
   });
 });
 
@@ -166,6 +182,7 @@ describe('scanErrorTraces', () => {
       pageSize?: number;
       resume?: PageResume;
       errorFilter?: 'honors' | 'empty' | 'ignores';
+      mode?: ErrorScanMode;
     },
   ) => {
     const jaeger = fakeJaeger(store, options.errorFilter);
@@ -177,6 +194,7 @@ describe('scanErrorTraces', () => {
           scanCap: options.scanCap ?? 1000,
           pageSize: options.pageSize ?? 4,
           resume: options.resume,
+          mode: options.mode,
           fetchPage: jaeger.fetchPage,
         }),
       ),
@@ -251,6 +269,51 @@ describe('scanErrorTraces', () => {
     expect(
       run.jaeger.requests.map((request) => request.serverFiltered),
     ).toEqual([true, false, false, false]);
+  });
+
+  test('reports the mode that produced the cursor', async () => {
+    const honored = await scan(store, {
+      limit: 1,
+      errorFilter: 'honors',
+    }).run;
+    expect(honored.mode).toBe('filtered');
+    expect(honored.next).toBeDefined();
+    const fellBack = await scan(store, {
+      limit: 1,
+      errorFilter: 'empty',
+    }).run;
+    expect(fellBack.mode).toBe('client');
+    expect(fellBack.next).toBeDefined();
+  });
+
+  test('a resumed filtered page that comes back empty does not fall back', async () => {
+    const run = scan(store, {
+      limit: 10,
+      errorFilter: 'empty',
+      mode: 'filtered',
+      resume: {
+        before: nanoToIso(store[1]?.startTimeUnixNano ?? ''),
+        seen: [],
+      },
+    });
+    const result = await run.run;
+    expect(result.matches).toEqual([]);
+    expect(result.mode).toBe('filtered');
+    expect(run.jaeger.requests).toHaveLength(1);
+  });
+
+  test('a resumed client page never asks Jaeger to filter', async () => {
+    const run = scan(store, {
+      limit: 10,
+      errorFilter: 'honors',
+      mode: 'client',
+    });
+    const result = await run.run;
+    expect(ids(result.matches)).toEqual(['t0002', 't0005', 't0006', 't0009']);
+    expect(result.mode).toBe('client');
+    expect(run.jaeger.requests.some((request) => request.serverFiltered)).toBe(
+      false,
+    );
   });
 
   test('a filter Jaeger ignores is not scanned twice', async () => {

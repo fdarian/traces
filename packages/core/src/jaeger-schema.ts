@@ -130,3 +130,43 @@ export const OtelTraceSummariesResultSchema = S.Struct({
 
 export type OtelTraceSummariesResult =
   typeof OtelTraceSummariesResultSchema.Type;
+
+// Jaeger's legacy `/api/traces` (the UI's API). The v3 HTTP gateway has no
+// attribute filter, so tag searches go through this one.
+export const JaegerLegacyTagSchema = S.Struct({
+  key: S.String,
+  value: S.Unknown,
+});
+
+export type JaegerLegacyTag = typeof JaegerLegacyTagSchema.Type;
+
+export const JaegerLegacySpanSchema = S.Struct({
+  traceID: S.String,
+  spanID: S.String,
+  operationName: S.String,
+  references: S.optional(
+    S.Array(S.Struct({ refType: S.String, spanID: S.String })),
+  ),
+  // Microseconds since the epoch.
+  startTime: S.Number,
+  duration: S.Number,
+  tags: S.optional(S.Array(JaegerLegacyTagSchema)),
+  processID: S.String,
+});
+
+export type JaegerLegacySpan = typeof JaegerLegacySpanSchema.Type;
+
+export const JaegerLegacyTraceSchema = S.Struct({
+  traceID: S.String,
+  spans: S.Array(JaegerLegacySpanSchema),
+  processes: S.Record(S.String, S.Struct({ serviceName: S.String })),
+});
+
+export type JaegerLegacyTrace = typeof JaegerLegacyTraceSchema.Type;
+
+export const JaegerLegacyTracesResultSchema = S.Struct({
+  data: S.Array(JaegerLegacyTraceSchema),
+});
+
+export type JaegerLegacyTracesResult =
+  typeof JaegerLegacyTracesResultSchema.Type;

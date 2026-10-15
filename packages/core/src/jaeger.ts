@@ -9,6 +9,9 @@ import {
   TraceNotFound,
 } from './errors.js';
 import {
+  type JaegerLegacySpan,
+  type JaegerLegacyTrace,
+  JaegerLegacyTracesResultSchema,
   OtelOperationsResultSchema,
   type OtelResourceSpan,
   OtelServicesResultSchema,
@@ -48,11 +51,34 @@ export function buildSearchParams(query: TraceQuery): URLSearchParams {
   if (query.maxDuration !== undefined) {
     params.append('query.duration_max', query.maxDuration);
   }
-  if (query.attributes !== undefined) {
-    params.append('query.attributes', JSON.stringify(query.attributes));
-  }
   if (query.limit !== undefined) {
     params.append('query.num_traces', query.limit.toString());
+  }
+  return params;
+}
+
+// Not in buildSearchParams: the v3 gateway ignores `query.attributes`
+// (jaeger v2.15.0 sets it to an empty map), so a tag search goes through the
+// legacy API, which takes the window in epoch microseconds.
+export function buildLegacySearchParams(query: TraceQuery): URLSearchParams {
+  const params = new URLSearchParams();
+  params.append('service', query.service);
+  if (query.operation !== undefined) {
+    params.append('operation', query.operation);
+  }
+  params.append('start', String(Date.parse(query.startTimeMin) * 1000));
+  params.append('end', String(Date.parse(query.startTimeMax) * 1000));
+  if (query.minDuration !== undefined) {
+    params.append('minDuration', query.minDuration);
+  }
+  if (query.maxDuration !== undefined) {
+    params.append('maxDuration', query.maxDuration);
+  }
+  if (query.attributes !== undefined) {
+    params.append('tags', JSON.stringify(query.attributes));
+  }
+  if (query.limit !== undefined) {
+    params.append('limit', query.limit.toString());
   }
   return params;
 }
@@ -182,6 +208,54 @@ export function mapTraceSummary(raw: OtelTraceSummary): TraceSummary {
     })),
     startTimeUnixNano,
     durationMs,
+  };
+}
+
+// Jaeger sets `error=true` on error spans; OTel ingestion also keeps the
+// status as `otel.status_code`.
+const isLegacyErrorSpan = (span: JaegerLegacySpan): boolean =>
+  (span.tags ?? []).some(
+    (tag) =>
+      (tag.key === 'error' && (tag.value === true || tag.value === 'true')) ||
+      (tag.key === 'otel.status_code' && tag.value === 'ERROR'),
+  );
+
+export function mapLegacyTrace(trace: JaegerLegacyTrace): TraceSummary {
+  const serviceOf = (span: JaegerLegacySpan) => {
+    const process = trace.processes[span.processID];
+    if (process === undefined) {
+      throw new Error(
+        `legacy trace ${trace.traceID}: span ${span.spanID} references unknown process ${span.processID}`,
+      );
+    }
+    return process.serviceName;
+  };
+  const root = trace.spans.find((span) => (span.references ?? []).length === 0);
+
+  const serviceMap: Map<string, number> = new Map();
+  let errorSpanCount = 0;
+  let minStartMicros = Number.POSITIVE_INFINITY;
+  let maxEndMicros = Number.NEGATIVE_INFINITY;
+  for (const span of trace.spans) {
+    const serviceName = serviceOf(span);
+    serviceMap.set(serviceName, (serviceMap.get(serviceName) ?? 0) + 1);
+    if (isLegacyErrorSpan(span)) errorSpanCount += 1;
+    minStartMicros = Math.min(minStartMicros, span.startTime);
+    maxEndMicros = Math.max(maxEndMicros, span.startTime + span.duration);
+  }
+
+  return {
+    traceId: trace.traceID,
+    rootService: root !== undefined ? serviceOf(root) : 'unknown',
+    rootOperation: root !== undefined ? root.operationName : 'unknown',
+    spanCount: trace.spans.length,
+    errorSpanCount,
+    services: Array.from(serviceMap.entries()).map(([name, spanCount]) => ({
+      name,
+      spanCount,
+    })),
+    startTimeUnixNano: (BigInt(minStartMicros) * 1000n).toString(),
+    durationMs: Math.floor((maxEndMicros - minStartMicros) / 1000),
   };
 }
 
@@ -386,6 +460,36 @@ function makeBackend(
     });
   };
 
+  const searchTracesViaLegacy = (
+    query: TraceQuery,
+  ): Effect.Effect<
+    ReadonlyArray<TraceSummary>,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    never
+  > => {
+    return Effect.gen(function* () {
+      const response = yield* makeRequest(
+        '/api/traces',
+        buildLegacySearchParams(query),
+      );
+      if (response.status !== 200) {
+        return yield* Effect.fail(
+          new JaegerBadResponse({
+            cause: new Error(
+              `legacy trace search answered ${response.status}: ${response.body.slice(0, 200)}`,
+            ),
+          }),
+        );
+      }
+      const parsed = yield* parseJson(response.body);
+      const validated = yield* validate(JaegerLegacyTracesResultSchema, parsed);
+      return yield* Effect.try({
+        try: () => validated.data.map(mapLegacyTrace),
+        catch: (cause) => new JaegerBadResponse({ cause }),
+      });
+    });
+  };
+
   const searchTraces = (
     query: TraceQuery,
   ): Effect.Effect<
@@ -394,6 +498,9 @@ function makeBackend(
     never
   > => {
     return Effect.gen(function* () {
+      if (query.attributes !== undefined) {
+        return yield* searchTracesViaLegacy(query);
+      }
       const available = yield* Ref.get(summariesAvailable);
       if (!available) {
         return yield* searchTracesViaFullTraces(query);
