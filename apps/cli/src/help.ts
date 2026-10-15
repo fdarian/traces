@@ -66,11 +66,16 @@ const SERVICE_ARGUMENT = [
   'service name from the config; optional when the project has exactly one',
 ] as const;
 
+const ERRORS_SERVICE_ARGUMENT = [
+  'service',
+  'service name from the config; omit to cover all services of the project',
+] as const;
+
 const MORE_NOTE =
   'When older records exist, stderr gets `more: <full command with --cursor>`; run it for the next page.';
 
 const EMPTY_NOTE =
-  'An empty result exits 0 and prints a note with the provider retention window on stderr; past that window, empty does not mean "no errors".';
+  'An empty result exits 0 and says so on stderr. When the window starts past the shortest provider retention (Railway 3d, Vercel 1h), the note adds the retention caveat: past that window, empty does not mean "no errors".';
 
 export const COMMAND_HELP = {
   services: {
@@ -112,7 +117,8 @@ export const COMMAND_HELP = {
       {
         name: 'grep',
         usage: '--grep <text>',
-        description: 'only messages containing text, case-insensitive',
+        description:
+          'only messages containing text: a literal substring of the message, not a regex; attrs are not searched',
       },
       {
         name: 'deploy',
@@ -157,6 +163,10 @@ export const COMMAND_HELP = {
       'Vercel build logs: stderr lines are level error (tool warnings included); fatal events are fatal.',
       'Railway has no fatal level, so --level fatal alone matches nothing there.',
       '--cursor continues the original window; repeat the original flags exactly as the `more:` line prints them.',
+      '--grep is a literal substring match on the message only: it is not a regex and does not search attrs. Railway matches case-insensitively.',
+      '`ts` is the provider receive time. A timestamp the app emitted itself, when present, is in `attrs.timestamp`.',
+      'On a TTY, times are UTC with a Z suffix, and the date is prefixed when the window spans more than one day. JSON `ts` is always the full ISO timestamp.',
+      '-f prints `following <service> ...` once on stderr; stdout stays NDJSON.',
     ],
     examples: [
       'traces logs api --since 30m --level error',
@@ -190,8 +200,8 @@ export const COMMAND_HELP = {
       'Deployment per line: id, service, provider, environment, status (queued | building | deploying | ready | failed | canceled | crashed | removed | sleeping | unknown), rawStatus, createdAt, url?, commit? {sha, message?, branch?}.',
     notes: [
       MORE_NOTE,
-      'Commit info is optional: it is missing for deploys not triggered from a git push.',
-      "Did a fix deploy? Compare the newest `ready` deployment's sha with `git rev-parse HEAD`.",
+      '`commit` is absent when the provider did not record one, e.g. Railway deploys made from the CLI or from an image.',
+      "Did a fix deploy? Compare the newest `ready` deployment's sha with `git rev-parse HEAD`. Without a commit, compare its `createdAt` with the time of the push.",
       "Vercel lists the deployments of --env (default production); Railway lists the service's environment.",
     ],
     examples: [
@@ -204,7 +214,7 @@ export const COMMAND_HELP = {
     synopsis: 'traces errors [service] [flags]',
     summary:
       'Group error and fatal logs by fingerprint, most frequent first. Start here for "what is failing".',
-    arguments: [SERVICE_ARGUMENT],
+    arguments: [ERRORS_SERVICE_ARGUMENT],
     flags: [
       {
         name: 'since',
@@ -220,6 +230,7 @@ export const COMMAND_HELP = {
     output:
       'one group per line: fingerprint, service, count, firstSeen, lastSeen, deploymentIds, sample (full message of the first occurrence), provider, environment, hint, partial. `hint` is a ready-to-run `traces logs ... --grep` command for that group.',
     notes: [
+      'Without a service, every service of the project is covered and each group keeps its `service`.',
       'Messages are grouped by their first line with ids, hex, quoted strings and numbers collapsed.',
       `At most ${ERROR_CAP} error logs are read. When the cap is hit, counts are partial (newest ${ERROR_CAP} only): every group has \`partial: true\` and stderr says so. Narrow --since for exact counts.`,
       EMPTY_NOTE,
@@ -351,8 +362,9 @@ const TOP_LEVEL = (): string =>
     'RESOLUTION',
     "  The project is matched from the cwd's git remote (or path) against the config;",
     '  --project <name> overrides. The service is the positional argument, and may be',
-    '  omitted when the project has exactly one. Run `traces services` to see what',
-    '  matched and whether each provider is authenticated.',
+    '  omitted when the project has exactly one (`traces errors` without one covers all',
+    '  services). Global flags may come before the command. Run `traces services` to see',
+    '  what matched and whether each provider is authenticated.',
     '',
     'CONFIG  ~/.config/traces/config.json  ($XDG_CONFIG_HOME/traces/config.json, or --config <path>)',
     '  {',
@@ -369,8 +381,9 @@ const TOP_LEVEL = (): string =>
     '  }',
     '  matcher: {"type":"git","repo":"owner/repo"} or {"type":"path","path":"~/code/myapp"}',
     '  (path wins over git; longest path wins). Vercel "team" is optional (slug or id).',
-    '  Railway "environment" defaults to production. Auth: `railway login`; Vercel uses',
-    '  VERCEL_TOKEN or the token the `vercel login` CLI stored.',
+    '  Railway "service" and "environment" accept a name or an id; "environment" defaults to',
+    '  production. Auth: `railway login`; Vercel uses VERCEL_TOKEN or the token the',
+    '  `vercel login` CLI stored.',
     '',
     'COMMANDS  (details and examples: traces <command> --help)',
     ...indent(commandSummaries()),
@@ -381,7 +394,8 @@ const TOP_LEVEL = (): string =>
     '  why is prod 500ing        traces errors api --since 1h',
     '                            traces logs api --level error --grep "<sample from above>"',
     '                            traces logs api --http --level error     (5xx requests)',
-    '  did my fix deploy         traces deploys api   (compare the sha with: git rev-parse HEAD)',
+    '  did my fix deploy         traces deploys api   (compare the sha with: git rev-parse HEAD;',
+    '                            no commit shown: compare createdAt with the time of the push)',
     '  build failed              traces logs web --build',
     '  watch while reproducing   traces logs api -f',
     '  what happened at 14:05    traces logs api --since 2026-10-12T14:00:00Z --until 2026-10-12T14:10:00Z',
@@ -389,13 +403,17 @@ const TOP_LEVEL = (): string =>
     '  older than this page      run the command from the "more:" line',
     '  preview or staging        traces logs web --env preview / traces logs api --env staging',
     '',
+    'LIMITS',
+    `  logs --limit: default ${LOGS_LIMIT.default}, max ${LOGS_LIMIT.max} per page.  deploys --limit: default ${DEPLOYS_LIMIT.default}, max ${DEPLOYS_LIMIT.max} per page.`,
+    `  errors has no --limit: it reads at most ${ERROR_CAP} error logs per service.`,
+    '',
     'OUTPUT',
     '  stdout: compact lines on a TTY; NDJSON when piped or with --json (one record per',
     '  line: LogRecord, Deployment, or error group; fields are stable). When older records',
     '  exist, stderr gets "more: <full command with --cursor>". Errors are one stderr line',
-    '  plus a "hint:" line. Empty results print a note (with the retention caveat) on',
-    '  stderr and exit 0. Exit codes: 0 ok, 1 runtime/provider error, 2 usage/config',
-    '  error, 3 auth error.',
+    '  plus a "hint:" line (parse errors too, with no usage block). Empty results print a',
+    '  note on stderr, with the retention caveat when the window starts past it, and exit 0.',
+    '  Exit codes: 0 ok, 1 runtime/provider error, 2 usage/config error, 3 auth error.',
     '',
     'RETENTION',
     '  Railway keeps logs 3d (Free), 7d (Hobby), 30d (Pro). Vercel runtime logs: 1h (Hobby),',
