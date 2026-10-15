@@ -170,12 +170,20 @@ const fakeBackend = (
   traces: ReadonlyArray<Trace>,
 ) => {
   const fetched: Array<string> = [];
-  const searches: Array<{ service: string; limit: number | undefined }> = [];
+  const searches: Array<{
+    service: string;
+    limit: number | undefined;
+    attributes: Record<string, string> | undefined;
+  }> = [];
   const backend: TraceBackendInterface = {
     listServices: Effect.succeed([]),
     listOperations: () => Effect.succeed([]),
     searchTraces: (query) => {
-      searches.push({ service: query.service, limit: query.limit });
+      searches.push({
+        service: query.service,
+        limit: query.limit,
+        attributes: query.attributes,
+      });
       const bound = BigInt(Date.parse(query.startTimeMax)) * 1_000_000n;
       return Effect.succeed(
         summaries
@@ -238,6 +246,44 @@ describe('scanTraceErrors', () => {
     expect(fake.searches.every((s) => s.service === 'mockingbird-web')).toBe(
       true,
     );
+  });
+
+  test('asks Jaeger for error traces first and falls back to the unfiltered window when it answers nothing', async () => {
+    const fake = fakeBackend(
+      [summary(1, 1)],
+      [trace(1, [errorSpan(1, 'mockingbird-web')])],
+    );
+    const filteredSearch = fake.backend.searchTraces;
+    const backend = {
+      ...fake.backend,
+      searchTraces: (query: Parameters<typeof filteredSearch>[0]) =>
+        query.attributes === undefined
+          ? filteredSearch(query)
+          : Effect.succeed([]),
+    };
+    const result = await Effect.runPromise(
+      scanTraceErrors({
+        backend,
+        ...SCOPE,
+        ...window,
+        maxErrorTraces: 200,
+        scanCap: 1000,
+        pageSize: 4,
+      }),
+    );
+    expect(result.errorTraces).toBe(1);
+    expect(fake.searches.map((search) => search.attributes)).toEqual([
+      undefined,
+    ]);
+  });
+
+  test('sends the error filter on the first search', async () => {
+    const fake = fakeBackend(
+      [summary(1, 1)],
+      [trace(1, [errorSpan(1, 'mockingbird-web')])],
+    );
+    await scan(fake);
+    expect(fake.searches[0]?.attributes).toEqual({ error: 'true' });
   });
 
   test('stops at the error-trace cap and says older ones were left', async () => {
