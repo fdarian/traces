@@ -53,6 +53,65 @@ describe('coalesceMultiline', () => {
     );
   });
 
+  test('moves a Bun source snippet below the error line that follows it', () => {
+    const groups = groupErrors(
+      coalesceMultiline([
+        line('370 | status: 404,', 0),
+        line('371 | });', 1),
+        line('error: Not found', 2),
+        line('      at handler (a.ts:1:2)', 3),
+      ]),
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.sample).toBe(
+      'error: Not found\n370 | status: 404,\n371 | });\n      at handler (a.ts:1:2)',
+    );
+    expect(groups[0]?.fingerprint).toBe(
+      groupErrors([line('error: Not found', 0)])[0]?.fingerprint,
+    );
+  });
+
+  test('skips object fields that sorted ahead of the headline', () => {
+    const [event] = coalesceMultiline([
+      line('  INDEX_SIZE_ERR: 1,', 0),
+      line('Request failed {', 0),
+      line('}', 1),
+    ]);
+    expect(event?.message).toBe('Request failed {\n  INDEX_SIZE_ERR: 1,\n}');
+  });
+
+  test.each([
+    ['  indented'],
+    ['}'],
+    [']'],
+    ['at frame (a.ts:1:2)'],
+    ['12 | const x = 1;'],
+  ])('%j is a continuation, not a headline', (continuation) => {
+    const [event] = coalesceMultiline([line(continuation, 0), line('Boom', 1)]);
+    expect(event?.message).toBe(`Boom\n${continuation}`);
+  });
+
+  test('keeps the first line when every line is a continuation', () => {
+    const [event] = coalesceMultiline([
+      line('    at a', 0),
+      line('}', 1),
+      line('12 | x', 2),
+    ]);
+    expect(event?.message).toBe('    at a\n}\n12 | x');
+  });
+
+  test('picks the headline before capping the message', () => {
+    const [event] = coalesceMultiline([
+      ...Array.from({ length: 25 }, (_, index) =>
+        line(`  field${index}`, index),
+      ),
+      line('Real headline', 26),
+    ]);
+    const lines = event?.message.split('\n') ?? [];
+    expect(lines[0]).toBe('Real headline');
+    expect(lines).toHaveLength(20);
+  });
+
   test('chains on the previous record, not the first, and splits past the gap', () => {
     const events = coalesceMultiline([
       line('a', 0),
