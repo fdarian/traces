@@ -13,6 +13,7 @@ import {
   renderCommandHelp,
   resolveHelpRequest,
 } from '#/help.ts';
+import { DEPLOYS_LIMIT, ERROR_CAP, LOGS_LIMIT } from '#/limits.ts';
 import { plainWhenPiped } from '#/output.ts';
 
 const OPTIONS: Record<CommandName, Record<string, unknown>> = {
@@ -70,6 +71,16 @@ describe('command help', () => {
       }
     }
     expect(HELP_TEXT.split('\n').length).toBeLessThan(100);
+  });
+
+  test('the top-level help states the --limit defaults and caps', () => {
+    expect(HELP_TEXT).toContain(
+      `logs --limit: default ${LOGS_LIMIT.default}, max ${LOGS_LIMIT.max}`,
+    );
+    expect(HELP_TEXT).toContain(
+      `deploys --limit: default ${DEPLOYS_LIMIT.default}, max ${DEPLOYS_LIMIT.max}`,
+    );
+    expect(HELP_TEXT).toContain(`at most ${ERROR_CAP} error logs per service`);
   });
 
   test('logs help carries the Vercel 5xx caveat and errors help the partial-count caveat', () => {
