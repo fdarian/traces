@@ -10,6 +10,7 @@ import {
   DEFAULT_WINDOW,
   DEPLOYS_LIMIT,
   ERROR_CAP,
+  ERROR_TRACE_CAP,
   FOLLOW_INTERVAL_SECONDS,
   LOGS_LIMIT,
   SPANS_LIMIT,
@@ -219,10 +220,11 @@ export const COMMAND_HELP = {
     ],
   },
   errors: {
-    tagline: 'error/fatal logs grouped by fingerprint, most frequent first',
+    tagline:
+      'error logs and error spans grouped by fingerprint, most frequent first',
     synopsis: 'traces errors [service] [flags]',
     summary:
-      'Group error and fatal logs by fingerprint, most frequent first. Start here for "what is failing".',
+      'Group error and fatal logs, plus error spans from Jaeger when the project has `tracing`, by fingerprint, most frequent first. Start here for "what is failing".',
     arguments: [ERRORS_SERVICE_ARGUMENT],
     flags: [
       {
@@ -235,12 +237,20 @@ export const COMMAND_HELP = {
         usage: '--until <when>',
         description: 'window end, same formats (default now)',
       },
+      {
+        name: 'source',
+        usage: '--source <logs|traces>',
+        description:
+          'only log groups, or only trace groups (default: both; the trace side runs only when the project has `tracing`)',
+      },
     ],
     output:
-      'one group per line: fingerprint, service, count, firstSeen, lastSeen, deploymentIds, sample (full message of the first occurrence), traceId (optional; from the first record that has one), provider, environment, hint, partial. `hint` is a ready-to-run `traces logs ... --grep` command for that group.',
+      'one group per line: source (logs | traces), fingerprint, service, count, firstSeen, lastSeen, deploymentIds (always empty for trace groups), sample (full message of the first occurrence; `<exception type>: <message>` for traces), traceId (optional; the first record that carries one, or the newest sampled trace), traceIds (trace groups only: up to 3 distinct traces), provider (railway | vercel | jaeger), environment (absent for trace groups), hint, partial. `hint` is a ready-to-run `traces logs ... --grep` command for a log group and `traces trace <traceId>` for a trace group. On a TTY, trace groups carry a `[traces]` marker.',
     notes: [
-      'Without a service, every service of the project is covered (fetched concurrently); each group keeps its `service` and all groups are sorted by count. Trace-only services (no `provider`) are skipped; naming one explicitly exits 2.',
-      'If one service fails (auth, provider error) while the others succeed, the successful groups are still printed, stderr gets `error: <service>: ...` per failed service, and the exit code is 1.',
+      'Without a service, every service of the project is covered (fetched concurrently); each group keeps its `service` and all groups, log and trace, are sorted by count. A trace-only service (no `provider`) is skipped on the log side and taken by the trace side; naming one exits 2 when the trace side will not run (no `tracing`, or --source logs).',
+      "Trace groups: when the project has `tracing`, each service's `otelService` is searched in the window, the full trace of every trace with error spans is fetched, and the error spans of that service are fingerprinted like Issues do (exception type, normalized message and top in-app frame; an error span without an exception event groups by span name and status message). A log group and a trace group for the same failure stay separate; match them by the traceId.",
+      `At most ${ERROR_TRACE_CAP} error traces are fetched per service, newest first, and at most ${TRACE_SCAN_CAP} traces are read to find them. When either cap leaves older traces unread, every trace group of that service has \`partial: true\` and stderr says so. Narrow --since for exact counts.`,
+      'If one service fails (auth, provider error) while the others succeed, the successful groups are still printed, stderr gets `error: <service>: ...` per failed log service (`error: <service> (traces): ...` for the trace side, `error: tracing: ...` when the tracing secret or backend cannot be set up), and the exit code is 1.',
       'Messages are grouped by their first line with ids, hex, quoted strings and numbers collapsed.',
       `At most ${ERROR_CAP} error logs are read. When the cap is hit, counts are partial (newest ${ERROR_CAP} only): every group of that service has \`partial: true\` and stderr says so (the cap is per service). Narrow --since for exact counts.`,
       EMPTY_NOTE,
@@ -249,6 +259,8 @@ export const COMMAND_HELP = {
     examples: [
       'traces errors api --since 1h',
       'traces errors api --since 2d --json',
+      'traces errors --since 1d --source traces     # error spans only',
+      "traces errors --source traces --json | jq -r '.hint'   # trace commands to run",
     ],
   },
   spans: {
@@ -521,7 +533,7 @@ const TOP_LEVEL = (): string =>
     '  `vercel login` CLI stored.',
     '  "otelService" (optional, any service entry) is the Jaeger service name; it defaults to the',
     '  service key. An entry with only {"otelService": "x-data"} is trace-only: logs, deploys and',
-    '  the log side of errors reject it (exit 2).',
+    '  the log side of errors skip it (naming one there exits 2); the trace side of errors takes it.',
     '',
     'TRACING  (per project, optional; trace commands exit 2 without it)',
     '  "tracing": { "provider": "jaeger", "url": "https://host/optional/base/path",',
@@ -543,7 +555,8 @@ const TOP_LEVEL = (): string =>
     '  slow endpoint             traces spans web --min-duration 1s',
     "  failing log -> its trace  traces logs web --level error --json   (copy a record's traceId)",
     '                            traces trace <traceId>',
-    '  what is failing anywhere  traces errors --since 1d   (all services, one list)',
+    '  what is failing anywhere  traces errors --since 1d   (all services, logs and error spans, one list)',
+    "  error group -> its trace  traces errors --source traces --since 1d   (run a group's hint: traces trace <id>)",
     '  why is prod 500ing        traces errors api --since 1h',
     '                            traces logs api --level error --grep "<sample from above>"',
     '                            traces logs api --http --level error     (5xx requests)',
@@ -558,7 +571,7 @@ const TOP_LEVEL = (): string =>
     '',
     'LIMITS',
     `  logs --limit: default ${LOGS_LIMIT.default}, max ${LOGS_LIMIT.max} per page.  deploys --limit: default ${DEPLOYS_LIMIT.default}, max ${DEPLOYS_LIMIT.max} per page.`,
-    `  errors has no --limit: it reads at most ${ERROR_CAP} error logs per service.`,
+    `  errors has no --limit: it reads at most ${ERROR_CAP} error logs per service, and fetches at most ${ERROR_TRACE_CAP} error traces per service.`,
     '',
     'OUTPUT',
     '  stdout: compact lines on a TTY; NDJSON when piped or with --json (one record per',
