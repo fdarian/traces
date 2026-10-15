@@ -324,6 +324,31 @@ export const COMMAND_HELP = {
       'traces spans web --limit 50 --json',
     ],
   },
+  trace: {
+    tagline: 'show one trace as a span tree from Jaeger',
+    synopsis: 'traces trace <traceId> [flags]',
+    summary:
+      'Fetch every span of one trace, ordered depth first. No service is needed; the project is still resolved for its `tracing` block (see TRACING in `traces --help`).',
+    arguments: [
+      [
+        'traceId',
+        'full 32-hex trace id (16-hex legacy ids work); the traceId of a `traces logs --json` record',
+      ],
+    ],
+    flags: [],
+    output:
+      'SpanRow per line, depth first with children by start time: traceId, spanId, parentSpanId (absent on roots), depth, service, name, kind, startTs (ISO, nanosecond precision), durationMs, status (ok | error | unset), statusMessage (optional), attrs (span attributes as an object), events[] ({name, ts, attrs}), exception ({type, message, stacktrace?}, optional; copied from the first exception event, which also stays in events). On a TTY: an indented tree, `+offset duration service name`, offset from the earliest span; error spans add ERR, then the exception type and message and its top 3 stack frames.',
+    notes: [
+      'A span whose parent is not in the trace (partly retained or still arriving) is a root at depth 0 and keeps its parentSpanId.',
+      'Span durations are whole milliseconds: spans under 1ms show 0ms.',
+      'A trace Jaeger does not have exits 1 with a hint. Jaeger keeps traces only as long as its storage backend does (in-memory Jaeger drops them on restart), so an old id may have expired.',
+      'A string that is not a trace id exits 2 before any request; the 8-char `trace=` prefix on a log line is too short, use `traces logs <service> --json` for the full id.',
+    ],
+    examples: [
+      'traces trace a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e',
+      'traces trace a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e --json | jq \'select(.status == "error")\'',
+    ],
+  },
   secret: {
     tagline: 'store or remove a keychain secret for tracing headers',
     synopsis: 'traces secret set|delete <name>',
@@ -516,6 +541,8 @@ const TOP_LEVEL = (): string =>
     '',
     'RECIPES',
     '  slow endpoint             traces spans web --min-duration 1s',
+    "  failing log -> its trace  traces logs web --level error --json   (copy a record's traceId)",
+    '                            traces trace <traceId>',
     '  what is failing anywhere  traces errors --since 1d   (all services, one list)',
     '  why is prod 500ing        traces errors api --since 1h',
     '                            traces logs api --level error --grep "<sample from above>"',
@@ -535,7 +562,7 @@ const TOP_LEVEL = (): string =>
     '',
     'OUTPUT',
     '  stdout: compact lines on a TTY; NDJSON when piped or with --json (one record per',
-    '  line: LogRecord, Deployment, or error group; fields are stable). When older records',
+    '  line: LogRecord, Deployment, error group, TraceRow or SpanRow; fields are stable). When older records',
     '  exist, stderr gets "more: <full command with --cursor>". Errors are one stderr line',
     '  plus a "hint:" line (parse errors too, with no usage block). Empty results print a',
     '  note on stderr, with the retention caveat when the window starts past it, and exit 0.',

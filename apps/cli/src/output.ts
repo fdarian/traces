@@ -1,5 +1,6 @@
 import {
   type Deployment,
+  firstLine,
   InvalidCursor,
   JaegerBadResponse,
   JaegerUnreachable,
@@ -9,9 +10,11 @@ import {
   ProviderNotFound,
   ProviderRequestError,
   ProviderResponseInvalid,
+  type SpanRow,
   stripAnsi,
   TraceBackendUnauthorized,
   TraceErrorCountsUnavailable,
+  TraceNotFound,
   type TraceRow,
 } from '@traces/core';
 import { Console, Effect, Schema } from 'effect';
@@ -87,6 +90,57 @@ export const formatTraceLine = (row: TraceRow, withDate: boolean): string => {
       ? ''
       : ` ERR×${row.errorSpanCount}`;
   return `${formatTime(row.startTs, withDate)} ${row.durationMs}ms${errors} ${row.rootService} ${row.rootOperation}  ${shortId(row.traceId)}…`;
+};
+
+const STACK_FRAMES_SHOWN = 3;
+
+/** JS-style `at ...` frames when present; any other format falls back to its first lines. */
+const topFrames = (stacktrace: string): ReadonlyArray<string> => {
+  const lines = stacktrace
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  const frames = lines.filter((line) => line.startsWith('at '));
+  return (frames.length > 0 ? frames : lines).slice(0, STACK_FRAMES_SHOWN);
+};
+
+const spanStatusMark = (row: SpanRow): string => {
+  if (row.status === 'error') return ' ERR';
+  return row.status === 'ok' ? ' ok' : '';
+};
+
+/** Indented tree, one block per span: offset from the trace start, duration, service, name; errors add the exception and its top frames. */
+export const formatSpanTree = (
+  rows: ReadonlyArray<SpanRow>,
+): ReadonlyArray<string> => {
+  const traceStart = Math.min(...rows.map((row) => Date.parse(row.startTs)));
+  const cells = rows.map((row) => ({
+    row,
+    offset: `+${Date.parse(row.startTs) - traceStart}ms`,
+    duration: `${row.durationMs}ms`,
+  }));
+  const offsetWidth = Math.max(...cells.map((cell) => cell.offset.length));
+  const durationWidth = Math.max(...cells.map((cell) => cell.duration.length));
+  const gutter = ' '.repeat(offsetWidth + durationWidth + 2);
+  return cells.flatMap((cell) => {
+    const indent = '  '.repeat(cell.row.depth);
+    const head = `${cell.offset.padStart(offsetWidth)} ${cell.duration.padStart(durationWidth)} ${indent}${cell.row.service} ${cell.row.name}${spanStatusMark(cell.row)}`;
+    const exception = cell.row.exception;
+    const problem =
+      exception !== undefined
+        ? `${exception.type}: ${firstLine(exception.message)}`
+        : cell.row.status === 'error' && cell.row.statusMessage !== undefined
+          ? firstLine(cell.row.statusMessage)
+          : undefined;
+    if (problem === undefined) return [head];
+    return [
+      head,
+      `${gutter}${indent}  ! ${problem}`,
+      ...topFrames(exception?.stacktrace ?? '').map(
+        (frame) => `${gutter}${indent}    ${frame}`,
+      ),
+    ];
+  });
 };
 
 export const formatDeploymentLine = (deployment: Deployment): string => {
@@ -246,6 +300,13 @@ export const renderError = (error: unknown): RenderedError => {
     return {
       message: `the tracing backend reports no error span counts (trace ${shortId(error.traceId)}), so --errors cannot filter`,
       hint: 'drop --errors and look for ERR in the output, or use `traces trace <id>` on a suspect trace',
+      code: EXIT_CODES.runtime,
+    };
+  }
+  if (error instanceof TraceNotFound) {
+    return {
+      message: `trace ${error.traceId} not found`,
+      hint: 'Jaeger keeps traces only as long as its storage backend does (in-memory Jaeger drops them on restart), so an old trace may have expired. Check it is the full traceId and that tracing.url points at the Jaeger that received it',
       code: EXIT_CODES.runtime,
     };
   }

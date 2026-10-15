@@ -6,6 +6,7 @@ import { logsOptions } from '#/commands/logs.ts';
 import { secretOptions } from '#/commands/secret.ts';
 import { servicesOptions } from '#/commands/services.ts';
 import { spansOptions } from '#/commands/spans.ts';
+import { traceOptions } from '#/commands/trace.ts';
 import {
   COMMAND_HELP,
   COMMAND_NAMES,
@@ -24,12 +25,13 @@ const OPTIONS: Record<CommandName, Record<string, unknown>> = {
   deploys: deploysOptions,
   errors: errorsOptions,
   spans: spansOptions,
+  trace: traceOptions,
   secret: secretOptions,
 };
 
 const names: Array<CommandName> = [...COMMAND_NAMES];
 
-const POSITIONALS = ['service', 'name'];
+const POSITIONALS = ['service', 'name', 'traceId'];
 
 const definedFlags = (name: CommandName) =>
   Object.keys(OPTIONS[name])
