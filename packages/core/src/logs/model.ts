@@ -27,7 +27,10 @@ export const LogRequest = Schema.Struct({
 export type LogRequest = typeof LogRequest.Type;
 
 export const LogRecord = Schema.Struct({
+  /** Provider receive time; paging and windows use it. */
   ts: Schema.String,
+  /** The app's own time (ISO, UTC), when `attrs.timestamp` carries one. Spans use this clock. */
+  appTs: Schema.optional(Schema.String),
   service: Schema.String,
   provider: Provider,
   environment: Schema.String,

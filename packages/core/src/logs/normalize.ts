@@ -88,6 +88,24 @@ export const traceContextOf = (
   };
 };
 
+// Date.parse alone accepts "1" or a zone-less local time, so require a full ISO-8601 instant.
+const ISO_INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/**
+ * Promotes `attrs.timestamp` only when it is a string holding an ISO-8601
+ * instant with an explicit zone. Numbers are left in `attrs`: seconds and
+ * milliseconds since the epoch cannot be told apart.
+ */
+export const appTimestampOf = (
+  attrs: Readonly<Record<string, unknown>>,
+): { readonly appTs?: string } => {
+  const raw = attrs.timestamp;
+  if (typeof raw !== 'string' || !ISO_INSTANT.test(raw)) return {};
+  const ms = Date.parse(raw);
+  return Number.isNaN(ms) ? {} : { appTs: new Date(ms).toISOString() };
+};
+
 export const levelAllowed = (
   levels: ReadonlyArray<LogLevel>,
   record: LogRecord,

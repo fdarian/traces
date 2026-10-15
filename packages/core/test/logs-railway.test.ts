@@ -106,6 +106,55 @@ describe('railway log mapping', () => {
     expect(bad.attrs.traceId).toBe('req-123');
   });
 
+  describe('appTs', () => {
+    const rowWith = (timestamp: unknown) => ({
+      timestamp: '2026-10-12T00:26:03.100Z',
+      message: 'hello',
+      attributes: [{ key: 'timestamp', value: JSON.stringify(timestamp) }],
+    });
+    const record = (timestamp: unknown) =>
+      mapRailwayLog(rowWith(timestamp) as never, {
+        target,
+        source: 'runtime',
+      });
+
+    test('promotes attrs.timestamp as an ISO instant and leaves ts and attrs alone', () => {
+      const mapped = record('2026-10-12T00:25:58.664Z');
+      expect(mapped.appTs).toBe('2026-10-12T00:25:58.664Z');
+      expect(mapped.ts).toBe('2026-10-12T00:26:03.100Z');
+      expect(mapped.attrs.timestamp).toBe('2026-10-12T00:25:58.664Z');
+    });
+
+    test('normalizes an offset to UTC', () => {
+      expect(record('2026-10-12T07:25:58.664+07:00').appTs).toBe(
+        '2026-10-12T00:25:58.664Z',
+      );
+    });
+
+    test.each([
+      ['a bare number', 1_791_764_758_664],
+      ['not a date', 'yesterday'],
+      ['a lenient Date.parse hit', '1'],
+      ['a date with no zone', '2026-10-12T00:25:58.664'],
+      ['an impossible date', '2026-13-45T00:25:58Z'],
+      ['an object', { at: '2026-10-12T00:25:58Z' }],
+    ])('ignores %s', (_label, value) => {
+      expect(record(value).appTs).toBeUndefined();
+    });
+
+    test('a record without the attribute has no appTs key', () => {
+      const mapped = mapRailwayLog(
+        {
+          timestamp: '2026-10-12T00:26:03.100Z',
+          message: 'x',
+          attributes: [],
+        } as never,
+        { target, source: 'runtime' },
+      );
+      expect('appTs' in mapped).toBe(false);
+    });
+  });
+
   test('strips ANSI escapes from messages', () => {
     const rows = fixture('railway-environment-logs.json') as Array<never>;
     const record = mapRailwayLog(rows[2] as never, {
