@@ -3,7 +3,7 @@
  * domain types in `./types.ts` (so consumers never need to install the
  * workspace-only `@traces/core`). This file is NOT part of the published entry
  * — it is never imported by `index.ts`, so it stays out of the bundle and the
- * emitted `.d.ts`. It exists only so `tsc --noEmit` fails if the local copy
+ * emitted `.d.ts`. It exists only so `tsrs --noEmit` fails if the local copy
  * structurally diverges from `@traces/core`'s model.
  */
 import type * as Core from '@traces/core';

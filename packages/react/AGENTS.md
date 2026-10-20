@@ -9,7 +9,7 @@ Publishable React SDK — controlled, presentational components that power the d
 - **No `'use client'`**: TanStack Start has no RSC — this directive is meaningless and never used anywhere in the repo.
 - **`@traces/core` is type-only / devDependency only**: it is a workspace-only package — consumers can't install it. Do NOT `import ... from '@traces/core'` in any shippable source.
   - Core domain types are vendored into `src/types.ts`.
-  - `src/types.guard.ts` is a compile-time assertion file (never imported by `index.ts`, never in the bundle) that fails `tsc` if the local copy structurally diverges from `@traces/core`. If you add or change a core type: update `src/types.ts` AND add/update the corresponding `AssertEqual` line in `types.guard.ts`.
+  - `src/types.guard.ts` is a compile-time assertion file (never imported by `index.ts`, never in the bundle) that fails `tsrs` if the local copy structurally diverges from `@traces/core`. If you add or change a core type: update `src/types.ts` AND add/update the corresponding `AssertEqual` line in `types.guard.ts`.
 
 ## Theming / token contract
 

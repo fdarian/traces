@@ -6,7 +6,7 @@
     "dev": "bun scripts/dev.ts",
     "build": "blume build",
     "check:validate": "blume validate --strict",
-    "check:tsc": "tsc --noEmit",
+    "check:tsc": "tsrs --noEmit",
     "check:lint": "biome check"
   },
   "dependencies": {
@@ -23,6 +23,7 @@
     "@types/node": "^25.9.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "tsrs": "catalog:",
     "typescript": "6.0.3"
   }
 }
