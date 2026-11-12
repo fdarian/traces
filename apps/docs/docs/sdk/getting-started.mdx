@@ -146,7 +146,7 @@ type Span = {
 // TraceSummary — for list views
 type TraceSummary = {
   traceId: string; rootService: string; rootOperation: string
-  spanCount: number; errorSpanCount?: number
+  spanCount: number; errorSpanCount: number
   services: ReadonlyArray<{ name: string; spanCount: number }>
   startTimeUnixNano: string; durationMs: number
 }

@@ -21,7 +21,8 @@ Pure domain layer: the trace/issue model, the `TraceBackend` interface, the Jaeg
 - Consumed at runtime by `services/engine`. `packages/react` only vendors its types (see that package's guard file)
 
 ## Gotchas
-- Jaeger v2's v3 gateway ignores `query.attributes`, so `TraceQuery.attributes` is searched through the legacy `/api/traces` (`tags`), and its traces are summarized from spans in `mapLegacyTrace`
+- Jaeger v2's v3 gateway ignores `query.attributes`, so `TraceQuery.attributes` is searched through the legacy `/api/traces` (`tags`), and its traces are summarized from spans in `mapLegacyTrace`; a host without that endpoint (404/405) gets a client-side search over `/api/v3/traces` instead (`traceMatchesAttributes`, capped at 1000 traces read)
+- `/api/v3/trace-summaries` is proto3 JSON, which omits zero fields: a missing `errorSpanCount` means 0
 - `LogRecord.attrs` values are JSON-decoded and typed `unknown`; narrow before use, don't assume strings
 - `LogRecord.traceId` / `spanId` are optional: set only when the attributes carry well-formed ids (`traceId`/`trace_id`, `spanId`/`span_id`; see `src/logs/normalize.ts`)
 - `LogRecord.ts` is the provider's receive time and drives paging; `appTs` is the app's own clock (from `attrs.timestamp`), optional, and the one to compare with span times

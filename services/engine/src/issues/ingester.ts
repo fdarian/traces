@@ -6,7 +6,6 @@ import {
   type JaegerBadResponse,
   type JaegerUnreachable,
   type Span,
-  type TraceAttributeSearchUnavailable,
   type TraceBackendUnauthorized,
   serializeAttribute,
   TraceBackend,
@@ -54,7 +53,6 @@ const ingestService = (
   void,
   | JaegerUnreachable
   | JaegerBadResponse
-  | TraceAttributeSearchUnavailable
   | TraceBackendUnauthorized
   | IssueStoreError,
   TraceBackend | IssueStore
@@ -197,7 +195,6 @@ const ingestTick = (
   void,
   | JaegerUnreachable
   | JaegerBadResponse
-  | TraceAttributeSearchUnavailable
   | TraceBackendUnauthorized
   | IssueStoreError,
   TraceBackend | IssueStore

@@ -1,7 +1,6 @@
 import {
   decodeCursor,
   encodeCursor,
-  errorSearchAttributes,
   fromTraceCursor,
   type PageResume,
   pageTraces,
@@ -142,10 +141,9 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
           maxDuration: Option.getOrUndefined(
             Option.map(maxDuration, (parsed) => parsed.text),
           ),
-          attributes: errorSearchAttributes(
-            request.serverFiltered,
+          attributes:
             Object.keys(attributes).length === 0 ? undefined : attributes,
-          ),
+          errorsOnly: request.serverFiltered,
           limit: traceFetchSize(request.size, request.resume),
         })
         .pipe(

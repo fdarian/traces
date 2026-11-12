@@ -3,11 +3,11 @@ import { Effect, Exit, Layer } from 'effect';
 import { HttpClient, HttpClientResponse } from 'effect/http';
 import {
   JaegerBadResponse,
-  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
   TraceNotFound,
 } from '#/errors.js';
 import { joinUrl, makeJaegerBackend } from '#/jaeger.js';
+import { nanoToIso } from '#/normalize.js';
 import servicesFixture from './fixtures/services.json';
 import traceDetailFixture from './fixtures/trace-detail.json';
 
@@ -288,26 +288,169 @@ describe('searchTraces with attributes', () => {
     }
   });
 
-  test.each([
-    404, 405,
-  ])('a legacy %d means attribute search is unavailable', async (status) => {
-    const { client } = recordingClient(status, { error: 'nope' });
-    const exit = await run(
-      client,
-      { url: 'https://host.example/~/jaeger', headers: {} },
-      (b) => b.searchTraces(query),
+  describe.each([404, 405])('a legacy %d', (status) => {
+    const otelSpan = (
+      traceId: string,
+      startNano: string,
+      attributes: ReadonlyArray<{
+        key: string;
+        value: { stringValue: string };
+      }>,
+    ) => ({
+      traceId,
+      spanId: `${traceId.slice(0, 8)}01`,
+      name: 'GET /',
+      kind: 2,
+      startTimeUnixNano: startNano,
+      endTimeUnixNano: String(BigInt(startNano) + 10_000_000n),
+      attributes,
+      status: {},
+    });
+    const traceA = otelSpan('a'.repeat(32), '1791947300000000000', [
+      { key: 'tenant', value: { stringValue: 'acme' } },
+    ]);
+    const traceB = otelSpan('b'.repeat(32), '1791947200000000000', [
+      { key: 'tenant', value: { stringValue: 'other' } },
+    ]);
+    const traceC = otelSpan('c'.repeat(32), '1791947100000000000', [
+      { key: 'tenant', value: { stringValue: 'acme' } },
+    ]);
+
+    /** Jaeger groups the spans of one trace under one resourceSpans entry. */
+    const v3Body = (spans: ReadonlyArray<ReturnType<typeof otelSpan>>) => ({
+      result: {
+        resourceSpans: spans.map((span) => ({
+          resource: {
+            attributes: [
+              { key: 'service.name', value: { stringValue: 'web' } },
+            ],
+          },
+          scopeSpans: [{ scope: { name: 'test' }, spans: [span] }],
+        })),
+      },
+    });
+
+    const routedClient = (batches: ReadonlyArray<unknown>) => {
+      const requests: Array<RecordedRequest> = [];
+      const remaining = [...batches];
+      const client = HttpClient.make((request) => {
+        const url = new URL(request.url);
+        requests.push({ url, headers: { ...request.headers } });
+        const answer =
+          url.pathname === '/api/traces'
+            ? new Response('{}', { status })
+            : new Response(JSON.stringify(remaining.shift() ?? v3Body([])));
+        return Effect.succeed(HttpClientResponse.fromWeb(request, answer));
+      });
+      return { client, requests };
+    };
+
+    test('filters /api/v3/traces on the client by exact attribute value', async () => {
+      const { client, requests } = routedClient([
+        v3Body([traceA, traceB, traceC]),
+      ]);
+      const exit = await run(
+        client,
+        { url: 'http://localhost:16686', headers: {} },
+        (b) => b.searchTraces({ ...query, attributes: { tenant: 'acme' } }),
+      );
+      expect(Exit.isSuccess(exit)).toBe(true);
+      if (!Exit.isSuccess(exit)) return;
+      expect(exit.value.map((summary) => summary.traceId)).toEqual([
+        'a'.repeat(32),
+        'c'.repeat(32),
+      ]);
+      expect(requests.map((request) => request.url.pathname)).toEqual([
+        '/api/traces',
+        '/api/v3/traces',
+      ]);
+      expect(requests[1]?.url.searchParams.has('query.attributes')).toBe(false);
+    });
+
+    test('remembers the missing legacy API instead of probing it again', async () => {
+      const { client, requests } = routedClient([v3Body([]), v3Body([])]);
+      await run(client, { url: 'http://localhost:16686', headers: {} }, (b) =>
+        b
+          .searchTraces({ ...query, attributes: { tenant: 'acme' } })
+          .pipe(
+            Effect.andThen(
+              b.searchTraces({ ...query, attributes: { tenant: 'acme' } }),
+            ),
+          ),
+      );
+      expect(
+        requests.filter((request) => request.url.pathname === '/api/traces'),
+      ).toHaveLength(1);
+    });
+
+    test('keeps reading older windows until the limit is met', async () => {
+      const filler = Array.from({ length: 100 }, (_, index) =>
+        otelSpan(
+          `f${String(index).padStart(31, '0')}`,
+          String(1_791_947_000_000_000_000n - BigInt(index) * 1_000_000_000n),
+          [],
+        ),
+      );
+      const { client, requests } = routedClient([
+        v3Body([traceA, ...filler.slice(0, 99)]),
+        v3Body([traceC]),
+      ]);
+      const exit = await run(
+        client,
+        { url: 'http://localhost:16686', headers: {} },
+        (b) =>
+          b.searchTraces({
+            ...query,
+            attributes: { tenant: 'acme' },
+            limit: 2,
+          }),
+      );
+      expect(Exit.isSuccess(exit)).toBe(true);
+      if (!Exit.isSuccess(exit)) return;
+      expect(exit.value.map((summary) => summary.traceId)).toEqual([
+        'a'.repeat(32),
+        'c'.repeat(32),
+      ]);
+      const v3 = requests.filter(
+        (request) => request.url.pathname === '/api/v3/traces',
+      );
+      expect(v3).toHaveLength(2);
+      expect(v3[1]?.url.searchParams.get('query.start_time_max')).toBe(
+        nanoToIso(filler[98]?.startTimeUnixNano ?? ''),
+      );
+    });
+
+    test('an error-only search falls back to the unfiltered summaries', async () => {
+      const { client, requests } = routedClient([{ summaries: [] }]);
+      const exit = await run(
+        client,
+        { url: 'http://localhost:16686', headers: {} },
+        (b) =>
+          b.searchTraces({
+            ...query,
+            attributes: undefined,
+            errorsOnly: true,
+          }),
+      );
+      expect(Exit.isSuccess(exit)).toBe(true);
+      expect(requests.map((request) => request.url.pathname)).toEqual([
+        '/api/traces',
+        '/api/v3/trace-summaries',
+      ]);
+    });
+  });
+
+  test('an error-only search asks the legacy API for error=true', async () => {
+    const { client, requests } = recordingClient(200, {
+      data: [],
+      total: 0,
+      errors: null,
+    });
+    await run(client, { url: 'http://localhost:16686', headers: {} }, (b) =>
+      b.searchTraces({ ...query, attributes: undefined, errorsOnly: true }),
     );
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (!Exit.isFailure(exit)) return;
-    const reason = exit.cause.reasons[0];
-    expect(reason?._tag === 'Fail' && reason.error).toBeInstanceOf(
-      TraceAttributeSearchUnavailable,
-    );
-    if (reason?._tag === 'Fail') {
-      const error = reason.error as TraceAttributeSearchUnavailable;
-      expect(error.status).toBe(status);
-      expect(error.url).toBe('https://host.example/~/jaeger/api/traces');
-    }
+    expect(requests[0]?.url.pathname).toBe('/api/traces');
+    expect(requests[0]?.url.searchParams.get('tags')).toBe('{"error":"true"}');
   });
 
   test('searches without attributes stay on the v3 API', async () => {

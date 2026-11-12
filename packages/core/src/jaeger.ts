@@ -1,11 +1,10 @@
-import { Config, Effect, Layer, Ref, Schema } from 'effect';
+import { Config, Effect, Layer, Option, Ref, Schema } from 'effect';
 import { HttpClient } from 'effect/http';
 import type { TraceQuery } from './backend.js';
 import { TraceBackend } from './backend.js';
 import {
   JaegerBadResponse,
   JaegerUnreachable,
-  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
   TraceNotFound,
 } from './errors.js';
@@ -30,6 +29,7 @@ import type {
   TraceSummary,
 } from './model.js';
 import {
+  nanoToIso,
   nanosToMs,
   normalizeAttributes,
   normalizeDurationMs,
@@ -202,7 +202,8 @@ export function mapTraceSummary(raw: OtelTraceSummary): TraceSummary {
     rootService: raw.rootServiceName,
     rootOperation: raw.rootOperationName,
     spanCount: raw.spanCount,
-    errorSpanCount: raw.errorSpanCount,
+    // proto3 JSON omits zero fields, so a trace without errors has no errorSpanCount key.
+    errorSpanCount: raw.errorSpanCount ?? 0,
     services: raw.services.map((s) => ({
       name: s.name,
       spanCount: s.spanCount,
@@ -316,11 +317,38 @@ export function joinUrl(base: URL, path: string): URL {
   return url;
 }
 
+/** Traces one `/api/v3/traces` fetch reads per round when a client-side attribute search pages the window. */
+const ATTRIBUTE_SEARCH_BATCH = 100;
+/** Traces a client-side attribute search reads before it stops with the matches found so far. */
+const ATTRIBUTE_SEARCH_CAP = 1000;
+
+const hasAttribute = (
+  attributes: ReadonlyArray<{ readonly key: string; readonly value: unknown }>,
+  key: string,
+  value: string,
+): boolean =>
+  attributes.some(
+    (attribute) => attribute.key === key && String(attribute.value) === value,
+  );
+
+export const traceMatchesAttributes = (
+  trace: Trace,
+  attributes: Readonly<Record<string, string>>,
+): boolean =>
+  Object.entries(attributes).every(([key, value]) =>
+    trace.spans.some(
+      (span) =>
+        hasAttribute(span.attributes, key, value) ||
+        hasAttribute(span.resource.attributes, key, value),
+    ),
+  );
+
 function makeBackend(
   client: HttpClient.HttpClient,
   baseURL: URL,
   headers: Readonly<Record<string, string>>,
   summariesAvailable: Ref.Ref<boolean>,
+  legacyAvailable: Ref.Ref<boolean>,
 ): TraceBackend {
   const makeRequest = (
     path: string,
@@ -459,10 +487,10 @@ function makeBackend(
     });
   };
 
-  const searchTracesViaFullTraces = (
+  const fetchFullTraces = (
     query: TraceQuery,
   ): Effect.Effect<
-    ReadonlyArray<TraceSummary>,
+    ReadonlyArray<Trace>,
     JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   > => {
@@ -500,23 +528,90 @@ function makeBackend(
         }
       }
 
-      const summaries: Array<TraceSummary> = [];
-      for (const resourceSpans of traceMap.values()) {
-        const trace = mapTrace(resourceSpans);
-        summaries.push(computeTraceSummary(trace));
-      }
-      return summaries;
+      return Array.from(traceMap.values()).map(mapTrace);
     });
   };
 
-  const searchTracesViaLegacy = (
+  const searchTracesViaFullTraces = (
     query: TraceQuery,
   ): Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    | JaegerUnreachable
-    | JaegerBadResponse
-    | TraceBackendUnauthorized
-    | TraceAttributeSearchUnavailable,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    never
+  > =>
+    fetchFullTraces(query).pipe(
+      Effect.map((traces) => traces.map(computeTraceSummary)),
+    );
+
+  /**
+   * Attribute search for a host without the legacy API: pages the window
+   * newest first through `/api/v3/traces` (which ignores attributes) and keeps
+   * the traces whose spans match, until `limit` matches, the window ends, or
+   * `ATTRIBUTE_SEARCH_CAP` traces were read.
+   */
+  const searchTracesByClientAttributes = (
+    query: TraceQuery,
+    attributes: Readonly<Record<string, string>>,
+  ): Effect.Effect<
+    ReadonlyArray<TraceSummary>,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    never
+  > => {
+    const step = (
+      windowEnd: string,
+      seen: ReadonlySet<string>,
+      matches: ReadonlyArray<TraceSummary>,
+    ): Effect.Effect<
+      ReadonlyArray<TraceSummary>,
+      JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+      never
+    > =>
+      Effect.gen(function* () {
+        const batch = yield* fetchFullTraces({
+          ...query,
+          attributes: undefined,
+          startTimeMax: windowEnd,
+          limit: ATTRIBUTE_SEARCH_BATCH,
+        });
+        const fresh = batch.filter((trace) => !seen.has(trace.traceId));
+        const read = fresh.map((trace) => ({
+          trace,
+          summary: computeTraceSummary(trace),
+        }));
+        const freshSummaries = read.map((entry) => entry.summary);
+        const hits = read
+          .filter((entry) => traceMatchesAttributes(entry.trace, attributes))
+          .map((entry) => entry.summary);
+        const found = [...matches, ...hits].sort((left, right) =>
+          BigInt(right.startTimeUnixNano) > BigInt(left.startTimeUnixNano)
+            ? 1
+            : -1,
+        );
+        const readIds = new Set([...seen, ...fresh.map((t) => t.traceId)]);
+        const enough = query.limit !== undefined && found.length >= query.limit;
+        const windowEnded =
+          batch.length < ATTRIBUTE_SEARCH_BATCH || fresh.length === 0;
+        if (enough || windowEnded || readIds.size >= ATTRIBUTE_SEARCH_CAP) {
+          return query.limit === undefined
+            ? found
+            : found.slice(0, query.limit);
+        }
+        const oldest = freshSummaries.reduce((least, summary) =>
+          BigInt(summary.startTimeUnixNano) < BigInt(least.startTimeUnixNano)
+            ? summary
+            : least,
+        );
+        return yield* step(nanoToIso(oldest.startTimeUnixNano), readIds, found);
+      });
+    return step(query.startTimeMax, new Set(), []);
+  };
+
+  /** None when the host does not serve the legacy API (404 or 405). */
+  const searchTracesViaLegacy = (
+    query: TraceQuery,
+  ): Effect.Effect<
+    Option.Option<ReadonlyArray<TraceSummary>>,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   > => {
     return Effect.gen(function* () {
@@ -525,10 +620,7 @@ function makeBackend(
         buildLegacySearchParams(query),
       );
       if (response.status === 404 || response.status === 405) {
-        return yield* new TraceAttributeSearchUnavailable({
-          status: response.status,
-          url: joinUrl(baseURL, '/api/traces').toString(),
-        });
+        return Option.none();
       }
       if (response.status !== 200) {
         return yield* Effect.fail(
@@ -545,7 +637,7 @@ function makeBackend(
         response,
       );
       return yield* Effect.try({
-        try: () => validated.data.map(mapLegacyTrace),
+        try: () => Option.some(validated.data.map(mapLegacyTrace)),
         catch: (cause) => badResponse(response, cause),
       });
     });
@@ -555,15 +647,25 @@ function makeBackend(
     query: TraceQuery,
   ): Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    | JaegerUnreachable
-    | JaegerBadResponse
-    | TraceBackendUnauthorized
-    | TraceAttributeSearchUnavailable,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   > => {
     return Effect.gen(function* () {
-      if (query.attributes !== undefined) {
-        return yield* searchTracesViaLegacy(query);
+      const attributes = query.attributes;
+      const tagSearch = attributes !== undefined || query.errorsOnly === true;
+      if (tagSearch && (yield* Ref.get(legacyAvailable))) {
+        const legacy = yield* searchTracesViaLegacy({
+          ...query,
+          attributes: {
+            ...attributes,
+            ...(query.errorsOnly === true ? { error: 'true' } : {}),
+          },
+        });
+        if (Option.isSome(legacy)) return legacy.value;
+        yield* Ref.set(legacyAvailable, false);
+      }
+      if (attributes !== undefined) {
+        return yield* searchTracesByClientAttributes(query, attributes);
       }
       const available = yield* Ref.get(summariesAvailable);
       if (!available) {
@@ -600,11 +702,13 @@ export const makeJaegerBackend = (
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     const summariesAvailable = yield* Ref.make(true);
+    const legacyAvailable = yield* Ref.make(true);
     return makeBackend(
       client,
       new URL(options.url),
       options.headers,
       summariesAvailable,
+      legacyAvailable,
     );
   });
 

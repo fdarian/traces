@@ -38,6 +38,40 @@ const fakeTraces = Array.from({ length: 12 }, (_, index) =>
   ),
 );
 
+/** The trace as `/api/v3/traces` returns it: one span, tagged `tenant=a` on even indexes and `tenant=b` on odd ones. */
+const fullTraceOf = (summary: ReturnType<typeof traceAt>) => {
+  const index = Number(summary.traceId.slice(0, 2));
+  return {
+    resource: {
+      attributes: [
+        { key: 'service.name', value: { stringValue: 'mockingbird-web' } },
+      ],
+    },
+    scopeSpans: [
+      {
+        scope: { name: 'test' },
+        spans: [
+          {
+            traceId: summary.traceId,
+            spanId: '0000000000000001',
+            name: 'GET /api/x',
+            kind: 2,
+            startTimeUnixNano: summary.minStartTimeUnixNano,
+            endTimeUnixNano: summary.maxEndTimeUnixNano,
+            attributes: [
+              {
+                key: 'tenant',
+                value: { stringValue: index % 2 === 0 ? 'a' : 'b' },
+              },
+            ],
+            status: summary.errorSpanCount > 0 ? { code: 2 } : {},
+          },
+        ],
+      },
+    ],
+  };
+};
+
 /** 1100 error-free traces, newest first by index, so a scan reaches its cap without finding an error. */
 const quietTraces = Array.from({ length: 1100 }, (_, index) =>
   traceAt(index, index.toString(16).padStart(32, '0'), 0),
@@ -97,7 +131,12 @@ beforeAll(async () => {
       response.writeHead(legacyStatus).end('no legacy');
       return;
     }
-    if (!legacy && url.pathname !== '/proxy/api/v3/trace-summaries') {
+    const fullTraces = url.pathname === '/proxy/api/v3/traces';
+    if (
+      !legacy &&
+      !fullTraces &&
+      url.pathname !== '/proxy/api/v3/trace-summaries'
+    ) {
       response.writeHead(404).end('not found');
       return;
     }
@@ -122,7 +161,9 @@ beforeAll(async () => {
         JSON.stringify(
           legacy
             ? { data: summaries.map(legacyTraceOf), errors: null }
-            : { summaries },
+            : fullTraces
+              ? { result: { resourceSpans: summaries.map(fullTraceOf) } }
+              : { summaries },
         ),
       );
   });
@@ -263,17 +304,13 @@ describe('traces spans against a fake Jaeger', () => {
       }
     };
 
-    test('--errors degrades to the client scan and says nothing is wrong', async () => {
+    test('--errors pages the summaries without a filter and says nothing is wrong', async () => {
       const config = configFor(tracingBlock());
       const first = await withoutLegacy(() =>
         run([...WINDOW, '--errors', '--limit', '2'], config),
       );
       expect(first.code).toBe(0);
       expect(idsOf(first.rows)).toEqual(['09', '11']);
-      expect(
-        JSON.parse(Buffer.from(first.cursor ?? '', 'base64url').toString())
-          .mode,
-      ).toBe('client');
       const second = await withoutLegacy(() =>
         run(
           [
@@ -290,29 +327,31 @@ describe('traces spans against a fake Jaeger', () => {
       expect(idsOf(second.rows)).toEqual(['05', '06']);
       expect(
         seen.every(
-          (request) => request.pathname === '/proxy/api/v3/trace-summaries',
+          (request) =>
+            request.pathname === '/proxy/api/v3/trace-summaries' ||
+            request.pathname === '/proxy/api/traces',
         ),
       ).toBe(true);
     });
 
-    test('--attr fails and names the endpoint', async () => {
+    test('--attr filters /api/v3/traces on the client', async () => {
       const result = await withoutLegacy(() =>
         run([...WINDOW, '--attr', 'tenant=a']),
       );
-      expect(result.code).toBe(1);
-      expect(result.rows).toEqual([]);
-      expect(result.stderr).toContain(
-        `attribute filters need the Jaeger legacy /api/traces endpoint, which answered HTTP ${status}`,
-      );
-      expect(result.stderr).toContain('hint: drop --attr');
+      expect(result.code).toBe(0);
+      expect(idsOf(result.rows)).toEqual(['00', '02', '04', '06', '08', '10']);
+      expect(seen.map((request) => request.pathname)).toEqual([
+        '/proxy/api/traces',
+        '/proxy/api/v3/traces',
+      ]);
     });
 
-    test('--errors with --attr fails the same way', async () => {
+    test('--errors with --attr keeps the matching traces that have error spans', async () => {
       const result = await withoutLegacy(() =>
         run([...WINDOW, '--errors', '--attr', 'tenant=a']),
       );
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain('attribute filters need');
+      expect(result.code).toBe(0);
+      expect(idsOf(result.rows)).toEqual(['02', '06']);
     });
   });
 
@@ -419,6 +458,7 @@ describe('formatTraceLine', () => {
     startTs: '2026-10-12T02:55:09.123456789Z',
     durationMs: 412,
     spanCount: 5,
+    errorSpanCount: 0,
     services: ['mockingbird-web'],
   };
 

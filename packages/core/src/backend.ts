@@ -2,7 +2,6 @@ import { Context, type Effect } from 'effect';
 import type {
   JaegerBadResponse,
   JaegerUnreachable,
-  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
   TraceNotFound,
 } from './errors.js';
@@ -15,7 +14,10 @@ export interface TraceQuery {
   readonly startTimeMax: string;
   readonly minDuration?: string;
   readonly maxDuration?: string;
+  /** Traces where each attribute is set to exactly this string on some span (or its resource). */
   readonly attributes?: Record<string, string>;
+  /** A hint to ask the server for error traces only; a backend that cannot filter ignores it, so callers still check `errorSpanCount`. */
+  readonly errorsOnly?: boolean;
   readonly limit?: number;
 }
 
@@ -36,10 +38,7 @@ export interface TraceBackend {
     query: TraceQuery,
   ) => Effect.Effect<
     ReadonlyArray<TraceSummary>,
-    | JaegerUnreachable
-    | JaegerBadResponse
-    | TraceBackendUnauthorized
-    | TraceAttributeSearchUnavailable,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   >;
   readonly getTrace: (

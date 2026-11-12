@@ -13,9 +13,7 @@ import {
   ProviderResponseInvalid,
   type SpanRow,
   stripAnsi,
-  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
-  TraceErrorCountsUnavailable,
   TraceNotFound,
   type TraceRow,
 } from '@traces/core';
@@ -87,10 +85,7 @@ export const formatLogLine = (record: LogRecord, withDate: boolean): string => {
 };
 
 export const formatTraceLine = (row: TraceRow, withDate: boolean): string => {
-  const errors =
-    row.errorSpanCount === undefined || row.errorSpanCount === 0
-      ? ''
-      : ` ERR×${row.errorSpanCount}`;
+  const errors = row.errorSpanCount === 0 ? '' : ` ERR×${row.errorSpanCount}`;
   return `${formatTime(row.startTs, withDate)} ${row.durationMs}ms${errors} ${row.rootService} ${row.rootOperation}  ${shortId(row.traceId)}…`;
 };
 
@@ -319,20 +314,6 @@ export const renderError = (error: unknown): RenderedError => {
     return {
       message: `tracing backend returned an unexpected response (${received}): ${causeMessage(error.cause)}; body: ${body === '' ? '(empty)' : `"${body}"`}`,
       hint: badResponseHint(error),
-      code: EXIT_CODES.runtime,
-    };
-  }
-  if (error instanceof TraceAttributeSearchUnavailable) {
-    return {
-      message: `attribute filters need the Jaeger legacy /api/traces endpoint, which answered HTTP ${error.status} at ${error.url}`,
-      hint: 'drop --attr, or point tracing.url at a Jaeger query host that serves /api/traces',
-      code: EXIT_CODES.runtime,
-    };
-  }
-  if (error instanceof TraceErrorCountsUnavailable) {
-    return {
-      message: `the tracing backend reports no error span counts (trace ${shortId(error.traceId)}), so --errors cannot filter`,
-      hint: 'drop --errors and look for ERR in the output, or use `traces trace <id>` on a suspect trace',
       code: EXIT_CODES.runtime,
     };
   }

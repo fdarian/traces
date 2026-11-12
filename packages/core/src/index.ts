@@ -7,9 +7,7 @@ export { TraceBackend } from './backend.js';
 export {
   JaegerBadResponse,
   JaegerUnreachable,
-  TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
-  TraceErrorCountsUnavailable,
   TraceNotFound,
 } from './errors.js';
 export {
@@ -141,7 +139,6 @@ export {
 } from './traces/error-scan.js';
 export type { ErrorScanMode, ErrorTraceScan } from './traces/paging.js';
 export {
-  errorSearchAttributes,
   fromTraceCursor,
   pageTraces,
   scanErrorTraces,

@@ -15,7 +15,7 @@ import {
 
 const BASE_NANO = 1_791_800_000_000_000_000n;
 
-const summary = (index: number, errors: number | undefined): TraceSummary => ({
+const summary = (index: number, errors: number): TraceSummary => ({
   traceId: `t${String(index).padStart(4, '0')}`,
   rootService: 'web',
   rootOperation: 'GET /',
@@ -173,7 +173,7 @@ const fakeBackend = (
   const searches: Array<{
     service: string;
     limit: number | undefined;
-    attributes: Record<string, string> | undefined;
+    errorsOnly: boolean | undefined;
   }> = [];
   const backend: TraceBackendInterface = {
     listServices: Effect.succeed([]),
@@ -182,7 +182,7 @@ const fakeBackend = (
       searches.push({
         service: query.service,
         limit: query.limit,
-        attributes: query.attributes,
+        errorsOnly: query.errorsOnly,
       });
       const bound = BigInt(Date.parse(query.startTimeMax)) * 1_000_000n;
       return Effect.succeed(
@@ -257,9 +257,7 @@ describe('scanTraceErrors', () => {
     const backend = {
       ...fake.backend,
       searchTraces: (query: Parameters<typeof filteredSearch>[0]) =>
-        query.attributes === undefined
-          ? filteredSearch(query)
-          : Effect.succeed([]),
+        query.errorsOnly !== true ? filteredSearch(query) : Effect.succeed([]),
     };
     const result = await Effect.runPromise(
       scanTraceErrors({
@@ -272,9 +270,7 @@ describe('scanTraceErrors', () => {
       }),
     );
     expect(result.errorTraces).toBe(1);
-    expect(fake.searches.map((search) => search.attributes)).toEqual([
-      undefined,
-    ]);
+    expect(fake.searches.map((search) => search.errorsOnly)).toEqual([false]);
   });
 
   test('sends the error filter on the first search', async () => {
@@ -283,7 +279,7 @@ describe('scanTraceErrors', () => {
       [trace(1, [errorSpan(1, 'mockingbird-web')])],
     );
     await scan(fake);
-    expect(fake.searches[0]?.attributes).toEqual({ error: 'true' });
+    expect(fake.searches[0]?.errorsOnly).toBe(true);
   });
 
   test('stops at the error-trace cap and says older ones were left', async () => {
@@ -318,11 +314,6 @@ describe('scanTraceErrors', () => {
     const result = await scan(fake);
     expect(result.errorTraces).toBe(1);
     expect(result.groups[0]?.count).toBe(1);
-  });
-
-  test('a backend without error counts fails the scan', async () => {
-    const fake = fakeBackend([summary(1, undefined)], []);
-    await expect(scan(fake)).rejects.toThrow();
   });
 });
 

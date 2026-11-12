@@ -1,8 +1,4 @@
 import { Effect } from 'effect';
-import {
-  TraceAttributeSearchUnavailable,
-  TraceErrorCountsUnavailable,
-} from '../errors.js';
 import { InvalidCursor } from '../logs/errors.js';
 import { type Cursor } from '../logs/model.js';
 import { shortHash } from '../logs/normalize.js';
@@ -87,18 +83,6 @@ export interface ErrorTraceScan {
   readonly capped: boolean;
 }
 
-/** The search attribute that asks Jaeger for traces holding an error span. */
-export const ERROR_SEARCH_ATTRIBUTES = { error: 'true' } as const;
-
-/** Search attributes for one scan pass: the caller's own, plus the error filter when the pass is server-filtered. */
-export const errorSearchAttributes = (
-  serverFiltered: boolean,
-  attributes: Record<string, string> | undefined,
-): Record<string, string> | undefined => {
-  if (!serverFiltered) return attributes;
-  return { ...attributes, ...ERROR_SEARCH_ATTRIBUTES };
-};
-
 export interface ErrorScanInput<E, R> {
   readonly limit: number;
   readonly scanCap: number;
@@ -106,7 +90,7 @@ export interface ErrorScanInput<E, R> {
   readonly resume?: PageResume;
   /** The mode of the pages before `resume`. Unset on a first page, which tries `filtered` and falls back to `client`. */
   readonly mode?: ErrorScanMode;
-  /** `serverFiltered` tells the search to ask Jaeger for error traces only (see `errorSearchAttributes`). */
+  /** `serverFiltered` tells the search to ask Jaeger for error traces only (`TraceQuery.errorsOnly`). */
   readonly fetchPage: (request: {
     readonly resume?: PageResume;
     readonly size: number;
@@ -117,13 +101,13 @@ export interface ErrorScanInput<E, R> {
 const scanPages = <E, R>(
   input: ErrorScanInput<E, R>,
   mode: ErrorScanMode,
-): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> => {
+): Effect.Effect<ErrorTraceScan, E, R> => {
   const serverFiltered = mode === 'filtered';
   const step = (
     resume: PageResume | undefined,
     scanned: number,
     collected: ReadonlyArray<TraceSummary>,
-  ): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> =>
+  ): Effect.Effect<ErrorTraceScan, E, R> =>
     Effect.gen(function* () {
       const page = yield* input.fetchPage({
         resume,
@@ -133,11 +117,6 @@ const scanPages = <E, R>(
       const newestFirst = [...page.kept].reverse();
       const hits: Array<TraceSummary> = [];
       for (const summary of newestFirst) {
-        if (summary.errorSpanCount === undefined) {
-          return yield* new TraceErrorCountsUnavailable({
-            traceId: summary.traceId,
-          });
-        }
         if (summary.errorSpanCount > 0) hits.push(summary);
       }
       const total = [...collected, ...hits];
@@ -198,26 +177,17 @@ const scanPages = <E, R>(
  * reachable. Jaeger's memory backend answers an error filter with nothing
  * (jaegertracing/jaeger#8553), so a filtered search that returns no traces
  * falls back to paging the unfiltered window and filtering on the client.
- * So does a backend without the legacy `/api/traces` endpoint
- * (`TraceAttributeSearchUnavailable`); a caller's own attribute filter still
- * needs that endpoint, so the client pass then fails with the same error.
  * A resumed page (`input.mode`) stays in the mode its first page settled on,
  * so an empty tail of the window does not rerun the fallback.
  * Matches are always verified from the summaries, never trusted from the server.
  */
 export const scanErrorTraces = <E, R>(
   input: ErrorScanInput<E, R>,
-): Effect.Effect<ErrorTraceScan, E | TraceErrorCountsUnavailable, R> =>
+): Effect.Effect<ErrorTraceScan, E, R> =>
   Effect.gen(function* () {
     if (input.mode !== undefined) return yield* scanPages(input, input.mode);
-    const filtered = yield* scanPages(input, 'filtered').pipe(
-      Effect.catchIf(
-        (error): error is Extract<E, TraceAttributeSearchUnavailable> =>
-          error instanceof TraceAttributeSearchUnavailable,
-        () => Effect.succeed(undefined),
-      ),
-    );
+    const filtered = yield* scanPages(input, 'filtered');
     // A filter that returned traces but none with errors was ignored, so that pass already was a client scan.
-    if (filtered !== undefined && filtered.scanned > 0) return filtered;
+    if (filtered.scanned > 0) return filtered;
     return yield* scanPages(input, 'client');
   });

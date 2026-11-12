@@ -60,7 +60,7 @@ export interface TraceSummary {
   readonly rootService: string;
   readonly rootOperation: string;
   readonly spanCount: number;
-  readonly errorSpanCount?: number;
+  readonly errorSpanCount: number;
   readonly services: ReadonlyArray<TraceSummaryService>;
   readonly startTimeUnixNano: string;
   readonly durationMs: number;
@@ -74,8 +74,7 @@ export const TraceRow = Schema.Struct({
   startTs: Schema.String,
   durationMs: Schema.Number,
   spanCount: Schema.Number,
-  /** Absent when the Jaeger backend does not report error spans. */
-  errorSpanCount: Schema.optional(Schema.Number),
+  errorSpanCount: Schema.Number,
   services: Schema.Array(Schema.String),
 });
 export type TraceRow = typeof TraceRow.Type;
@@ -87,8 +86,6 @@ export const toTraceRow = (summary: TraceSummary): TraceRow => ({
   startTs: nanoToIso(summary.startTimeUnixNano),
   durationMs: summary.durationMs,
   spanCount: summary.spanCount,
-  ...(summary.errorSpanCount === undefined
-    ? {}
-    : { errorSpanCount: summary.errorSpanCount }),
+  errorSpanCount: summary.errorSpanCount,
   services: summary.services.map((service) => service.name),
 });

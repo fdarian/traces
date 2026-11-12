@@ -8,12 +8,7 @@ import { byFrequency, type ErrorGroup } from '../logs/errors-group.js';
 import type { PageResume } from '../logs/paging.js';
 import type { Span, Trace } from '../model.js';
 import { extractExceptionInfo, nanoToIso } from '../normalize.js';
-import {
-  errorSearchAttributes,
-  pageTraces,
-  scanErrorTraces,
-  traceFetchSize,
-} from './paging.js';
+import { pageTraces, scanErrorTraces, traceFetchSize } from './paging.js';
 
 const SAMPLE_TRACES = 3;
 const FETCH_CONCURRENCY = 4;
@@ -175,10 +170,7 @@ export const scanTraceErrors = (input: {
             service: input.otelService,
             startTimeMin: input.since.toISOString(),
             startTimeMax: request.resume?.before ?? input.until.toISOString(),
-            attributes: errorSearchAttributes(
-              request.serverFiltered,
-              undefined,
-            ),
+            errorsOnly: request.serverFiltered,
             limit: traceFetchSize(request.size, request.resume),
           })
           .pipe(

@@ -50,7 +50,7 @@ type TraceSummary = {
   rootService: string
   rootOperation: string
   spanCount: number
-  errorSpanCount?: number
+  errorSpanCount: number
   services: ReadonlyArray<{ name: string; spanCount: number }>
   startTimeUnixNano: string  // nanosecond decimal string
   durationMs: number
