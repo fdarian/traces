@@ -1,13 +1,17 @@
 import { hashFingerprint } from '../issues/fingerprint.js';
 import { normalizeExceptionMessage } from '../issues/normalize-message.js';
 import type { LogRecord } from './model.js';
+import type { Coalesced } from './multiline.js';
 
 export interface ErrorGroup {
   /** Log and trace groups never merge: their fingerprints come from different inputs. */
   readonly source: 'logs' | 'traces';
   readonly fingerprint: string;
   readonly service: string;
+  /** Events: records merged by `coalesceMultiline` count once. */
   readonly count: number;
+  /** Log groups only: the log lines behind `count`, which is what grep counts. */
+  readonly lines?: number;
   readonly firstSeen: string;
   readonly lastSeen: string;
   readonly deploymentIds: ReadonlyArray<string>;
@@ -35,7 +39,7 @@ export const errorFingerprint = (record: LogRecord): string =>
 
 /** Groups by service and normalized first line (ids and numbers collapsed), most frequent first. Records of several services may be passed together. */
 export const groupErrors = (
-  records: ReadonlyArray<LogRecord>,
+  records: ReadonlyArray<Coalesced>,
 ): ReadonlyArray<ErrorGroup> => {
   const groups = new Map<
     string,
@@ -44,6 +48,7 @@ export const groupErrors = (
       fingerprint: string;
       service: string;
       count: number;
+      lines: number;
       firstSeen: string;
       lastSeen: string;
       deploymentIds: Set<string>;
@@ -60,6 +65,7 @@ export const groupErrors = (
         fingerprint,
         service: record.service,
         count: 1,
+        lines: record.lines,
         firstSeen: record.ts,
         lastSeen: record.ts,
         deploymentIds: new Set(
@@ -71,6 +77,7 @@ export const groupErrors = (
       continue;
     }
     existing.count += 1;
+    existing.lines += record.lines;
     if (record.ts < existing.firstSeen) existing.firstSeen = record.ts;
     if (record.ts > existing.lastSeen) existing.lastSeen = record.ts;
     if (record.deploymentId !== undefined) {

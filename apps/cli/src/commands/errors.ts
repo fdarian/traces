@@ -50,8 +50,13 @@ const formatGroup = (record: ErrorGroupRecord): string => {
     record.traceId === undefined ? '' : ` trace=${shortId(record.traceId)}`;
   const origin = record.source === 'traces' ? ' [traces]' : '';
   const fresh = record.new === true ? ' NEW' : '';
+  const count = `${record.count}x`;
+  const counted =
+    record.lines === undefined || record.lines === record.count
+      ? count
+      : `${count} (${record.lines} lines)`;
   const sample = record.sample.split('\n').slice(0, 1).join('');
-  return `${String(record.count).padStart(5)}x ${record.service}${origin}${fresh} ${record.firstSeen} -> ${record.lastSeen}${deploys}${trace}\n       ${sample}\n       $ ${record.hint}`;
+  return `${counted.padStart(6)} ${record.service}${origin}${fresh} ${record.firstSeen} -> ${record.lastSeen}${deploys}${trace}\n       ${sample}\n       $ ${record.hint}`;
 };
 
 interface ErrorGroupRecord extends ErrorGroup {

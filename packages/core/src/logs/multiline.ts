@@ -4,6 +4,9 @@ import type { LogLevel, LogRecord } from './model.js';
 export const MULTILINE_GAP_MS = 50;
 export const MULTILINE_SAMPLE_LINES = 20;
 
+/** An event and the number of log lines it was merged from, which is what grep counts. */
+export type Coalesced = LogRecord & { readonly lines: number };
+
 const levelClass = (level: LogLevel): LogLevel =>
   level === 'fatal' ? 'error' : level;
 
@@ -54,7 +57,7 @@ const eventKey = (record: LogRecord): string =>
  */
 export const coalesceMultiline = (
   records: ReadonlyArray<LogRecord>,
-): ReadonlyArray<LogRecord> => {
+): ReadonlyArray<Coalesced> => {
   const events: Array<OpenEvent> = [];
   const open = new Map<string, OpenEvent>();
   for (const record of records) {
@@ -83,13 +86,16 @@ export const coalesceMultiline = (
     open.set(key, created);
   }
   return events.map((event) => {
-    if (!event.merged) return event.record;
+    if (!event.merged) {
+      return { ...event.record, lines: event.lines.length };
+    }
     const message = withHeadlineFirst(event.lines)
       .slice(0, MULTILINE_SAMPLE_LINES)
       .join('\n');
     return {
       ...event.record,
       message,
+      lines: event.lines.length,
       ...(event.traceId === undefined ? {} : { traceId: event.traceId }),
     };
   });

@@ -67,7 +67,8 @@ describe('coalesceMultiline', () => {
       'error: Not found\n370 | status: 404,\n371 | });\n      at handler (a.ts:1:2)',
     );
     expect(groups[0]?.fingerprint).toBe(
-      groupErrors([line('error: Not found', 0)])[0]?.fingerprint,
+      groupErrors(coalesceMultiline([line('error: Not found', 0)]))[0]
+        ?.fingerprint,
     );
   });
 
@@ -171,8 +172,36 @@ describe('coalesceMultiline', () => {
     expect(events[0]?.traceId).toBe('trace-3');
   });
 
-  test('leaves a lone record untouched', () => {
+  test('leaves a lone record untouched apart from its line count', () => {
     const only = line('alone\nwith two lines', 0);
-    expect(coalesceMultiline([only])).toEqual([only]);
+    expect(coalesceMultiline([only])).toEqual([{ ...only, lines: 2 }]);
+  });
+
+  test('lines counts every merged log line, past the sample cap', () => {
+    const dump = Array.from({ length: 30 }, (_, index) =>
+      line(`    field${index}: 1,`, index),
+    );
+    const [event] = coalesceMultiline([line('Request failed {', 0), ...dump]);
+    expect(event?.lines).toBe(31);
+    expect(event?.message.split('\n')).toHaveLength(20);
+  });
+
+  test('a record that is already multi-line counts its own lines', () => {
+    const [event] = coalesceMultiline([line('Boom\n  at a\n  at b', 0)]);
+    expect(event?.lines).toBe(3);
+  });
+
+  test('group lines add up across events while count stays the events', () => {
+    const groups = groupErrors(
+      coalesceMultiline([
+        line('Request failed {', 0),
+        line('    status: 500,', 1),
+        line('},', 2),
+        line('Request failed {', 5_000),
+        line('    status: 502,', 5_001),
+        line('},', 5_002),
+      ]),
+    );
+    expect(groups[0]).toMatchObject({ count: 2, lines: 6 });
   });
 });

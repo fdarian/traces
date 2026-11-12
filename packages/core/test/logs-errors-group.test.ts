@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { groupErrors, type LogRecord } from '#/index.js';
+import { type Coalesced, groupErrors } from '#/index.js';
 
 const record = (
   message: string,
   ts: string,
-  overrides: Partial<LogRecord> = {},
-): LogRecord => ({
+  overrides: Partial<Coalesced> = {},
+): Coalesced => ({
+  lines: 1,
   ts,
   service: 'api',
   provider: 'railway',
@@ -98,5 +99,13 @@ describe('groupErrors', () => {
       ['worker', 3],
       ['web', 2],
     ]);
+  });
+
+  test('sums the lines behind each event, while count stays the events', () => {
+    const groups = groupErrors([
+      record('Boom 1', '2026-10-12T00:00:01Z', { lines: 12 }),
+      record('Boom 2', '2026-10-12T00:00:09Z', { lines: 8 }),
+    ]);
+    expect(groups[0]).toMatchObject({ count: 2, lines: 20 });
   });
 });
