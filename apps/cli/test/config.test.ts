@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { BunServices } from '@effect/platform-bun';
 import { Effect } from 'effect';
 import {
   decodeConfig,
   defaultConfigPath,
   hasLogProvider,
   otelServiceName,
+  readConfig,
 } from '#/config.ts';
 
 const decode = (value: unknown) =>
@@ -120,6 +122,18 @@ describe('config decode', () => {
 });
 
 describe('config error hints', () => {
+  test('a missing file points at traces init and names the path to create', async () => {
+    const path = '/nonexistent/traces/config.json';
+    const result = await Effect.runPromise(
+      readConfig(path).pipe(Effect.provide(BunServices.layer), Effect.result),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure.hint).toContain('`traces init`');
+      expect(result.failure.hint).toContain(`create ${path}`);
+    }
+  });
+
   test('a bad field is named, and the hint does not say to create the file', async () => {
     const result = await decode({
       projects: {

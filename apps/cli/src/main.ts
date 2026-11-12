@@ -6,6 +6,7 @@ import { FetchHttpClient } from 'effect/http';
 import { hoistGlobalFlags } from '#/argv.ts';
 import { deploysCommand } from '#/commands/deploys.ts';
 import { errorsCommand } from '#/commands/errors.ts';
+import { initCommand } from '#/commands/init.ts';
 import { logsCommand } from '#/commands/logs.ts';
 import { secretCommand } from '#/commands/secret.ts';
 import { servicesCommand } from '#/commands/services.ts';
@@ -30,6 +31,7 @@ import { Secrets } from '#/secrets.ts';
 
 const root = Command.make('traces').pipe(
   Command.withSubcommands([
+    initCommand,
     servicesCommand,
     logsCommand,
     deploysCommand,

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Console, Effect } from 'effect';
 import { deploysOptions } from '#/commands/deploys.ts';
 import { errorsOptions } from '#/commands/errors.ts';
+import { initOptions } from '#/commands/init.ts';
 import { logsOptions } from '#/commands/logs.ts';
 import { secretOptions } from '#/commands/secret.ts';
 import { servicesOptions } from '#/commands/services.ts';
@@ -26,6 +27,7 @@ import {
 import { plainWhenPiped } from '#/output.ts';
 
 const OPTIONS: Record<CommandName, Record<string, unknown>> = {
+  init: initOptions,
   services: servicesOptions,
   logs: logsOptions,
   deploys: deploysOptions,

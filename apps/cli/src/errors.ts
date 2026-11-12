@@ -20,3 +20,9 @@ export class EnvVarMissing extends Schema.TaggedError<EnvVarMissing>()(
   'EnvVarMissing',
   { name: Schema.String },
 ) {}
+
+/** `traces init` found no Railway or Vercel project to put in the config. */
+export class NothingDiscovered extends Schema.TaggedError<NothingDiscovered>()(
+  'NothingDiscovered',
+  {},
+) {}

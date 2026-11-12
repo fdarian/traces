@@ -19,7 +19,12 @@ import {
 } from '@traces/core';
 import { Console, Effect, Schema } from 'effect';
 import { CliError, CliOutput } from 'effect/cli';
-import { ConfigError, EnvVarMissing, UsageError } from '#/errors.ts';
+import {
+  ConfigError,
+  EnvVarMissing,
+  NothingDiscovered,
+  UsageError,
+} from '#/errors.ts';
 import { SHORTEST_RETENTION_MS } from '#/limits.ts';
 import { SecretMissing, SecretStoreError } from '#/secrets.ts';
 
@@ -241,6 +246,13 @@ export const renderError = (error: unknown): RenderedError => {
       message: `${error.provider}: not authorized`,
       hint: error.hint,
       code: EXIT_CODES.auth,
+    };
+  }
+  if (error instanceof NothingDiscovered) {
+    return {
+      message: 'found no Railway or Vercel project to put in traces.json',
+      hint: 'link the folder with `railway link` / `vercel link`, or pass --railway-project',
+      code: EXIT_CODES.runtime,
     };
   }
   if (error instanceof NoReadyDeployment) {

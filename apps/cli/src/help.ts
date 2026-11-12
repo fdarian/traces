@@ -83,6 +83,59 @@ const EMPTY_NOTE =
   'An empty result exits 0 and says so on stderr. When the window starts past the shortest provider retention (Railway 3d, Vercel 1h), the note adds the retention caveat: past that window, empty does not mean "no errors".';
 
 export const COMMAND_HELP = {
+  init: {
+    tagline: 'write traces.json at the git root from Railway and Vercel',
+    synopsis: 'traces init [flags]',
+    summary:
+      'Write <git root>/traces.json, discovering the services from the linked Railway project and every Vercel-linked folder, so no config has to be written by hand. Run it from inside the repo; outside a git repository it exits 2.',
+    arguments: [],
+    flags: [
+      {
+        name: 'railway-project',
+        usage: '--railway-project <id>',
+        description:
+          'Railway project to read services from; default: the project `railway status --json` reports for the git root (a failure there is a stderr note, not an error)',
+      },
+      {
+        name: 'jaeger-url',
+        usage: '--jaeger-url <url>',
+        description:
+          'add `tracing: {provider: jaeger, url}`; without it there is no tracing block',
+      },
+      {
+        name: 'jaeger-header',
+        usage: '--jaeger-header <Name>=keychain:<secret>',
+        description:
+          'header whose value is read from the keychain secret at use time; repeatable; needs --jaeger-url',
+      },
+      {
+        name: 'force',
+        usage: '--force',
+        description:
+          'overwrite an existing traces.json (default: refuse, exit 2)',
+      },
+      {
+        name: 'dry-run',
+        usage: '--dry-run',
+        description: 'print the JSON to stdout and write nothing',
+      },
+    ],
+    output:
+      'with --dry-run, the traces.json content (pretty-printed JSON, not NDJSON). Otherwise one record per service {path, service, ref} (NDJSON when piped, lines on a TTY; init has no --json flag); stderr has `wrote <path>` and the next steps.',
+    notes: [
+      'Railway: every service of the project becomes an entry {provider, project, service, environment}; environment is "production" when the project has one, else left out. `railway status --json` does not say which environment is linked, so a non-production link is not detected.',
+      "Vercel: each `.vercel/project.json` up to 3 folders below the git root (skipping node_modules) becomes {provider: vercel, project: <projectId>, team: <orgId>}. The key is the project name from the Vercel API; without a token it is the file's projectName, else the folder name.",
+      'Keys are the service names reduced to letters, digits, `_` and `-`. A name used by both providers becomes `<name>-railway` and `<name>-vercel`.',
+      'Nothing found at all exits 1 with a hint. Header values are never written: only {"keychain": "<secret>"} refs; store each with `traces secret set <secret>`.',
+      'Takes no global flags.',
+    ],
+    examples: [
+      'traces init --dry-run',
+      'traces init',
+      'traces init --jaeger-url https://jaeger.example.com --jaeger-header X-API-Key=keychain:myapp.jaeger',
+    ],
+    noGlobalFlags: true,
+  },
   services: {
     tagline: 'matched project, services, provider auth status',
     synopsis: 'traces services [flags]',
@@ -512,17 +565,17 @@ const TOP_LEVEL = (): string =>
     'traces - read logs and deployments from Vercel and Railway through one CLI.',
     '',
     'RESOLUTION',
-    "  The project comes from the repo's traces.json (see CONFIG), else is matched from the cwd's",
-    '  git remote (or path) against the global config; --project <name> overrides. The service',
-    '  is the positional argument, omitted when the project has exactly one (`traces errors`',
-    '  without one covers all services). Global flags may come before the command. `traces',
-    '  services` shows what matched and whether each provider is authenticated.',
+    "  The project comes from the repo's traces.json (see CONFIG), else the cwd's git remote or path",
+    '  is matched against the global config; --project <name> overrides. The service is the',
+    '  positional argument, omitted when the project has exactly one (`traces errors` without one',
+    '  covers all services). Global flags may precede the command. `traces services` shows what',
+    "  matched and each provider's auth status.",
     '',
     'CONFIG  lookup: --config <path>, else traces.json at the git root (found walking up from the cwd),',
     '  else ~/.config/traces/config.json ($XDG_CONFIG_HOME). --project <name> skips traces.json.',
-    '  traces.json is one project, safe to commit (header secrets are {keychain}/{env} refs; keep',
-    '  literal header values in the global file): {"name": "myapp" (optional), "tracing": {..},',
-    '  "services": {..}}, no matcher. Global file:',
+    '  traces.json (`traces init` writes it) is one project, safe to commit (header secrets are',
+    '  {keychain}/{env} refs; keep literal header values in the global file): {"name": "myapp"',
+    '  (optional), "tracing": {..}, "services": {..}}, no matcher. Global file:',
     '  {',
     '    "projects": {',
     '      "myapp": {',
@@ -551,9 +604,8 @@ const TOP_LEVEL = (): string =>
     '  Header values: a literal string, {"env": "NAME"} or {"keychain": "<name>"}, read only when',
     '  a trace command runs. One-time setup, run by the user (agents cannot answer the hidden prompt):',
     '    traces secret set myapp.jaeger      (or: pbpaste | traces secret set myapp.jaeger)',
-    '  `traces services` shows the URL, each referenced secret as present or missing, whether the',
-    '  URL answers (reachable, unauthorized or error), and the otelService per service, flagging',
-    '  any Jaeger does not report. A missing secret or env var exits 3 with the fix as a hint.',
+    '  `traces services` shows the URL, each secret as present or missing, whether the URL answers,',
+    '  and each otelService Jaeger does not report. A missing secret or env var exits 3 with a hint.',
     '',
     'COMMANDS  (details and examples: traces <command> --help)',
     ...indent(commandSummaries()),
@@ -577,7 +629,6 @@ const TOP_LEVEL = (): string =>
     '  watch while reproducing   traces logs api -f',
     '  what happened at 14:05    traces logs api --since 2026-10-12T14:00:00Z --until 2026-10-12T14:10:00Z',
     '  one bad deployment        traces deploys api; traces logs api --deploy <id> --level error',
-    '  older than this page      run the command from the "more:" line',
     '  preview or staging        traces logs web --env preview / traces logs api --env staging',
     '',
     'LIMITS',

@@ -140,7 +140,8 @@ export const resolveDefaultConfigPath = Effect.gen(function* () {
 const EXAMPLE_HINT =
   '`traces --help` shows a minimal example for each provider';
 
-const CREATE_FILE_HINT = `create the file; ${EXAMPLE_HINT}`;
+const createFileHint = (path: string) =>
+  `run \`traces init\` in the repo to write traces.json, or create ${path}; ${EXAMPLE_HINT}`;
 
 const issuePath = (issue: SchemaIssue.Issue): ReadonlyArray<PropertyKey> => {
   switch (issue._tag) {
@@ -204,7 +205,7 @@ export const readConfig = (path: string) =>
               : `cannot read config file: ${error.message}`,
           hint:
             error.reason._tag === 'NotFound'
-              ? CREATE_FILE_HINT
+              ? createFileHint(path)
               : 'check the file permissions',
         }),
     ),
