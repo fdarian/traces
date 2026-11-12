@@ -71,9 +71,17 @@ const SERVICE_ARGUMENT = [
   'service name from the config; optional when the project has exactly one',
 ] as const;
 
+const FALLBACK_NOTE =
+  "A name the config doesn't list is tried as a Railway service when all the config's Railway services share one Railway project and environment (stderr says so); otherwise it exits 2, and the hint lists the Railway project's services when they can be fetched.";
+
+const LOG_SERVICE_ARGUMENT = [
+  'service',
+  `service name from the config; optional when the project has exactly one. ${FALLBACK_NOTE}`,
+] as const;
+
 const ERRORS_SERVICE_ARGUMENT = [
   'service',
-  'service name from the config; omit to cover all services of the project',
+  `service name from the config; omit to cover all services of the project. ${FALLBACK_NOTE}`,
 ] as const;
 
 const MORE_NOTE =
@@ -157,7 +165,7 @@ export const COMMAND_HELP = {
     tagline: 'runtime logs, oldest to newest (also --build, --http)',
     synopsis: 'traces logs [service] [flags]',
     summary: `Print logs for one service, oldest to newest. Default: runtime logs of the last ${DEFAULT_WINDOW}.`,
-    arguments: [SERVICE_ARGUMENT],
+    arguments: [LOG_SERVICE_ARGUMENT],
     flags: [
       {
         name: 'since',
@@ -246,7 +254,7 @@ export const COMMAND_HELP = {
     synopsis: 'traces deploys [service] [flags]',
     summary:
       'List deployments of a service, newest first: status, commit, branch, time, url.',
-    arguments: [SERVICE_ARGUMENT],
+    arguments: [LOG_SERVICE_ARGUMENT],
     flags: [
       {
         name: 'limit',

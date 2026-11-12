@@ -3,9 +3,10 @@ import {
   makeJaegerBackend,
   makeRailwaySource,
   makeVercelSource,
+  railwayProjectLayout,
   type ServiceTarget,
 } from '@traces/core';
-import { Config, Effect, Option } from 'effect';
+import { Config, Console, Effect, Option } from 'effect';
 import { Flag } from 'effect/cli';
 import {
   type HeaderValue,
@@ -144,6 +145,74 @@ export const selectService = (
   );
 };
 
+type RailwayServiceConfig = Extract<ServiceConfig, { provider: 'railway' }>;
+
+const railwayServices = (resolved: ResolvedProject) =>
+  Object.values(resolved.project.services).filter(
+    (config): config is RailwayServiceConfig =>
+      'provider' in config && config.provider === 'railway',
+  );
+
+/** The names are a hint only, so a Railway failure (logged out, offline) just leaves them out. */
+const railwayServiceNames = (project: string) =>
+  railwayProjectLayout(project).pipe(
+    Effect.map((layout) => layout.services.map((service) => service.name)),
+    Effect.option,
+    Effect.map(Option.getOrUndefined),
+  );
+
+/**
+ * `logs`, `deploys` and `errors <service>` accept a Railway service the config doesn't list, as
+ * long as the config's Railway services all sit in one Railway project and environment, so the
+ * name can only mean a service of that project. A name that's not there fails later in the
+ * source's own by-id-or-name lookup, which lists the project's services.
+ */
+export const selectLogService = (
+  resolved: ResolvedProject,
+  requested: Option.Option<string>,
+) =>
+  Effect.gen(function* () {
+    if (Option.isNone(requested))
+      return yield* selectService(resolved, requested);
+    const name = requested.value;
+    const configured = resolved.project.services[name];
+    if (configured !== undefined) return { name, config: configured };
+
+    const railway = railwayServices(resolved);
+    const projects = new Set(railway.map((config) => config.project));
+    const environments = new Set(
+      railway.map((config) => config.environment ?? 'production'),
+    );
+    const first = railway[0];
+    if (first === undefined || projects.size !== 1 || environments.size !== 1) {
+      const available = `available services in "${resolved.projectName}": ${Object.keys(resolved.project.services).join(', ')}`;
+      const live =
+        first !== undefined && projects.size === 1
+          ? yield* railwayServiceNames(first.project)
+          : undefined;
+      return yield* new UsageError({
+        message: `no service named "${name}" in project "${resolved.projectName}"`,
+        hint:
+          first === undefined || live === undefined
+            ? available
+            : `${available}; Railway project ${first.project} has: ${live.join(', ')}`,
+      });
+    }
+    const project = first.project;
+    yield* Console.error(
+      `${name} is not in the config; using Railway service "${name}" in project ${project}. Add it (or run traces init).`,
+    );
+    const config: RailwayServiceConfig = {
+      provider: 'railway',
+      project,
+      service: name,
+      ...(first.environment === undefined
+        ? {}
+        : { environment: first.environment }),
+    };
+    return { name, config };
+  });
+
 export const requireLogProvider = (
   name: string,
   config: ServiceConfig,
@@ -212,7 +281,7 @@ export const resolveService = (
 ) =>
   Effect.gen(function* () {
     const resolved = yield* resolveProject(flags);
-    const selected = yield* selectService(resolved, service);
+    const selected = yield* selectLogService(resolved, service);
     const config = yield* requireLogProvider(selected.name, selected.config);
     const target = yield* buildTarget(selected.name, config, flags.env);
     const source = yield* buildSource(target);
@@ -338,7 +407,7 @@ export const resolveErrorScope = (
 
     const candidates: Array<{ name: string; config: ServiceConfig }> =
       Option.isSome(requested)
-        ? [yield* selectService(resolved, requested)]
+        ? [yield* selectLogService(resolved, requested)]
         : Object.entries(resolved.project.services).map(([name, config]) => ({
             name,
             config,
