@@ -12,7 +12,7 @@ import {
   hasLogProvider,
   type LogServiceConfig,
   otelServiceName,
-  type ProjectConfig,
+  type ProjectSettings,
   readConfig,
   resolveDefaultConfigPath,
   type ServiceConfig,
@@ -23,6 +23,7 @@ import {
   resolveMatcherPaths,
   selectProject,
 } from '#/project-match.ts';
+import { findRepoConfig } from '#/repo-config.ts';
 import {
   type SecretMissing,
   type SecretStoreError,
@@ -44,18 +45,22 @@ export interface GlobalFlags {
   readonly json: boolean;
 }
 
+export type ConfigSource = 'flag' | 'repo' | 'global';
+
 export interface ResolvedProject {
   readonly configPath: string;
+  readonly configSource: ConfigSource;
   readonly projectName: string;
-  readonly matchedBy: 'flag' | 'path' | 'git';
-  readonly project: ProjectConfig;
+  readonly matchedBy: 'flag' | 'path' | 'git' | 'repo';
+  readonly project: ProjectSettings;
 }
 
-export const resolveProject = (flags: GlobalFlags) =>
+const resolveFromFile = (
+  flags: GlobalFlags,
+  configPath: string,
+  configSource: 'flag' | 'global',
+) =>
   Effect.gen(function* () {
-    const configPath = Option.isSome(flags.config)
-      ? flags.config.value
-      : yield* resolveDefaultConfigPath;
     const config = yield* readConfig(configPath);
     const invocation = yield* captureInvocation(process.cwd()).pipe(
       Effect.mapError(
@@ -76,10 +81,36 @@ export const resolveProject = (flags: GlobalFlags) =>
     });
     return {
       configPath,
+      configSource,
       projectName: selected.name,
       matchedBy: selected.matchedBy,
       project: selected.project,
     } satisfies ResolvedProject;
+  });
+
+/** `--config` wins, then the repo's `traces.json`, then the global file; `--project` names live in the global file, so it skips the repo one. */
+export const resolveProject = (flags: GlobalFlags) =>
+  Effect.gen(function* () {
+    if (Option.isSome(flags.config)) {
+      return yield* resolveFromFile(flags, flags.config.value, 'flag');
+    }
+    if (Option.isNone(flags.project)) {
+      const repo = yield* findRepoConfig(process.cwd());
+      if (Option.isSome(repo)) {
+        return {
+          configPath: repo.value.path,
+          configSource: 'repo',
+          projectName: repo.value.name,
+          matchedBy: 'repo',
+          project: repo.value.project,
+        } satisfies ResolvedProject;
+      }
+    }
+    return yield* resolveFromFile(
+      flags,
+      yield* resolveDefaultConfigPath,
+      'global',
+    );
   });
 
 export const selectService = (
@@ -233,7 +264,7 @@ export const resolveHeaders = (
 const noTracingConfig = (resolved: ResolvedProject) =>
   new UsageError({
     message: `project "${resolved.projectName}" has no tracing config`,
-    hint: `add to the project in ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces --help\``,
+    hint: `add to ${resolved.configSource === 'repo' ? 'the top level of' : 'the project in'} ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces --help\``,
   });
 
 export const resolveTraceBackend = (resolved: ResolvedProject) =>

@@ -15,6 +15,7 @@ import {
 } from '#/config.ts';
 import { causeMessage, emitRecord, outputMode, renderError } from '#/output.ts';
 import {
+  type ConfigSource,
   globalOptions,
   type ResolvedProject,
   resolveProject,
@@ -48,8 +49,9 @@ interface TracingStatus {
 
 interface ServiceRecord {
   readonly configPath: string;
+  readonly configSource: ConfigSource;
   readonly project: string;
-  readonly matchedBy: 'flag' | 'path' | 'git';
+  readonly matchedBy: ResolvedProject['matchedBy'];
   readonly service: string;
   /** Absent for trace-only services. */
   readonly provider?: 'vercel' | 'railway';
@@ -230,7 +232,7 @@ export const servicesCommand = Command.make(
           : jaegerServices.includes(otelService);
       if (mode === 'human') {
         yield* Console.log(
-          `config ${resolved.configPath}\nproject ${resolved.projectName} (matched by ${resolved.matchedBy})`,
+          `config ${resolved.configPath} (${resolved.configSource})\nproject ${resolved.projectName} (matched by ${resolved.matchedBy})`,
         );
         if (tracing !== undefined) {
           const missing = Object.entries(resolved.project.services)
@@ -247,6 +249,7 @@ export const servicesCommand = Command.make(
         const found = inJaeger(otelServiceName(service, ref));
         const common = {
           configPath: resolved.configPath,
+          configSource: resolved.configSource,
           project: resolved.projectName,
           matchedBy: resolved.matchedBy,
           service,

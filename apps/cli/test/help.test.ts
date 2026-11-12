@@ -89,6 +89,15 @@ describe('command help', () => {
     expect(HELP_TEXT.split('\n').length).toBeLessThan(100);
   });
 
+  test('help documents the repo traces.json lookup and configSource', () => {
+    expect(HELP_TEXT).toContain('traces.json at the git root');
+    expect(HELP_TEXT).toContain('--project <name> skips traces.json');
+    expect(HELP_TEXT).toContain('safe to commit');
+    const services = renderCommandHelp('services').replace(/\s+/g, ' ');
+    expect(services).toContain('configSource (flag | repo | global)');
+    expect(services).toContain('matchedBy (flag | path | git | repo)');
+  });
+
   test('the top-level help states the --limit defaults and caps', () => {
     expect(HELP_TEXT).toContain(
       `logs --limit: default ${LOGS_LIMIT.default}, max ${LOGS_LIMIT.max}`,

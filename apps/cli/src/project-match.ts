@@ -150,14 +150,11 @@ export const matchProjects = (
   };
 };
 
-const readGitOrigin = (cwd: string) =>
+/** `None` when git is missing, exits non-zero (not a repo, no origin) or prints nothing. */
+const runGit = (cwd: string, args: ReadonlyArray<string>) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const process = yield* ChildProcess.make(
-        'git',
-        ['remote', 'get-url', 'origin'],
-        { cwd },
-      );
+      const process = yield* ChildProcess.make('git', args, { cwd });
       const [stdout, exitCode] = yield* Effect.all(
         [
           process.stdout.pipe(Stream.decodeText(), Stream.mkString),
@@ -166,9 +163,9 @@ const readGitOrigin = (cwd: string) =>
         ],
         { concurrency: 'unbounded' },
       );
-      const origin = stdout.trim();
-      return exitCode === 0 && origin.length > 0
-        ? Option.some(origin)
+      const output = stdout.trim();
+      return exitCode === 0 && output.length > 0
+        ? Option.some(output)
         : Option.none<string>();
     }),
   ).pipe(
@@ -178,6 +175,12 @@ const readGitOrigin = (cwd: string) =>
         : Effect.fail(error),
     ),
   );
+
+const readGitOrigin = (cwd: string) =>
+  runGit(cwd, ['remote', 'get-url', 'origin']);
+
+export const readGitToplevel = (cwd: string) =>
+  runGit(cwd, ['rev-parse', '--show-toplevel']);
 
 /** Canonical path per path-matcher project; a path that doesn't exist can't match, so it's left out. */
 export const resolveMatcherPaths = (config: TracesConfig) =>

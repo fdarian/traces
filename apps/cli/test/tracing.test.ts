@@ -116,9 +116,9 @@ const resolvedProject = (
 ): ResolvedProject => ({
   configPath: '/cfg.json',
   projectName: 'app',
+  configSource: 'flag',
   matchedBy: 'flag',
   project: {
-    matcher: { type: 'git', repo: 'acme/app' },
     tracing,
     services: { web: { provider: 'vercel', project: 'p' } },
   },
