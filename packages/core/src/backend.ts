@@ -1,4 +1,4 @@
-import { Context, type Effect } from 'effect';
+import { Context, type Effect, type Option } from 'effect';
 import type {
   JaegerBadResponse,
   JaegerUnreachable,
@@ -38,6 +38,31 @@ export interface TraceBackend {
     query: TraceQuery,
   ) => Effect.Effect<
     ReadonlyArray<TraceSummary>,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    never
+  >;
+  /**
+   * The newest `query.limit` traces of the window, with their spans, in one
+   * request. Attributes and `errorsOnly` are not applied: the caller matches
+   * them on the traces itself (see `attributePage`), so it can tell when its
+   * scan was cut short.
+   */
+  readonly searchFullTraces: (
+    query: TraceQuery,
+  ) => Effect.Effect<
+    ReadonlyArray<Trace>,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    never
+  >;
+  /**
+   * A tag search the server evaluates (`attributes`, and `errorsOnly` as the
+   * `error` tag). None when the server cannot: Jaeger v2's v3 gateway ignores
+   * tags and a host may serve no other API.
+   */
+  readonly searchTagged: (
+    query: TraceQuery,
+  ) => Effect.Effect<
+    Option.Option<ReadonlyArray<TraceSummary>>,
     JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   >;

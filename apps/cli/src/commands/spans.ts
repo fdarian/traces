@@ -1,10 +1,13 @@
 import {
+  attributePage,
   decodeCursor,
+  type ErrorTraceScan,
   encodeCursor,
   fromTraceCursor,
   type PageResume,
   pageTraces,
   scanErrorTraces,
+  scanTraceWindow,
   toTraceCursor,
   toTraceRow,
   traceFetchSize,
@@ -124,68 +127,81 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
 
     const service = yield* resolveTraceService(args, args.service);
     const windowEnd = (until ?? now).toISOString();
-    const fetchPage = (request: {
-      readonly resume?: PageResume;
-      readonly size: number;
-      readonly serverFiltered: boolean;
-    }) =>
-      service.backend
-        .searchTraces({
-          service: service.otelService,
-          operation: Option.getOrUndefined(args.op),
-          startTimeMin: since.toISOString(),
-          startTimeMax: request.resume?.before ?? windowEnd,
-          minDuration: Option.getOrUndefined(
-            Option.map(minDuration, (parsed) => parsed.text),
-          ),
-          maxDuration: Option.getOrUndefined(
-            Option.map(maxDuration, (parsed) => parsed.text),
-          ),
-          attributes:
-            Object.keys(attributes).length === 0 ? undefined : attributes,
-          errorsOnly: request.serverFiltered,
-          limit: traceFetchSize(request.size, request.resume),
+    const query = {
+      service: service.otelService,
+      operation: Option.getOrUndefined(args.op),
+      startTimeMin: since.toISOString(),
+      startTimeMax: windowEnd,
+      minDuration: Option.getOrUndefined(
+        Option.map(minDuration, (parsed) => parsed.text),
+      ),
+      maxDuration: Option.getOrUndefined(
+        Option.map(maxDuration, (parsed) => parsed.text),
+      ),
+    };
+    const matchesAttributes = Object.keys(attributes).length > 0;
+    const fetchPage = matchesAttributes
+      ? attributePage({
+          backend: service.backend,
+          query,
+          attributes,
+          windowEnd,
+          requireError: args.errors,
         })
-        .pipe(
-          Effect.map((summaries) =>
-            pageTraces({
-              summaries,
-              limit: request.size,
-              resume: request.resume,
-            }),
-          ),
-        );
+      : (request: {
+          readonly resume?: PageResume;
+          readonly size: number;
+          readonly serverFiltered: boolean;
+        }) =>
+          service.backend
+            .searchTraces({
+              ...query,
+              startTimeMax: request.resume?.before ?? windowEnd,
+              errorsOnly: request.serverFiltered,
+              limit: traceFetchSize(request.size, request.resume),
+            })
+            .pipe(
+              Effect.map((summaries) =>
+                pageTraces({
+                  summaries,
+                  limit: request.size,
+                  resume: request.resume,
+                }),
+              ),
+            );
+    const scanInput = {
+      limit: args.limit,
+      scanCap: TRACE_SCAN_CAP,
+      pageSize: TRACE_SCAN_PAGE,
+      resume: resumed?.resume,
+      mode: resumed?.mode,
+      fetchPage,
+    };
+    const fromScan = (scan: ErrorTraceScan) => ({
+      traces: scan.matches,
+      next: scan.next,
+      mode: args.errors ? scan.mode : undefined,
+      capped: scan.capped,
+      scanned: scan.scanned,
+    });
 
     const result = args.errors
-      ? yield* scanErrorTraces({
-          limit: args.limit,
-          scanCap: TRACE_SCAN_CAP,
-          pageSize: TRACE_SCAN_PAGE,
-          resume: resumed?.resume,
-          mode: resumed?.mode,
-          fetchPage,
-        }).pipe(
-          Effect.map((scan) => ({
-            traces: scan.matches,
-            next: scan.next,
-            mode: scan.mode,
-            capped: scan.capped,
-            scanned: scan.scanned,
-          })),
-        )
-      : yield* fetchPage({
-          resume: resumed?.resume,
-          size: args.limit,
-          serverFiltered: false,
-        }).pipe(
-          Effect.map((page) => ({
-            traces: page.kept,
-            next: page.next,
-            mode: undefined,
-            capped: false,
-            scanned: page.kept.length,
-          })),
-        );
+      ? yield* scanErrorTraces(scanInput).pipe(Effect.map(fromScan))
+      : matchesAttributes
+        ? yield* scanTraceWindow(scanInput, 'client').pipe(Effect.map(fromScan))
+        : yield* fetchPage({
+            resume: resumed?.resume,
+            size: args.limit,
+            serverFiltered: false,
+          }).pipe(
+            Effect.map((page) => ({
+              traces: page.kept,
+              next: page.next,
+              mode: undefined,
+              capped: false,
+              scanned: page.kept.length,
+            })),
+          );
 
     const mode = outputMode(args.json);
     const withDate = windowSpansDays(since, until ?? now);
@@ -194,6 +210,7 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
         formatTraceLine(row, withDate),
       );
     }
+    const searched = `${args.errors ? 'error traces' : 'traces'}${matchesAttributes ? ' matching --attr' : ''}`;
     if (result.traces.length === 0) {
       // An empty page with a cursor is a capped scan, not an empty window.
       const window =
@@ -201,13 +218,13 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
           ? `in ${since.toISOString()} to ${windowEnd}`
           : `in the scanned range (${result.next.before} to ${resumed?.resume.before ?? windowEnd}); more below`;
       yield* emptyNotice(
-        args.errors ? 'error traces' : 'traces',
+        searched,
         `for ${service.otelService} (jaeger) ${window}`,
       );
     }
     if (result.capped) {
       yield* Console.error(
-        `note: scanned ${result.scanned} traces (cap ${TRACE_SCAN_CAP}) and found ${result.traces.length} of ${args.limit} error traces; older traces were not read. Run the \`more:\` command to keep scanning.`,
+        `note: scanned ${result.scanned} traces (cap ${TRACE_SCAN_CAP}) and found ${result.traces.length} of ${args.limit} ${searched}; older traces were not read. Run the \`more:\` command to keep scanning.`,
       );
     }
     if (result.next !== undefined) {

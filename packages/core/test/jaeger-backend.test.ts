@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect, Exit, Layer } from 'effect';
+import { Effect, Exit, Layer, Option } from 'effect';
 import { HttpClient, HttpClientResponse } from 'effect/http';
 import {
   JaegerBadResponse,
@@ -391,9 +391,14 @@ describe('searchTraces with attributes', () => {
           [],
         ),
       );
+      // Older than the first batch: a later page only holds traces before the window bound.
+      const olderC = otelSpan('c'.repeat(32), '1791946000000000000', [
+        { key: 'tenant', value: { stringValue: 'acme' } },
+      ]);
       const { client, requests } = routedClient([
-        v3Body([traceA, ...filler.slice(0, 99)]),
-        v3Body([traceC]),
+        // One more than the page: the extra row is how the scan knows older traces remain.
+        v3Body([traceA, ...filler]),
+        v3Body([olderC]),
       ]);
       const exit = await run(
         client,
@@ -531,5 +536,51 @@ describe('JaegerBadResponse', () => {
       }),
     );
     expect(error.body).toBe('{"unexpected":true}');
+  });
+});
+
+describe('the one-batch searches behind a paged attribute search', () => {
+  const query = {
+    service: 'web',
+    startTimeMin: '2026-10-12T00:00:00.000Z',
+    startTimeMax: '2026-10-15T00:00:00.000Z',
+    attributes: { tenant: 'acme' },
+    limit: 7,
+  };
+
+  test('searchFullTraces reads one /api/v3/traces batch and sends no attribute filter', async () => {
+    const { client, requests } = recordingClient(200, {
+      result: { resourceSpans: [] },
+    });
+    const exit = await run(
+      client,
+      { url: 'http://localhost:16686', headers: {} },
+      (b) => b.searchFullTraces({ ...query, errorsOnly: true }),
+    );
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(requests.map((request) => request.url.pathname)).toEqual([
+      '/api/v3/traces',
+    ]);
+    const params = requests[0]?.url.searchParams;
+    expect(params?.get('query.num_traces')).toBe('7');
+    expect(
+      [...(params?.keys() ?? [])].some((key) => key.includes('attr')),
+    ).toBe(false);
+  });
+
+  test('searchTagged answers none for a host without the legacy API, and asks only once', async () => {
+    const { client, requests } = recordingClient(404, {});
+    const exit = await run(
+      client,
+      { url: 'http://localhost:16686', headers: {} },
+      (b) =>
+        Effect.gen(function* () {
+          const first = yield* b.searchTagged(query);
+          const second = yield* b.searchTagged(query);
+          return [first, second];
+        }),
+    );
+    expect(Exit.isSuccess(exit) && exit.value.every(Option.isNone)).toBe(true);
+    expect(requests).toHaveLength(1);
   });
 });

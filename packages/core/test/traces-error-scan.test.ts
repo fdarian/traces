@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import {
   fingerprintFromErrorSpan,
   fingerprintFromException,
@@ -179,6 +179,8 @@ const fakeBackend = (
   const backend: TraceBackendInterface = {
     listServices: Effect.succeed([]),
     listOperations: () => Effect.succeed([]),
+    searchFullTraces: () => Effect.succeed([]),
+    searchTagged: () => Effect.succeed(Option.none()),
     searchTraces: (query) => {
       searches.push({
         service: query.service,

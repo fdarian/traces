@@ -1,19 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import assert from 'node:assert';
 import { Effect, Exit } from 'effect';
-import {
-  computeTraceSummary,
-  mapTrace,
-  mapTraceSummary,
-  parseJson,
-  validate,
-} from '#/jaeger.js';
+import { mapTrace, mapTraceSummary, parseJson, validate } from '#/jaeger.js';
 import {
   type OtelResourceSpan,
   OtelTraceSummariesResultSchema,
   type OtelTraceSummary,
   OtelTracesResultSchema,
 } from '#/jaeger-schema.js';
+import { computeTraceSummary } from '#/traces/summary.js';
 import traceMultiSpan from './fixtures/trace-multi-span.json';
 import traceSummaries from './fixtures/trace-summaries.json';
 

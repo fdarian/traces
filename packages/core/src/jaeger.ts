@@ -30,13 +30,14 @@ import type {
 } from './model.js';
 import {
   nanoToIso,
-  nanosToMs,
   normalizeAttributes,
   normalizeDurationMs,
   normalizeSpanEvents,
   normalizeStatusCode,
   normalizeTimestamp,
 } from './normalize.js';
+import { attributePage, scanTraceWindow } from './traces/paging.js';
+import { computeTraceSummary } from './traces/summary.js';
 
 export function buildSearchParams(query: TraceQuery): URLSearchParams {
   const params = new URLSearchParams();
@@ -138,58 +139,6 @@ export function mapTrace(
     }
   }
   return { traceId, spans };
-}
-
-export function computeTraceSummary(trace: Trace): TraceSummary {
-  const rootSpan = trace.spans.find((s) => s.parentSpanId === undefined);
-  const rootService =
-    rootSpan !== undefined ? rootSpan.resource.serviceName : 'unknown';
-  const rootOperation = rootSpan !== undefined ? rootSpan.name : 'unknown';
-
-  const serviceMap: Map<string, number> = new Map();
-  let errorSpanCount = 0;
-  let minStart = BigInt('0');
-  let maxEnd = BigInt('0');
-  let first = true;
-
-  for (const span of trace.spans) {
-    const serviceName = span.resource.serviceName;
-    serviceMap.set(serviceName, (serviceMap.get(serviceName) ?? 0) + 1);
-    if (span.status.code === 'error') {
-      errorSpanCount += 1;
-    }
-    const start = BigInt(span.startTimeUnixNano);
-    const end = BigInt(span.endTimeUnixNano);
-    if (first) {
-      minStart = start;
-      maxEnd = end;
-      first = false;
-    } else {
-      if (start < minStart) {
-        minStart = start;
-      }
-      if (end > maxEnd) {
-        maxEnd = end;
-      }
-    }
-  }
-
-  const services = Array.from(serviceMap.entries()).map(
-    ([name, spanCount]) => ({ name, spanCount }),
-  );
-
-  const durationMs = nanosToMs(maxEnd - minStart);
-
-  return {
-    traceId: trace.traceId,
-    rootService,
-    rootOperation,
-    spanCount: trace.spans.length,
-    errorSpanCount,
-    services,
-    startTimeUnixNano: minStart.toString(),
-    durationMs,
-  };
 }
 
 export function mapTraceSummary(raw: OtelTraceSummary): TraceSummary {
@@ -317,31 +266,10 @@ export function joinUrl(base: URL, path: string): URL {
   return url;
 }
 
-/** Traces one `/api/v3/traces` fetch reads per round when a client-side attribute search pages the window. */
+/** Traces one `/api/v3/traces` fetch reads per round when `searchTraces` pages the window to match attributes on the client. */
 const ATTRIBUTE_SEARCH_BATCH = 100;
-/** Traces a client-side attribute search reads before it stops with the matches found so far. */
+/** Traces that `searchTraces` reads that way before it stops with the matches found so far. */
 const ATTRIBUTE_SEARCH_CAP = 1000;
-
-const hasAttribute = (
-  attributes: ReadonlyArray<{ readonly key: string; readonly value: unknown }>,
-  key: string,
-  value: string,
-): boolean =>
-  attributes.some(
-    (attribute) => attribute.key === key && String(attribute.value) === value,
-  );
-
-export const traceMatchesAttributes = (
-  trace: Trace,
-  attributes: Readonly<Record<string, string>>,
-): boolean =>
-  Object.entries(attributes).every(([key, value]) =>
-    trace.spans.some(
-      (span) =>
-        hasAttribute(span.attributes, key, value) ||
-        hasAttribute(span.resource.attributes, key, value),
-    ),
-  );
 
 function makeBackend(
   client: HttpClient.HttpClient,
@@ -487,7 +415,8 @@ function makeBackend(
     });
   };
 
-  const fetchFullTraces = (
+  /** One `/api/v3/traces` batch: the newest `query.limit` traces of the window with their spans. The gateway ignores attributes, so `query.attributes` and `errorsOnly` do nothing here. */
+  const searchFullTraces = (
     query: TraceQuery,
   ): Effect.Effect<
     ReadonlyArray<Trace>,
@@ -539,72 +468,9 @@ function makeBackend(
     JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
     never
   > =>
-    fetchFullTraces(query).pipe(
+    searchFullTraces(query).pipe(
       Effect.map((traces) => traces.map(computeTraceSummary)),
     );
-
-  /**
-   * Attribute search for a host without the legacy API: pages the window
-   * newest first through `/api/v3/traces` (which ignores attributes) and keeps
-   * the traces whose spans match, until `limit` matches, the window ends, or
-   * `ATTRIBUTE_SEARCH_CAP` traces were read.
-   */
-  const searchTracesByClientAttributes = (
-    query: TraceQuery,
-    attributes: Readonly<Record<string, string>>,
-  ): Effect.Effect<
-    ReadonlyArray<TraceSummary>,
-    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
-    never
-  > => {
-    const step = (
-      windowEnd: string,
-      seen: ReadonlySet<string>,
-      matches: ReadonlyArray<TraceSummary>,
-    ): Effect.Effect<
-      ReadonlyArray<TraceSummary>,
-      JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
-      never
-    > =>
-      Effect.gen(function* () {
-        const batch = yield* fetchFullTraces({
-          ...query,
-          attributes: undefined,
-          startTimeMax: windowEnd,
-          limit: ATTRIBUTE_SEARCH_BATCH,
-        });
-        const fresh = batch.filter((trace) => !seen.has(trace.traceId));
-        const read = fresh.map((trace) => ({
-          trace,
-          summary: computeTraceSummary(trace),
-        }));
-        const freshSummaries = read.map((entry) => entry.summary);
-        const hits = read
-          .filter((entry) => traceMatchesAttributes(entry.trace, attributes))
-          .map((entry) => entry.summary);
-        const found = [...matches, ...hits].sort((left, right) =>
-          BigInt(right.startTimeUnixNano) > BigInt(left.startTimeUnixNano)
-            ? 1
-            : -1,
-        );
-        const readIds = new Set([...seen, ...fresh.map((t) => t.traceId)]);
-        const enough = query.limit !== undefined && found.length >= query.limit;
-        const windowEnded =
-          batch.length < ATTRIBUTE_SEARCH_BATCH || fresh.length === 0;
-        if (enough || windowEnded || readIds.size >= ATTRIBUTE_SEARCH_CAP) {
-          return query.limit === undefined
-            ? found
-            : found.slice(0, query.limit);
-        }
-        const oldest = freshSummaries.reduce((least, summary) =>
-          BigInt(summary.startTimeUnixNano) < BigInt(least.startTimeUnixNano)
-            ? summary
-            : least,
-        );
-        return yield* step(nanoToIso(oldest.startTimeUnixNano), readIds, found);
-      });
-    return step(query.startTimeMax, new Set(), []);
-  };
 
   /** None when the host does not serve the legacy API (404 or 405). */
   const searchTracesViaLegacy = (
@@ -643,6 +509,27 @@ function makeBackend(
     });
   };
 
+  /** Tag search through the legacy API; the legacy API is probed once and a 404 or 405 is remembered. */
+  const searchTagged = (
+    query: TraceQuery,
+  ): Effect.Effect<
+    Option.Option<ReadonlyArray<TraceSummary>>,
+    JaegerUnreachable | JaegerBadResponse | TraceBackendUnauthorized,
+    never
+  > =>
+    Effect.gen(function* () {
+      if (!(yield* Ref.get(legacyAvailable))) return Option.none();
+      const legacy = yield* searchTracesViaLegacy({
+        ...query,
+        attributes: {
+          ...query.attributes,
+          ...(query.errorsOnly === true ? { error: 'true' } : {}),
+        },
+      });
+      if (Option.isNone(legacy)) yield* Ref.set(legacyAvailable, false);
+      return legacy;
+    });
+
   const searchTraces = (
     query: TraceQuery,
   ): Effect.Effect<
@@ -652,20 +539,29 @@ function makeBackend(
   > => {
     return Effect.gen(function* () {
       const attributes = query.attributes;
-      const tagSearch = attributes !== undefined || query.errorsOnly === true;
-      if (tagSearch && (yield* Ref.get(legacyAvailable))) {
-        const legacy = yield* searchTracesViaLegacy({
-          ...query,
-          attributes: {
-            ...attributes,
-            ...(query.errorsOnly === true ? { error: 'true' } : {}),
-          },
-        });
-        if (Option.isSome(legacy)) return legacy.value;
-        yield* Ref.set(legacyAvailable, false);
+      if (attributes !== undefined || query.errorsOnly === true) {
+        const tagged = yield* searchTagged(query);
+        if (Option.isSome(tagged)) return tagged.value;
       }
       if (attributes !== undefined) {
-        return yield* searchTracesByClientAttributes(query, attributes);
+        // No legacy API: page the window and match on the client. Callers that
+        // want to know the scan was cut short page it themselves (`attributePage`).
+        const scan = yield* scanTraceWindow(
+          {
+            limit: query.limit ?? ATTRIBUTE_SEARCH_CAP,
+            scanCap: ATTRIBUTE_SEARCH_CAP,
+            pageSize: ATTRIBUTE_SEARCH_BATCH,
+            fetchPage: attributePage({
+              backend: { searchTagged, searchFullTraces },
+              query,
+              attributes,
+              windowEnd: query.startTimeMax,
+              requireError: false,
+            }),
+          },
+          'client',
+        );
+        return [...scan.matches].reverse();
       }
       const available = yield* Ref.get(summariesAvailable);
       if (!available) {
@@ -692,6 +588,8 @@ function makeBackend(
     listServices,
     listOperations,
     searchTraces,
+    searchTagged,
+    searchFullTraces,
     getTrace,
   };
 }

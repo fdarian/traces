@@ -1,4 +1,5 @@
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
+import type { TraceBackend, TraceQuery } from '../backend.js';
 import { InvalidCursor } from '../logs/errors.js';
 import { type Cursor } from '../logs/model.js';
 import { shortHash } from '../logs/normalize.js';
@@ -7,8 +8,9 @@ import {
   type PageResume,
   pageBackwards,
 } from '../logs/paging.js';
-import type { TraceSummary } from '../model.js';
+import type { Trace, TraceSummary } from '../model.js';
 import { nanoToIso } from '../normalize.js';
+import { computeTraceSummary, traceMatchesAttributes } from './summary.js';
 
 const position = (summary: TraceSummary) =>
   nanoToIso(summary.startTimeUnixNano);
@@ -83,6 +85,11 @@ export interface ErrorTraceScan {
   readonly capped: boolean;
 }
 
+export interface ScanPage extends BackwardPage<TraceSummary> {
+  /** The trace ids of `kept` that match, for a page that decides it itself (an attribute match). Unset means `errorSpanCount > 0`. */
+  readonly hits?: ReadonlySet<string>;
+}
+
 export interface ErrorScanInput<E, R> {
   readonly limit: number;
   readonly scanCap: number;
@@ -95,8 +102,19 @@ export interface ErrorScanInput<E, R> {
     readonly resume?: PageResume;
     readonly size: number;
     readonly serverFiltered: boolean;
-  }) => Effect.Effect<BackwardPage<TraceSummary>, E, R>;
+  }) => Effect.Effect<ScanPage, E, R>;
 }
+
+/**
+ * Pages the window newest to oldest in a fixed `mode` until `limit` matches,
+ * the window ends, or `scanCap` traces were read. Unlike `scanErrorTraces` it
+ * never retries in the other mode, so a page that sets `hits` (an attribute
+ * search) decides what matches.
+ */
+export const scanTraceWindow = <E, R>(
+  input: ErrorScanInput<E, R>,
+  mode: ErrorScanMode,
+): Effect.Effect<ErrorTraceScan, E, R> => scanPages(input, mode);
 
 const scanPages = <E, R>(
   input: ErrorScanInput<E, R>,
@@ -117,7 +135,11 @@ const scanPages = <E, R>(
       const newestFirst = [...page.kept].reverse();
       const hits: Array<TraceSummary> = [];
       for (const summary of newestFirst) {
-        if (summary.errorSpanCount > 0) hits.push(summary);
+        const isHit =
+          page.hits === undefined
+            ? summary.errorSpanCount > 0
+            : page.hits.has(summary.traceId);
+        if (isHit) hits.push(summary);
       }
       const total = [...collected, ...hits];
       const nowScanned = scanned + page.kept.length;
@@ -191,3 +213,79 @@ export const scanErrorTraces = <E, R>(
     if (filtered.scanned > 0) return filtered;
     return yield* scanPages(input, 'client');
   });
+
+/**
+ * One page of an attribute search, for `scanTraceWindow`. The server matches
+ * when it can (`searchTagged`); otherwise the page reads one batch of full
+ * traces and matches their spans here, so every trace read counts toward the
+ * scan cap and a capped scan reports itself like an error scan does.
+ * `requireError` keeps only traces with error spans.
+ */
+export const attributePage =
+  (input: {
+    readonly backend: Pick<TraceBackend, 'searchTagged' | 'searchFullTraces'>;
+    readonly query: TraceQuery;
+    readonly attributes: Readonly<Record<string, string>>;
+    readonly windowEnd: string;
+    readonly requireError: boolean;
+  }) =>
+  (request: {
+    readonly resume?: PageResume;
+    readonly size: number;
+    readonly serverFiltered: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const query: TraceQuery = {
+        ...input.query,
+        startTimeMax: request.resume?.before ?? input.windowEnd,
+        limit: traceFetchSize(request.size, request.resume),
+      };
+      const wanted = (summary: TraceSummary) =>
+        !input.requireError || summary.errorSpanCount > 0;
+      const tagged = yield* input.backend.searchTagged({
+        ...query,
+        attributes: input.attributes,
+        errorsOnly: request.serverFiltered,
+      });
+      if (Option.isSome(tagged)) {
+        const page = pageTraces({
+          summaries: tagged.value,
+          limit: request.size,
+          resume: request.resume,
+        });
+        return {
+          ...page,
+          hits: new Set(
+            page.kept.filter(wanted).map((summary) => summary.traceId),
+          ),
+        } satisfies ScanPage;
+      }
+      const traces = yield* input.backend.searchFullTraces({
+        ...query,
+        attributes: undefined,
+        errorsOnly: undefined,
+      });
+      const byId = new Map<string, Trace>(
+        traces.map((trace) => [trace.traceId, trace] as const),
+      );
+      const page = pageTraces({
+        summaries: traces.map(computeTraceSummary),
+        limit: request.size,
+        resume: request.resume,
+      });
+      return {
+        ...page,
+        hits: new Set(
+          page.kept
+            .filter((summary) => {
+              const trace = byId.get(summary.traceId);
+              return (
+                trace !== undefined &&
+                wanted(summary) &&
+                traceMatchesAttributes(trace, input.attributes)
+              );
+            })
+            .map((summary) => summary.traceId),
+        ),
+      } satisfies ScanPage;
+    });

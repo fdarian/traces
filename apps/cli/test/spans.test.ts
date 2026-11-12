@@ -346,6 +346,47 @@ describe('traces spans against a fake Jaeger', () => {
       ]);
     });
 
+    test('--attr stops at the scan cap, says so on stderr and hands back a cursor to keep scanning', async () => {
+      quietBacklog = true;
+      try {
+        const first = await withoutLegacy(() =>
+          run([...WINDOW, '--attr', 'tenant=b', '--limit', '5']),
+        );
+        expect(first.code).toBe(0);
+        expect(first.rows).toEqual([]);
+        expect(first.stderr).toContain(
+          'note: scanned 1000 traces (cap 1000) and found 0 of 5 traces matching --attr; older traces were not read.',
+        );
+        expect(first.stderr).toContain('in the scanned range (');
+        expect(first.more).toContain('--attr tenant=b');
+        const resumed = await withoutLegacy(() =>
+          run([
+            ...WINDOW,
+            '--attr',
+            'tenant=b',
+            '--limit',
+            '5',
+            '--cursor',
+            first.cursor ?? '',
+          ]),
+        );
+        // 1100 traces: the second scan reads the last 100 and reaches the window's start.
+        expect(resumed.stderr).not.toContain('note: scanned');
+        expect(resumed.more).toBeUndefined();
+      } finally {
+        quietBacklog = false;
+      }
+    });
+
+    test('--attr that finds its limit before the cap prints no cap note', async () => {
+      const result = await withoutLegacy(() =>
+        run([...WINDOW, '--attr', 'tenant=a', '--limit', '2']),
+      );
+      expect(idsOf(result.rows)).toEqual(['08', '10']);
+      expect(result.stderr).not.toContain('note: scanned');
+      expect(result.more).toBeDefined();
+    });
+
     test('--errors with --attr keeps the matching traces that have error spans', async () => {
       const result = await withoutLegacy(() =>
         run([...WINDOW, '--errors', '--attr', 'tenant=a']),
