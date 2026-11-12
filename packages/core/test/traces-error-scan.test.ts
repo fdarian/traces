@@ -160,8 +160,10 @@ describe('groupTraceErrors', () => {
     ]);
     const groups = groupTraceErrors([...traces, other], SCOPE);
     expect(groups.map((group) => group.count)).toEqual([5, 1]);
-    expect(groups[0]?.traceIds).toEqual(['t0005', 't0004', 't0003']);
-    expect(groups[0]?.firstSeen < groups[0]?.lastSeen).toBe(true);
+    const top = groups[0];
+    if (top === undefined) throw new Error('expected a group');
+    expect(top.traceIds).toEqual(['t0005', 't0004', 't0003']);
+    expect(top.firstSeen < top.lastSeen).toBe(true);
   });
 });
 

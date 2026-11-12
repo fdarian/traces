@@ -1,8 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect, Layer, Stream } from 'effect';
+import { Effect, Layer, Redacted, Stream } from 'effect';
 import { HttpClient, HttpClientResponse } from 'effect/http';
-import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import {
+  type ChildProcess,
+  ChildProcessSpawner,
+  type CommandLine,
+} from 'effect/process';
+
+const unwrap = (word: CommandLine.Word): string =>
+  typeof word === 'string' ? word : Redacted.value(word);
 
 export const fixture = (name: string): unknown =>
   JSON.parse(readFileSync(join(import.meta.dir, 'fixtures', name), 'utf8'));
@@ -21,7 +28,9 @@ export const fakeRailway = (
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) => {
-      const args = (command as unknown as ChildProcess.StandardCommand).args;
+      const args = (
+        command as unknown as ChildProcess.StandardCommand
+      ).args.map(unwrap);
       const variables: Record<string, string> = {};
       for (let index = 0; index < args.length; index++) {
         const flag = args[index];
@@ -64,7 +73,10 @@ export const fakeHttp = (
     HttpClient.make((request) => {
       const url = new URL(request.url);
       for (const entry of request.urlParams) {
-        url.searchParams.set(entry[0], entry[1]);
+        url.searchParams.set(
+          entry[0],
+          typeof entry[1] === 'string' ? entry[1] : Redacted.value(entry[1]),
+        );
       }
       calls.push({ url: url.toString() });
       const reply = respond(url);

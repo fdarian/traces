@@ -89,7 +89,7 @@ describe('pageTraces', () => {
     const seen: Array<string> = [];
     const loop = async (resume?: PageResume): Promise<void> => {
       const page = await Effect.runPromise(
-        jaeger.fetchPage({ resume, size: 3 }),
+        jaeger.fetchPage({ resume, size: 3, serverFiltered: false }),
       );
       seen.push(...ids(page.kept).reverse());
       if (page.next !== undefined) await loop(page.next);
@@ -107,17 +107,23 @@ describe('pageTraces', () => {
       summary(4, 0),
     ];
     const jaeger = fakeJaeger(twins);
-    const first = await Effect.runPromise(jaeger.fetchPage({ size: 2 }));
+    const first = await Effect.runPromise(
+      jaeger.fetchPage({ size: 2, serverFiltered: false }),
+    );
     expect(first.next?.before).toBe(
       nanoToIso(twins[2]?.startTimeUnixNano ?? ''),
     );
     expect(first.next?.seen).toHaveLength(1);
     const second = await Effect.runPromise(
-      jaeger.fetchPage({ resume: first.next, size: 2 }),
+      jaeger.fetchPage({ resume: first.next, size: 2, serverFiltered: false }),
     );
     const third = second.next
       ? await Effect.runPromise(
-          jaeger.fetchPage({ resume: second.next, size: 2 }),
+          jaeger.fetchPage({
+            resume: second.next,
+            size: 2,
+            serverFiltered: false,
+          }),
         )
       : { kept: [] };
     const all = [...first.kept, ...second.kept, ...third.kept];

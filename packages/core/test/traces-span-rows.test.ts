@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   normalizeSpanKind,
   type Span,
+  type SpanKind,
   type Trace,
   toSpanRows,
 } from '#/index.js';
@@ -230,7 +231,7 @@ describe('toSpanRows exception promotion', () => {
 });
 
 describe('span kind', () => {
-  test.each([
+  test.each<[string, SpanKind]>([
     ['SPAN_KIND_SERVER', 'server'],
     ['SPAN_KIND_CLIENT', 'client'],
     ['SPAN_KIND_PRODUCER', 'producer'],
