@@ -1,7 +1,11 @@
 import { defineConfig } from 'blume';
+import { posthog } from 'blume/analytics';
+
+const ph = process.env.POSTHOG_KEY;
 
 export default defineConfig({
   title: 'traces',
+  ...(ph ? { analytics: [posthog({ key: ph })] } : {}),
   description:
     'A lightweight observability dashboard for Jaeger v2 with a publishable React SDK.',
   basePath: '/docs',
