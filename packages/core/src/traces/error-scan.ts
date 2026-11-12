@@ -135,6 +135,11 @@ export interface TraceErrorScanResult {
   readonly scanned: number;
   /** True when older error traces were left unread (either cap), so counts undercount. */
   readonly partial: boolean;
+  /**
+   * Set with `partial`: the start of the oldest trace the counts include, so
+   * they cover `countedSince` to the window end, not the whole window.
+   */
+  readonly countedSince?: string;
 }
 
 /**
@@ -202,5 +207,6 @@ export const scanTraceErrors = (input: {
       errorTraces: traces.length,
       scanned: scan.scanned,
       partial: scan.next !== undefined,
+      ...(scan.next === undefined ? {} : { countedSince: scan.next.before }),
     } satisfies TraceErrorScanResult;
   });

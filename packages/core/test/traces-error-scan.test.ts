@@ -12,6 +12,7 @@ import {
   TraceNotFound,
   type TraceSummary,
 } from '#/index.js';
+import { nanoToIso } from '#/normalize.js';
 
 const BASE_NANO = 1_791_800_000_000_000_000n;
 
@@ -241,6 +242,7 @@ describe('scanTraceErrors', () => {
       scanned: 4,
       partial: false,
     });
+    expect(result.countedSince).toBeUndefined();
     expect(result.groups[0]).toMatchObject({ count: 2 });
     expect(result.groups[0]?.traceIds).toEqual(['t0004', 't0002']);
     expect(fake.searches.every((s) => s.service === 'mockingbird-web')).toBe(
@@ -295,6 +297,10 @@ describe('scanTraceErrors', () => {
     expect(result.partial).toBe(true);
     expect([...fake.fetched].sort()).toEqual(['t0004', 't0005', 't0006']);
     expect(result.groups[0]?.count).toBe(3);
+    // The counts include the oldest of the three fetched traces and nothing before it.
+    expect(result.countedSince).toBe(
+      nanoToIso(summary(4, 1).startTimeUnixNano),
+    );
   });
 
   test('is partial when the scan cap stops it short of the cap on error traces', async () => {
@@ -304,6 +310,9 @@ describe('scanTraceErrors', () => {
     );
     const result = await scan(fake, { scanCap: 4 });
     expect(result).toMatchObject({ errorTraces: 0, scanned: 4, partial: true });
+    expect(result.countedSince).toBe(
+      nanoToIso(summary(5, 0).startTimeUnixNano),
+    );
   });
 
   test('skips a trace that expired between search and fetch', async () => {

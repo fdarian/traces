@@ -35,7 +35,8 @@ if (document.includes('project(')) {
   const since = vars.b === undefined ? -Infinity : Date.parse(vars.b);
   const rows = state.logs
     .filter((row) => Date.parse(row.timestamp) <= before && Date.parse(row.timestamp) >= since)
-    .slice(-Number(vars.l));
+    // N+1 rows for a limit of N: the shape pageRailway reads as "older logs remain" (see core logs/paging.ts).
+    .slice(-(Number(vars.l) + 1));
   reply({ environmentLogs: rows });
 } else {
   console.error('unexpected document ' + document);
@@ -146,9 +147,13 @@ const summaryOf = (entry: (typeof TRACE_ERRORS)[number]) => ({
 let dir: string;
 let jaeger: Server;
 
-const writeState = (name: string, deployments: ReadonlyArray<object>) => {
+const writeState = (
+  name: string,
+  deployments: ReadonlyArray<object>,
+  logs: ReadonlyArray<object> = LOGS,
+) => {
   const path = join(dir, `${name}.json`);
-  writeFileSync(path, JSON.stringify({ deployments, logs: LOGS }));
+  writeFileSync(path, JSON.stringify({ deployments, logs }));
   return path;
 };
 
@@ -389,5 +394,66 @@ describe('traces logs --since deploy', () => {
       '2026-10-15T12:20:00.000Z',
       '2026-10-15T12:30:00.000Z',
     ]);
+  });
+});
+
+describe('traces errors partial coverage', () => {
+  const FLOOD_START = Date.parse('2026-10-15T11:00:00.000Z');
+  const flood = Array.from({ length: 2001 }, (_, index) =>
+    logRow(
+      new Date(FLOOD_START + index * 1000).toISOString(),
+      `ECONNRESET talking to 10.0.0.${index}`,
+    ),
+  );
+
+  test('a capped log service says which time range its counts cover', async () => {
+    const state = writeState('flood', DEPLOYMENTS, flood);
+    const result = await run(
+      'errors',
+      [
+        'api',
+        '--since',
+        '2026-10-15T10:00:00Z',
+        '--until',
+        UNTIL,
+        '--source',
+        'logs',
+      ],
+      configFor(false),
+      state,
+    );
+    expect(result.code).toBe(0);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      count: 2000,
+      lines: 2000,
+      partial: true,
+      // The oldest of the 2001 rows is the one the cap dropped.
+      countedSince: '2026-10-15T11:00:01.000Z',
+    });
+    expect(result.stderr).toContain(
+      'note: hit the 2000-log cap; counts cover 2026-10-15T11:00:01Z -> 2026-10-15T14:00:00Z, not the whole window from 2026-10-15T10:00:00Z. Narrow --since for exact counts.',
+    );
+  });
+
+  test('a service that read its whole window has no countedSince', async () => {
+    const state = writeState('whole', DEPLOYMENTS);
+    const result = await run(
+      'errors',
+      [
+        'api',
+        '--since',
+        '2026-10-15T10:00:00Z',
+        '--until',
+        UNTIL,
+        '--source',
+        'logs',
+      ],
+      configFor(false),
+      state,
+    );
+    expect(result.rows.every((row) => row.partial === false)).toBe(true);
+    expect(result.rows.some((row) => 'countedSince' in row)).toBe(false);
+    expect(result.stderr).not.toContain('counts cover');
   });
 });

@@ -38,6 +38,11 @@ import {
   retentionNoteFor,
   shortId,
 } from '#/output.ts';
+import {
+  collectCoverage,
+  coverageNote,
+  partialFields,
+} from '#/partial-coverage.ts';
 import { globalOptions, resolveErrorScope } from '#/resolve.ts';
 import { parseInstant, parseWhen } from '#/time.ts';
 
@@ -66,6 +71,8 @@ interface ErrorGroupRecord extends ErrorGroup {
   readonly hint: string;
   /** True when a cap was hit, so counts undercount. */
   readonly partial: boolean;
+  /** Set with `partial`: the counts cover this instant to the window end, not the whole window. */
+  readonly countedSince?: string;
   /** `--since deploy` only: no baseline error in this service shares the fingerprint. */
   readonly new?: boolean;
   /** `--since deploy` only: the deploy the service's window starts at. */
@@ -303,14 +310,11 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
       o._tag === 'failed' ? [o] : [],
     );
 
-    const partialServices = new Set(
-      fetched
-        .filter((service) => service.page.next !== undefined)
-        .map((service) => service.name),
-    );
-    const partialTraceServices = new Set(
-      scanned.filter((o) => o.scan.partial).map((o) => o.name),
-    );
+    const coverages = collectCoverage(fetched, scanned, {
+      logs: ERROR_CAP,
+      errorTraces: ERROR_TRACE_CAP,
+      scanned: TRACE_SCAN_CAP,
+    });
     const environments = new Map(
       fetched.map((service) => [service.name, service.target] as const),
     );
@@ -382,7 +386,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
             ...group,
             provider: 'jaeger',
             hint: commandLine('trace', [traceId], globalFlags),
-            partial: partialTraceServices.has(group.service),
+            ...partialFields(coverages, group),
             ...deployFields(group),
           } satisfies ErrorGroupRecord,
           formatGroup,
@@ -413,7 +417,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
           provider: target.provider,
           environment: target.environment,
           hint,
-          partial: partialServices.has(group.service),
+          ...partialFields(coverages, group),
           ...deployFields(group),
         } satisfies ErrorGroupRecord,
         formatGroup,
@@ -444,7 +448,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
             : 'errors';
       yield* emptyNotice(
         what,
-        partialTraceServices.size === 0
+        scanned.every((o) => !o.scan.partial)
           ? `for ${detail} ${sinceLabel}`
           : `for ${detail} in the scanned range ${sinceLabel} (trace scan was capped; see note)`,
         retention,
@@ -452,12 +456,8 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
     }
     const labelled =
       scope.entries.length + (scope.traces?.services.length ?? 0) > 1;
-    for (const service of fetched) {
-      if (!partialServices.has(service.name)) continue;
-      const prefix = labelled ? `${service.name}: ` : '';
-      yield* Console.error(
-        `note: ${prefix}hit the ${ERROR_CAP}-log cap; counts are partial (newest ${ERROR_CAP} error logs only). Narrow --since for exact counts.`,
-      );
+    for (const coverage of coverages.values()) {
+      yield* Console.error(coverageNote(coverage, until ?? now, labelled));
     }
     for (const service of fetched) {
       if (service.baseline?.capped !== true) continue;
@@ -469,13 +469,6 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
       if (outcome.baseline?.capped !== true) continue;
       yield* Console.error(
         `note: ${outcome.name} (traces): the baseline trace scan was capped; \`new\` may over-report for this service.`,
-      );
-    }
-    for (const outcome of scanned) {
-      if (!outcome.scan.partial) continue;
-      const prefix = labelled ? `${outcome.name} (traces): ` : '';
-      yield* Console.error(
-        `note: ${prefix}trace scan was capped (${ERROR_TRACE_CAP} error traces or ${TRACE_SCAN_CAP} traces scanned per service) after reading ${outcome.scan.errorTraces} error traces out of ${outcome.scan.scanned} scanned; older traces remain unread, so counts are partial (newest first). Narrow the window with --since for exact counts.`,
       );
     }
     for (const failure of failures) {
