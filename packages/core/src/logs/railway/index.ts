@@ -1,3 +1,4 @@
+export { railwayLinkedProject, railwayProjectLayout } from './discovery.js';
 export {
   mapRailwayDeployment,
   mapRailwayHttpLog,

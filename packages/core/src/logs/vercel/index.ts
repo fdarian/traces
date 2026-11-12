@@ -1,3 +1,4 @@
+export { fetchVercelProjectName } from './discovery.js';
 export {
   mapBuildEvent,
   mapHttpRow,

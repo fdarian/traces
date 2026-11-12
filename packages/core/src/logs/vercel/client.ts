@@ -18,7 +18,7 @@ const LOGIN_HINT = 'run `vercel login` or set VERCEL_TOKEN';
 
 /** Authenticated JSON GETs against Vercel; `teamParams` scopes team-bound API calls. */
 export const makeVercelClient = (
-  target: VercelTarget,
+  target: Pick<VercelTarget, 'team'>,
   token: Redacted.Redacted<string>,
 ) =>
   Effect.gen(function* () {

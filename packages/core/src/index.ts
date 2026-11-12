@@ -91,9 +91,12 @@ export {
   mapRailwayLog,
   mapRailwayStatus,
   RAILWAY_RETENTION_NOTE,
+  railwayLinkedProject,
+  railwayProjectLayout,
 } from './logs/railway/index.js';
 export type { LogSource } from './logs/source.js';
 export {
+  fetchVercelProjectName,
   makeVercelSource,
   mapBuildEvent,
   mapHttpRow,

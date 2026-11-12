@@ -94,3 +94,8 @@ export const BuildLogsData = Schema.Struct({
 export const HttpLogsData = Schema.Struct({
   httpLogs: Schema.Array(RailwayHttpRow),
 });
+
+/** Only the project id is read; `railway status --json` serializes the whole project, and the linked environment is not part of it. */
+export const LinkedProject = Schema.fromJsonString(
+  Schema.Struct({ id: Schema.NonEmptyString }),
+);

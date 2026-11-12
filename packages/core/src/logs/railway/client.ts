@@ -4,11 +4,13 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import {
   ProviderAuthError,
   type ProviderError,
+  ProviderNotFound,
   ProviderRequestError,
   ProviderResponseInvalid,
 } from '../errors.js';
 import { PROVIDER } from './normalize.js';
-import { Envelope } from './schema.js';
+import { PROJECT_QUERY } from './queries.js';
+import { Envelope, LinkedProject, ProjectData } from './schema.js';
 
 const INSTALL_HINT =
   'install the Railway CLI (https://docs.railway.com/guides/cli) and run `railway login`';
@@ -31,10 +33,14 @@ const looksUnauthorized = (text: string): boolean =>
 export const makeRailwayClient = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-  const runCli = (args: ReadonlyArray<string>) =>
+  const runCli = (args: ReadonlyArray<string>, cwd?: string) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const process = yield* ChildProcess.make('railway', args).pipe(
+        const process = yield* ChildProcess.make(
+          'railway',
+          args,
+          cwd === undefined ? {} : { cwd },
+        ).pipe(
           Effect.provideService(
             ChildProcessSpawner.ChildProcessSpawner,
             spawner,
@@ -116,5 +122,69 @@ export const makeRailwayClient = Effect.gen(function* () {
       );
     });
 
-  return { query };
+  /** The project the folder is linked to, from `railway status --json`; Railway's own config files are never read. */
+  const linkedProject = (
+    cwd: string,
+  ): Effect.Effect<{ readonly id: string }, ProviderError, never> =>
+    Effect.gen(function* () {
+      const result = yield* runCli(['status', '--json'], cwd);
+      const output = `${result.stderr}\n${result.stdout}`;
+      if (looksUnauthorized(output)) {
+        return yield* new ProviderAuthError({
+          provider: PROVIDER,
+          hint: LOGIN_HINT,
+        });
+      }
+      if (/no linked project/i.test(output)) {
+        return yield* new ProviderNotFound({
+          provider: PROVIDER,
+          what: 'a linked project',
+          hint: 'run `railway link` in the folder, or pass --railway-project',
+        });
+      }
+      if (result.exitCode !== 0) {
+        return yield* new ProviderRequestError({
+          provider: PROVIDER,
+          cause: new Error(
+            `railway status failed: ${result.stderr.trim() || result.stdout.trim()}`,
+          ),
+        });
+      }
+      return yield* Schema.decodeUnknownEffect(LinkedProject)(
+        result.stdout,
+      ).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderResponseInvalid({
+              provider: PROVIDER,
+              operation: 'status',
+              cause,
+            }),
+        ),
+      );
+    });
+
+  /** Every service and environment of a Railway project. */
+  const projectLayout = (projectId: string) =>
+    Effect.gen(function* () {
+      const data = yield* query(
+        'project',
+        PROJECT_QUERY,
+        { raw: { id: projectId } },
+        ProjectData,
+      );
+      if (data.project === null) {
+        return yield* new ProviderNotFound({
+          provider: PROVIDER,
+          what: `project ${projectId}`,
+          hint: 'check the project id and that `railway whoami` can see it',
+        });
+      }
+      return {
+        services: data.project.services.edges.map((edge) => edge.node),
+        environments: data.project.environments.edges.map((edge) => edge.node),
+      };
+    });
+
+  return { query, linkedProject, projectLayout };
 });
