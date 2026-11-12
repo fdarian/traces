@@ -17,6 +17,7 @@ import {
   keychainSecrets,
   type ServiceCandidate,
   validateRepoConfig,
+  vercelTeamOf,
 } from '#/init.ts';
 import { causeMessage, emitRecord, outputMode, renderError } from '#/output.ts';
 import { readGitToplevel } from '#/project-match.ts';
@@ -89,14 +90,14 @@ const vercelCandidates = (toplevel: string) =>
       const config: LogServiceConfig = {
         provider: 'vercel',
         project: link.projectId,
-        team: link.orgId,
+        ...vercelTeamOf(link.orgId),
       };
       if (token._tag === 'Failure') {
         candidates.push({ name: link.fallbackName, config });
         continue;
       }
       const name = yield* fetchVercelProjectName(
-        { id: link.projectId, team: link.orgId },
+        { id: link.projectId, ...vercelTeamOf(link.orgId) },
         token.success.token,
       ).pipe(
         Effect.catch((error: ProviderError) =>

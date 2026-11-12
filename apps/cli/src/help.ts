@@ -132,7 +132,7 @@ export const COMMAND_HELP = {
       'with --dry-run, the traces.json content (pretty-printed JSON, not NDJSON). Otherwise one record per service {path, service, ref} (NDJSON when piped, lines on a TTY; init has no --json flag); stderr has `wrote <path>` and the next steps.',
     notes: [
       'Railway: every service of the project becomes an entry {provider, project, service, environment}; environment is "production" when the project has one, else left out. `railway status --json` does not say which environment is linked, so a non-production link is not detected.',
-      "Vercel: each `.vercel/project.json` up to 3 folders below the git root (skipping node_modules) becomes {provider: vercel, project: <projectId>, team: <orgId>}. The key is the project name from the Vercel API; without a token it is the file's projectName, else the folder name.",
+      "Vercel: each `.vercel/project.json` up to 3 folders below the git root (skipping node_modules) becomes {provider: vercel, project: <projectId>, team: <orgId>} (team only when the orgId starts with `team_`; a personal account's orgId is a user id, so the entry has no team). The key is the project name from the Vercel API; without a token it is the file's projectName, else the folder name.",
       'Keys are the service names reduced to letters, digits, `_` and `-`. A name used by both providers becomes `<name>-railway` and `<name>-vercel`.',
       'Nothing found at all exits 1 with a hint. Header values are never written: only {"keychain": "<secret>"} refs; store each with `traces secret set <secret>`.',
       'Takes no global flags.',

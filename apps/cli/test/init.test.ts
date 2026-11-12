@@ -20,6 +20,7 @@ import {
   findVercelLinks,
   parseJaegerHeader,
   slugify,
+  vercelTeamOf,
 } from '#/init.ts';
 
 const vercel = (project: string) => ({
@@ -130,6 +131,14 @@ const link = (dir: string, extra: Record<string, string> = {}) =>
       ...extra,
     }),
   );
+
+describe('vercelTeamOf', () => {
+  test('only a team_ orgId is a team; a personal account has none', () => {
+    expect(vercelTeamOf('team_abc')).toEqual({ team: 'team_abc' });
+    expect(vercelTeamOf('user_abc')).toEqual({});
+    expect(vercelTeamOf('abc123')).toEqual({});
+  });
+});
 
 const newRepo = (name: string) => {
   const path = join(root, name);
@@ -245,6 +254,10 @@ describe('traces init', () => {
   test('--dry-run prints a config that decodes and writes nothing', async () => {
     const repo = newRepo('dry');
     link(join(repo, 'apps', 'web'), { projectName: 'web' });
+    link(join(repo, 'apps', 'personal'), {
+      projectName: 'personal',
+      orgId: 'user_9',
+    });
     const run = traces(repo, ['--dry-run']);
     expect(run.code).toBe(0);
     expect(existsSync(join(repo, 'traces.json'))).toBe(false);
@@ -266,6 +279,10 @@ describe('traces init', () => {
         provider: 'vercel',
         project: expect.stringMatching(/^prj_/),
         team: 'team_1',
+      },
+      personal: {
+        provider: 'vercel',
+        project: expect.stringMatching(/^prj_/),
       },
     });
     expect(config.tracing).toBeUndefined();

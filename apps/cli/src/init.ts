@@ -105,6 +105,10 @@ export const findVercelLinks = (root: string) =>
     });
   });
 
+/** A personal Vercel account's orgId is a user id, which is not a team; only `team_` ids are. */
+export const vercelTeamOf = (orgId: string): { readonly team?: string } =>
+  orgId.startsWith('team_') ? { team: orgId } : {};
+
 /** Collapses anything outside the config's identifier alphabet to `-`; empty when nothing usable is left. */
 export const slugify = (name: string) =>
   name.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
