@@ -265,6 +265,19 @@ export const resolveTraceService = (
 
 export type ErrorSource = 'logs' | 'traces';
 
+const buildLogService = (
+  name: string,
+  config: LogServiceConfig,
+  env: GlobalFlags['env'],
+) =>
+  Effect.gen(function* () {
+    const target = yield* buildTarget(name, config, env);
+    const source = yield* buildSource(target);
+    return { target, source };
+  });
+
+type LogBuild = ReturnType<typeof buildLogService>;
+
 /**
  * Which services `errors` reads, per side. Without `--source` both sides run, the
  * trace side only when the project has `tracing`. A trace-only service takes part in the
@@ -304,42 +317,52 @@ export const resolveErrorScope = (
       if (only !== undefined) yield* requireLogProvider(only.name, only.config);
     }
 
-    const logServices = wantLogs
-      ? candidates.flatMap((candidate) =>
-          hasLogProvider(candidate.config)
-            ? [{ name: candidate.name, config: candidate.config }]
-            : [],
-        )
-      : [];
-    const traceServices: Array<{ name: string; otelService: string }> = [];
+    const traceServices: Array<{
+      name: string;
+      otelService: string;
+      build: LogBuild | undefined;
+    }> = [];
+    const logCandidates = candidates.flatMap((candidate) =>
+      hasLogProvider(candidate.config)
+        ? [{ name: candidate.name, config: candidate.config }]
+        : [],
+    );
+    // Built once per service: the trace side reuses the log side's source to find the deploy `--since deploy` anchors on.
+    const builds = new Map<string, LogBuild>();
+    for (const selected of logCandidates) {
+      builds.set(
+        selected.name,
+        yield* Effect.cached(
+          buildLogService(selected.name, selected.config, flags.env),
+        ),
+      );
+    }
     if (traceSide) {
       for (const candidate of candidates) {
         const otelService = otelServiceName(candidate.name, candidate.config);
         if (traceServices.some((known) => known.otelService === otelService)) {
           continue;
         }
-        traceServices.push({ name: candidate.name, otelService });
+        traceServices.push({
+          name: candidate.name,
+          otelService,
+          build: builds.get(candidate.name),
+        });
       }
     }
-    if (logServices.length === 0 && traceServices.length === 0) {
+    const logEntries = wantLogs
+      ? logCandidates.flatMap((selected) => {
+          const build = builds.get(selected.name);
+          return build === undefined ? [] : [{ name: selected.name, build }];
+        })
+      : [];
+    if (logEntries.length === 0 && traceServices.length === 0) {
       return yield* new UsageError({
         message: `project "${resolved.projectName}" has no log services; all are trace-only`,
         hint: 'add a "provider" to a service entry in the config to read its logs, or a "tracing" block to read its traces',
       });
     }
 
-    const logEntries = logServices.map((selected) => ({
-      name: selected.name,
-      build: Effect.gen(function* () {
-        const target = yield* buildTarget(
-          selected.name,
-          selected.config,
-          flags.env,
-        );
-        const source = yield* buildSource(target);
-        return { target, source };
-      }),
-    }));
     const traceBackend =
       traceServices.length === 0
         ? undefined

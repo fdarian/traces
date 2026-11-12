@@ -9,15 +9,27 @@ const UNIT_MS: Readonly<Record<string, number>> = {
   w: 7 * 24 * 60 * 60 * 1000,
 };
 
-/** `30m`, `2d` (relative to `now`) or an ISO timestamp. */
-export const parseWhen = (flag: string, text: string, now: Date) => {
+export type When =
+  | { readonly _tag: 'instant'; readonly at: Date }
+  | { readonly _tag: 'deploy' };
+
+/** `30m`, `2d` (relative to `now`), an ISO timestamp, or the literal `deploy` (resolved by the command, which knows the service). */
+export const parseWhen = (
+  flag: string,
+  text: string,
+  now: Date,
+): Effect.Effect<When, UsageError> => {
+  if (text === 'deploy') {
+    return Effect.succeed<When>({ _tag: 'deploy' });
+  }
   const relative = /^(\d+)([smhdw])$/.exec(text);
   if (relative?.[1] !== undefined && relative[2] !== undefined) {
     const unit = UNIT_MS[relative[2]];
     if (unit !== undefined) {
-      return Effect.succeed(
-        new Date(now.getTime() - Number(relative[1]) * unit),
-      );
+      return Effect.succeed<When>({
+        _tag: 'instant',
+        at: new Date(now.getTime() - Number(relative[1]) * unit),
+      });
     }
   }
   const parsed = /^\d{4}-\d{2}-\d{2}/.test(text)
@@ -31,8 +43,23 @@ export const parseWhen = (flag: string, text: string, now: Date) => {
       }),
     );
   }
-  return Effect.succeed(new Date(parsed));
+  return Effect.succeed<When>({ _tag: 'instant', at: new Date(parsed) });
 };
+
+/** For flags that cannot mean "the latest deploy": `--until` everywhere, `--since` outside `logs` and `errors`. */
+export const parseInstant = (flag: string, text: string, now: Date) =>
+  parseWhen(flag, text, now).pipe(
+    Effect.flatMap((when) =>
+      when._tag === 'instant'
+        ? Effect.succeed(when.at)
+        : Effect.fail(
+            new UsageError({
+              message: `${flag} does not accept "deploy"`,
+              hint: 'use a duration like 30m, 1h, 2d or an ISO timestamp; --since deploy works on logs and errors',
+            }),
+          ),
+    ),
+  );
 
 const DURATION_UNIT_MS: Readonly<Record<string, number>> = {
   ms: 1,

@@ -28,7 +28,7 @@ import {
   windowSpansDays,
 } from '#/output.ts';
 import { globalOptions, resolveTraceService } from '#/resolve.ts';
-import { parseDuration, parseWhen } from '#/time.ts';
+import { parseDuration, parseInstant } from '#/time.ts';
 
 const parseAttributes = (pairs: ReadonlyArray<string>) =>
   Effect.gen(function* () {
@@ -108,13 +108,13 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
     // The cursor carries the window start so a relative `--since 1h` cannot drift between pages.
     const since =
       resumed?.since ??
-      (yield* parseWhen(
+      (yield* parseInstant(
         '--since',
         Option.getOrElse(args.since, () => DEFAULT_WINDOW),
         now,
       ));
     const until = Option.isSome(args.until)
-      ? yield* parseWhen('--until', args.until.value, now)
+      ? yield* parseInstant('--until', args.until.value, now)
       : undefined;
     if (since.getTime() >= (until ?? now).getTime()) {
       return yield* new UsageError({

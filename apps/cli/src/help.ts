@@ -109,12 +109,12 @@ export const COMMAND_HELP = {
       {
         name: 'since',
         usage: '--since <when>',
-        description: `30m | 1h | 2d | ISO timestamp (default ${DEFAULT_WINDOW}; with --build, no lower bound)`,
+        description: `30m | 1h | 2d | ISO timestamp | deploy (default ${DEFAULT_WINDOW}; with --build, no lower bound). deploy: the start time of the service's latest ready deploy; stderr says which one. none ready: exit 1`,
       },
       {
         name: 'until',
         usage: '--until <when>',
-        description: 'window end, same formats (default now)',
+        description: 'window end, same formats except deploy (default now)',
       },
       {
         name: 'level',
@@ -231,12 +231,12 @@ export const COMMAND_HELP = {
       {
         name: 'since',
         usage: '--since <when>',
-        description: `30m | 1h | 2d | ISO timestamp (default ${DEFAULT_WINDOW})`,
+        description: `30m | 1h | 2d | ISO timestamp | deploy (default ${DEFAULT_WINDOW}). deploy: each service's window starts at its own latest ready deploy; see --since deploy below`,
       },
       {
         name: 'until',
         usage: '--until <when>',
-        description: 'window end, same formats (default now)',
+        description: 'window end, same formats except deploy (default now)',
       },
       {
         name: 'source',
@@ -246,12 +246,14 @@ export const COMMAND_HELP = {
       },
     ],
     output:
-      'one group per line: source (logs | traces), fingerprint, service, count, firstSeen, lastSeen, deploymentIds (always empty for trace groups), sample (full message of the first occurrence; `<exception type>: <message>` for traces), traceId (optional; the first record that carries one, or the newest sampled trace), traceIds (trace groups only: up to 3 distinct traces), provider (railway | vercel | jaeger), environment (absent for trace groups), hint, partial. `hint` is a ready-to-run `traces logs ... --grep` command for a log group and `traces trace <traceId>` for a trace group. On a TTY, trace groups carry a `[traces]` marker.',
+      'one group per line: source (logs | traces), fingerprint, service, count, firstSeen, lastSeen, deploymentIds (always empty for trace groups), sample (full message of the first occurrence; `<exception type>: <message>` for traces), traceId (optional; the first record that carries one, or the newest sampled trace), traceIds (trace groups only: up to 3 distinct traces), provider (railway | vercel | jaeger), environment (absent for trace groups), hint, partial, and with --since deploy `new`, `deploymentId`, `deployedAt`. `hint` is a ready-to-run `traces logs ... --grep` command for a log group and `traces trace <traceId>` for a trace group. On a TTY, trace groups carry a `[traces]` marker.',
     notes: [
       'Without a service, every service of the project is covered (fetched concurrently); each group keeps its `service` and all groups, log and trace, are sorted by count. A trace-only service (no `provider`) is skipped on the log side and taken by the trace side; naming one exits 2 when the trace side will not run (no `tracing`, or --source logs).',
       "Trace groups: when the project has `tracing`, each service's `otelService` is searched in the window, the full trace of every trace with error spans is fetched, and the error spans of that service are fingerprinted like Issues do (exception type, normalized message and top in-app frame; an error span without an exception event groups by span name and status message). A log group and a trace group for the same failure stay separate; match them by the traceId.",
       `At most ${ERROR_TRACE_CAP} error traces are fetched per service, newest first, and at most ${TRACE_SCAN_CAP} traces are read to find them. When either cap leaves older traces unread, every trace group of that service has \`partial: true\` and stderr says so. Narrow --since for exact counts.`,
       'If one service fails (auth, provider error) while the others succeed, the successful groups are still printed, stderr gets `error: <service>: ...` per failed log service (`error: <service> (traces): ...` for the trace side, `error: tracing: ...` when the tracing secret or backend cannot be set up), and the exit code is 1.',
+      '--since deploy: each service with a log provider starts its window at the start time of its own latest ready deploy (among the last 20), so a multi-service run has per-service windows; stderr prints `<service>: since deploy <id> at <time>; baseline <span> before`. Trace groups of such a service use the same window; trace-only services are skipped with a stderr note. With no ready deploy the service fails with exit 1 (`traces deploys <service>` shows why).',
+      'Baseline (--since deploy only): each service also reads its errors in the window before the deploy, as long as the post-deploy window (until --until or now), at most 24h. Every group then carries `new: true` when no baseline error in that service has its fingerprint, `deploymentId` and `deployedAt` (the window start). Baseline errors are used only for fingerprints, never counted. If the baseline hit a cap, stderr says `new` may over-report. Hints keep `--since deploy`, so they stay copy-pasteable.',
       'Messages are grouped by their first line with ids, hex, quoted strings and numbers collapsed.',
       `At most ${ERROR_CAP} error logs are read. When the cap is hit, counts are partial (newest ${ERROR_CAP} only): every group of that service has \`partial: true\` and stderr says so (the cap is per service). Narrow --since for exact counts.`,
       EMPTY_NOTE,
@@ -260,6 +262,7 @@ export const COMMAND_HELP = {
     examples: [
       'traces errors api --since 1h',
       'traces errors api --since 2d --json',
+      'traces errors --since deploy     # then read the groups with new: true',
       'traces errors --since 1d --source traces     # error spans only',
       "traces errors --source traces --json | jq -r '.hint'   # trace commands to run",
     ],
@@ -562,6 +565,8 @@ const TOP_LEVEL = (): string =>
     '                            traces trace <traceId>',
     '  what is failing anywhere  traces errors --since 1d   (all services, logs and error spans, one list)',
     "  error group -> its trace  traces errors --source traces --since 1d   (run a group's hint: traces trace <id>)",
+    '  did my deploy add errors  traces errors --since deploy   (read the groups with new: true)',
+    '                            traces logs api --since deploy --level error',
     '  why is prod 500ing        traces errors api --since 1h',
     '                            traces logs api --level error --grep "<sample from above>"',
     '                            traces logs api --http --level error     (5xx requests)',

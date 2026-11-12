@@ -5,6 +5,7 @@ import {
   JaegerBadResponse,
   JaegerUnreachable,
   type LogRecord,
+  NoReadyDeployment,
   type Provider,
   ProviderAuthError,
   ProviderNotFound,
@@ -245,6 +246,13 @@ export const renderError = (error: unknown): RenderedError => {
       message: `${error.provider}: not authorized`,
       hint: error.hint,
       code: EXIT_CODES.auth,
+    };
+  }
+  if (error instanceof NoReadyDeployment) {
+    return {
+      message: `${error.service} has no ready deployment among its last ${error.scanned}`,
+      hint: `traces deploys ${error.service}`,
+      code: EXIT_CODES.runtime,
     };
   }
   if (error instanceof ProviderNotFound) {

@@ -18,32 +18,57 @@ import {
   retentionNoteFor,
   windowSpansDays,
 } from '#/output.ts';
-import { parseWhen } from '#/time.ts';
+import { parseInstant, parseWhen } from '#/time.ts';
 import { vercelAuthFilePath } from '#/vercel-token.ts';
 
 const now = new Date('2026-10-12T12:00:00.000Z');
 
 describe('parseWhen', () => {
+  const at = async (text: string) => {
+    const when = await Effect.runPromise(parseWhen('--since', text, now));
+    if (when._tag !== 'instant') throw new Error(`${text} is not an instant`);
+    return when.at.toISOString();
+  };
+
   test('parses relative durations against now', async () => {
-    const since = await Effect.runPromise(parseWhen('--since', '30m', now));
-    expect(since.toISOString()).toBe('2026-10-12T11:30:00.000Z');
-    const days = await Effect.runPromise(parseWhen('--since', '2d', now));
-    expect(days.toISOString()).toBe('2026-10-10T12:00:00.000Z');
+    expect(await at('30m')).toBe('2026-10-12T11:30:00.000Z');
+    expect(await at('2d')).toBe('2026-10-10T12:00:00.000Z');
   });
 
   test('parses ISO timestamps', async () => {
-    const at = await Effect.runPromise(
-      parseWhen('--since', '2026-10-12T08:00:00Z', now),
-    );
-    expect(at.toISOString()).toBe('2026-10-12T08:00:00.000Z');
+    expect(await at('2026-10-12T08:00:00Z')).toBe('2026-10-12T08:00:00.000Z');
+  });
+
+  test('the literal deploy is tagged, not resolved', async () => {
+    expect(
+      await Effect.runPromise(parseWhen('--since', 'deploy', now)),
+    ).toEqual({ _tag: 'deploy' });
   });
 
   test('rejects anything else with a usage error', async () => {
-    for (const text of ['banana', '10', '1x', '12:00']) {
+    for (const text of ['banana', '10', '1x', '12:00', 'Deploy', 'latest']) {
       const result = await Effect.runPromise(
         parseWhen('--since', text, now).pipe(Effect.result),
       );
       expect(result._tag).toBe('Failure');
+    }
+  });
+});
+
+describe('parseInstant', () => {
+  test('returns the instant', async () => {
+    const result = await Effect.runPromise(parseInstant('--until', '1h', now));
+    expect(result.toISOString()).toBe('2026-10-12T11:00:00.000Z');
+  });
+
+  test('refuses deploy and says where it works', async () => {
+    const result = await Effect.runPromise(
+      parseInstant('--until', 'deploy', now).pipe(Effect.result),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure.message).toContain('--until does not accept');
+      expect(result.failure.hint).toContain('logs and errors');
     }
   });
 });

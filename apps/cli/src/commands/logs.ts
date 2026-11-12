@@ -4,14 +4,17 @@ import {
   type LogQuery,
   type LogRecord,
   type LogSource,
+  latestReadyDeployment,
   type ServiceTarget,
 } from '@traces/core';
 import { Console, Duration, Effect, Option, Schedule } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
+import { deployInstant, deploySinceText } from '#/deploy-window.ts';
 import { UsageError } from '#/errors.ts';
 import { parseLevels } from '#/levels.ts';
 import {
   DEFAULT_WINDOW,
+  DEPLOY_SCAN,
   FOLLOW_INTERVAL_SECONDS,
   LOGS_LIMIT,
 } from '#/limits.ts';
@@ -26,7 +29,7 @@ import {
   windowSpansDays,
 } from '#/output.ts';
 import { globalOptions, resolveService } from '#/resolve.ts';
-import { parseWhen } from '#/time.ts';
+import { parseInstant, parseWhen } from '#/time.ts';
 
 const FOLLOW_INTERVAL = Duration.seconds(FOLLOW_INTERVAL_SECONDS);
 
@@ -136,13 +139,13 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
     }
     const kind = kindOf(args.build, args.http);
     const now = new Date();
-    const since = Option.isSome(args.since)
+    const when = Option.isSome(args.since)
       ? yield* parseWhen('--since', args.since.value, now)
       : kind === 'build'
         ? undefined
         : yield* parseWhen('--since', DEFAULT_WINDOW, now);
     const until = Option.isSome(args.until)
-      ? yield* parseWhen('--until', args.until.value, now)
+      ? yield* parseInstant('--until', args.until.value, now)
       : undefined;
     const levels = Option.isSome(args.level)
       ? yield* parseLevels(args.level.value)
@@ -151,6 +154,17 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
       ? yield* decodeCursor(args.cursor.value)
       : undefined;
     const resolved = yield* resolveService(args, args.service);
+    let since: Date | undefined;
+    if (when?._tag === 'deploy') {
+      const deployment = yield* latestReadyDeployment(resolved.source, {
+        service: resolved.name,
+        scan: DEPLOY_SCAN,
+      });
+      since = yield* deployInstant(deployment);
+      yield* Console.error(deploySinceText(deployment, since));
+    } else {
+      since = when?.at;
+    }
     const query: LogQuery = {
       since,
       until,
@@ -191,7 +205,13 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
             ['env', Option.getOrUndefined(args.env)],
             ['config', Option.getOrUndefined(args.config)],
             ['json', args.json],
-            ['since', Option.getOrUndefined(args.since)],
+            // The window start is settled now; re-resolving `deploy` on the next page could move it.
+            [
+              'since',
+              when?._tag === 'deploy'
+                ? since?.toISOString()
+                : Option.getOrUndefined(args.since),
+            ],
             ['until', Option.getOrUndefined(args.until)],
             ['level', Option.getOrUndefined(args.level)],
             ['grep', Option.getOrUndefined(args.grep)],

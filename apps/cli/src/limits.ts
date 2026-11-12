@@ -8,6 +8,8 @@ export const ERROR_TRACE_CAP = 200;
 /** `spans --errors` reads at most this many traces looking for error ones. */
 export const TRACE_SCAN_CAP = 1000;
 export const TRACE_SCAN_PAGE = 100;
+/** `--since deploy` looks for the latest ready deployment among this many recent ones. */
+export const DEPLOY_SCAN = 20;
 export const DEFAULT_WINDOW = '1h';
 export const FOLLOW_INTERVAL_SECONDS = 2;
 

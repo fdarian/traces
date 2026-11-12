@@ -200,4 +200,14 @@ describe('plainWhenPiped', () => {
     tty.console.error(colored);
     expect(tty.seen).toEqual([`error:${colored}`]);
   });
+
+  test('logs and errors document --since deploy, and errors its baseline fields', () => {
+    const flat = (name: CommandName) =>
+      renderCommandHelp(name).replace(/\s+/g, ' ');
+    expect(flat('logs')).toContain('latest ready deploy');
+    expect(flat('errors')).toContain('new: true');
+    expect(flat('errors')).toContain('deploymentId');
+    expect(flat('errors')).toContain('baseline');
+    expect(HELP_TEXT).toContain('traces errors --since deploy');
+  });
 });
