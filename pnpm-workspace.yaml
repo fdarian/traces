@@ -3,7 +3,7 @@ packages:
   - apps/*
   - scripts
 catalog:
-  effect: 4.0.3
+  effect: 4.1.4
 allowBuilds:
   "@parcel/watcher": false
   esbuild: false
@@ -13,7 +13,7 @@ overrides:
   mdast-util-to-markdown: 2.1.2
 minimumReleaseAgeExclude:
   - blume@2.2.3
-  - effect@4.0.3
+  - effect@4.1.4
 packageExtensions:
   recharts:
     peerDependencies:

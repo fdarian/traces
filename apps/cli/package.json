@@ -12,7 +12,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.3",
+    "@effect/platform-bun": "4.1.4",
     "@traces/core": "workspace:*",
     "effect": "catalog:"
   },
