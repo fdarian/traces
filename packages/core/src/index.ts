@@ -55,6 +55,10 @@ export {
   firstLine,
   groupErrors,
 } from './logs/errors-group.js';
+export {
+  latestReadyDeployment,
+  NoReadyDeployment,
+} from './logs/latest-deploy.js';
 export type {
   Cursor,
   DeploymentCommit,
