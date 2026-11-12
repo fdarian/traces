@@ -5,7 +5,11 @@ import { UsageError } from '#/errors.ts';
 import { Secrets } from '#/secrets.ts';
 
 export const secretOptions = {
-  name: Argument.String('name'),
+  name: Argument.String('name').pipe(
+    Argument.withDescription(
+      'the secret name used in the config, e.g. mockingbird.jaeger',
+    ),
+  ),
 };
 
 const requireName = (name: string) =>
@@ -44,6 +48,18 @@ const setCommand = Command.make('set', secretOptions, (args) =>
     yield* Secrets.use((secrets) => secrets.set(name, value));
     yield* Console.error(`stored secret "${name}" in the keychain`);
   }),
+).pipe(
+  Command.withShortDescription('store a secret value'),
+  Command.withDescription(
+    'Store the value of a keychain secret. The value comes from a hidden prompt on a terminal, or from stdin when piped (one trailing newline is dropped); an empty value is refused. Agents cannot answer the hidden prompt: the user runs it once.',
+  ),
+  Command.withExamples([
+    { command: 'traces secret set mockingbird.jaeger' },
+    {
+      command: 'pbpaste | traces secret set mockingbird.jaeger',
+      description: 'from stdin',
+    },
+  ]),
 );
 
 const deleteCommand = Command.make('delete', secretOptions, (args) =>
@@ -56,8 +72,22 @@ const deleteCommand = Command.make('delete', secretOptions, (args) =>
         : `no secret named "${name}" in the keychain; nothing to delete`,
     );
   }),
+).pipe(
+  Command.withShortDescription('remove a secret'),
+  Command.withDescription(
+    'Remove a keychain secret. A name that does not exist exits 0 and says so on stderr.',
+  ),
+  Command.withExamples([
+    { command: 'traces secret delete mockingbird.jaeger' },
+  ]),
 );
 
 export const secretCommand = Command.make('secret').pipe(
+  Command.withShortDescription(
+    'store or remove a keychain secret for tracing headers',
+  ),
+  Command.withDescription(
+    'Manage the OS-keychain secrets that tracing headers refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged. There is no `list`: `traces services` shows present or missing for every secret the config references.',
+  ),
   Command.withSubcommands([setCommand, deleteCommand]),
 );

@@ -279,4 +279,15 @@ export const servicesCommand = Command.make(
         );
       }
     }),
+).pipe(
+  Command.withShortDescription(
+    'matched project, services, provider auth status',
+  ),
+  Command.withDescription(
+    'Show the project matched for the current directory, its services, whether each provider is authenticated, and the tracing setup (URL, header secrets, otelService) with a live reachability check of the tracing URL.',
+  ),
+  Command.withExamples([
+    { command: 'traces services' },
+    { command: 'traces services --project myapp --json' },
+  ]),
 );

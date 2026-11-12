@@ -1,7 +1,13 @@
 #!/usr/bin/env bun
 import { BunRuntime, BunServices } from '@effect/platform-bun';
-import { Cause, Console, Effect, Exit, Layer, Option } from 'effect';
-import { Command } from 'effect/cli';
+import { Cause, Effect, Exit, Layer, Option } from 'effect';
+import {
+  CliConfig,
+  CliError,
+  CliOutput,
+  Command,
+  GlobalFlag,
+} from 'effect/cli';
 import { FetchHttpClient } from 'effect/http';
 import { hoistGlobalFlags } from '#/argv.ts';
 import { deploysCommand } from '#/commands/deploys.ts';
@@ -11,24 +17,19 @@ import { secretCommand } from '#/commands/secret.ts';
 import { servicesCommand } from '#/commands/services.ts';
 import { spansCommand } from '#/commands/spans.ts';
 import { traceCommand } from '#/commands/trace.ts';
-import { UsageError } from '#/errors.ts';
-import {
-  COMMAND_NAMES,
-  HELP_TEXT,
-  renderCommandHelp,
-  resolveHelpRequest,
-} from '#/help.ts';
 import {
   EXIT_CODES,
   ExitWith,
+  parseErrorPresenter,
   renderError,
   reportError,
-  withoutFrameworkHelp,
-  withPlainConsole,
 } from '#/output.ts';
 import { Secrets } from '#/secrets.ts';
 
 const root = Command.make('traces').pipe(
+  Command.withDescription(
+    'read logs, deployments and traces from Vercel, Railway and Jaeger through one CLI',
+  ),
   Command.withSubcommands([
     servicesCommand,
     logsCommand,
@@ -40,28 +41,20 @@ const root = Command.make('traces').pipe(
   ]),
 );
 
-const run = Command.runWith(root, { version: '0.0.0', renderErrors: false });
+const run = Command.runWith(root, { version: '0.0.0' });
 
-const rawArgs = hoistGlobalFlags(process.argv.slice(2));
-const helpRequest = resolveHelpRequest(rawArgs);
-
-const program = Effect.gen(function* () {
-  if (helpRequest === undefined) return yield* run(rawArgs);
-  switch (helpRequest.kind) {
-    case 'top':
-      return yield* Console.log(HELP_TEXT);
-    case 'command':
-      return yield* Console.log(renderCommandHelp(helpRequest.name));
-    case 'unknown':
-      return yield* new UsageError({
-        message: `no command named "${helpRequest.name}"`,
-        hint: `commands: ${COMMAND_NAMES.join(', ')}`,
-      });
-  }
-}).pipe(
+const program = run(hoistGlobalFlags(process.argv.slice(2))).pipe(
   Effect.catch((error) => {
     // Already reported by the command (partial failures); only the exit code is left to carry.
     if (error instanceof ExitWith) return Effect.fail(error);
+    // `traces` with no arguments: the framework already printed the root help.
+    if (
+      CliError.isCliError(error) &&
+      error._tag === 'ShowHelp' &&
+      error.errors.length === 0
+    ) {
+      return Effect.void;
+    }
     const rendered = renderError(error);
     return reportError(rendered).pipe(
       Effect.andThen(Effect.fail(new ExitWith({ code: rendered.code }))),
@@ -70,10 +63,14 @@ const program = Effect.gen(function* () {
 );
 
 program.pipe(
-  withoutFrameworkHelp,
-  withPlainConsole,
   Effect.provide(
-    Layer.mergeAll(BunServices.layer, FetchHttpClient.layer, Secrets.layer),
+    Layer.mergeAll(
+      BunServices.layer,
+      FetchHttpClient.layer,
+      Secrets.layer,
+      CliConfig.layer({ builtIns: [GlobalFlag.Help] }),
+      CliOutput.layerPresenter(parseErrorPresenter),
+    ),
   ),
   BunRuntime.runMain({
     disableErrorReporting: true,

@@ -31,10 +31,28 @@ import {
 import { findVercelToken } from '#/vercel-token.ts';
 
 export const globalOptions = {
-  project: Flag.String('project').pipe(Flag.optional),
-  env: Flag.String('env').pipe(Flag.optional),
-  config: Flag.String('config').pipe(Flag.optional),
-  json: Flag.Boolean('json').pipe(Flag.withDefault(false)),
+  project: Flag.String('project').pipe(
+    Flag.withDescription('project from the config; overrides cwd matching'),
+    Flag.optional,
+  ),
+  env: Flag.String('env').pipe(
+    Flag.withDescription(
+      'Railway environment name, or Vercel target (production | preview)',
+    ),
+    Flag.optional,
+  ),
+  config: Flag.String('config').pipe(
+    Flag.withDescription(
+      'config file (default $XDG_CONFIG_HOME/traces/config.json)',
+    ),
+    Flag.optional,
+  ),
+  json: Flag.Boolean('json').pipe(
+    Flag.withDescription(
+      'NDJSON output even on a TTY (it is the default when piped)',
+    ),
+    Flag.withDefault(false),
+  ),
 };
 
 export interface GlobalFlags {

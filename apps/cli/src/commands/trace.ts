@@ -13,7 +13,11 @@ const TRACE_ID = /^[0-9a-f]{16}(?:[0-9a-f]{16})?$/i;
 
 export const traceOptions = {
   ...globalOptions,
-  traceId: Argument.String('traceId'),
+  traceId: Argument.String('traceId').pipe(
+    Argument.withDescription(
+      'full 32-hex trace id (16-hex legacy ids work); the traceId of a `traces logs --json` record',
+    ),
+  ),
 };
 
 export const traceCommand = Command.make('trace', traceOptions, (args) =>
@@ -38,4 +42,16 @@ export const traceCommand = Command.make('trace', traceOptions, (args) =>
       yield* Console.log(line);
     }
   }),
+).pipe(
+  Command.withShortDescription('show one trace as a span tree from Jaeger'),
+  Command.withDescription(
+    'Fetch every span of one trace, ordered depth first. No service is needed; the project is still resolved for its `tracing` block.',
+  ),
+  Command.withExamples([
+    { command: 'traces trace a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e' },
+    {
+      command:
+        'traces trace a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e --json | jq \'select(.status == "error")\'',
+    },
+  ]),
 );

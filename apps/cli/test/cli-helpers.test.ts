@@ -6,14 +6,15 @@ import {
   ProviderNotFound,
   TraceAttributeSearchUnavailable,
 } from '@traces/core';
-import { Effect } from 'effect';
-import { CliError } from 'effect/cli';
+import { Console, Context, Effect } from 'effect';
+import { CliError, type CliOutput, type HelpDoc } from 'effect/cli';
 import { ConfigError, UsageError } from '#/errors.ts';
 import { parseLevels } from '#/levels.ts';
 import {
   commandLine,
   EXIT_CODES,
   formatLogLine,
+  parseErrorPresenter,
   renderError,
   retentionNoteFor,
   windowSpansDays,
@@ -322,5 +323,55 @@ describe('vercelAuthFilePath', () => {
     expect(vercelAuthFilePath('linux', '/home/u', '/data')).toBe(
       '/data/com.vercel.cli/auth.json',
     );
+  });
+});
+
+describe('parseErrorPresenter', () => {
+  const helpDoc: HelpDoc.HelpDoc = {
+    description: 'd',
+    usage: 'traces',
+    flags: [],
+    annotations: Context.empty(),
+  };
+
+  const stdoutOf = (event: CliOutput.Presenter.Event) => {
+    const lines: Array<unknown> = [];
+    Effect.runSync(
+      Console.consoleWith((base) =>
+        Effect.provideService(
+          parseErrorPresenter.present(event),
+          Console.Console,
+          {
+            ...base,
+            log: (...args) => {
+              lines.push(...args);
+            },
+          },
+        ),
+      ),
+    );
+    return lines;
+  };
+
+  test('prints no usage block for an invalid invocation', () => {
+    expect(
+      stdoutOf({
+        _tag: 'InvalidInvocation',
+        commandPath: ['traces'],
+        helpDoc,
+        errors: [],
+      }),
+    ).toEqual([]);
+  });
+
+  test('still prints requested help', () => {
+    expect(
+      stdoutOf({
+        _tag: 'Help',
+        reason: 'Requested',
+        commandPath: ['traces'],
+        helpDoc,
+      }).join('\n'),
+    ).toContain('USAGE');
   });
 });

@@ -11,6 +11,7 @@
 
 ## Notes
 - Provider adapters live in `@traces/core` (`packages/core/src/logs/`); this app owns config, project matching, commands, and output.
-- All help is hand-written in `src/help.ts`; `COMMAND_HELP` is the one place each command's flags are documented, and `test/help.test.ts` fails when a command's flags and its help disagree. Adding a flag means adding it there.
-- Adapter tests, fixtures and fakes live in `packages/core/test`; config, matcher, help and output tests live here.
+- Help is the Effect framework's own: each command's description, flag descriptions and examples live on its `Command` / `Flag` / `Argument` in `src/commands/*.ts` (and `globalOptions` in `src/resolve.ts`). Only `--help` is a built-in flag, and `parseErrorPresenter` (`src/output.ts`) keeps parse errors to the one-line `error:` + `hint:` on stderr with no usage block.
+- Long-form guidance (resolution, config, tracing, output/exit codes/limits, recipes) is markdown under `skills/`; the limits in `skills/references/output.md` are literal numbers, update them with `src/limits.ts`.
+- Adapter tests, fixtures and fakes live in `packages/core/test`; config, matcher and output tests live here.
 - stdout carries one record type only (NDJSON when piped); hints and pagination go to stderr.

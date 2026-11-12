@@ -97,17 +97,67 @@ const windowText = (query: LogQuery, target: ServiceTarget) =>
 
 export const logsOptions = {
   ...globalOptions,
-  service: Argument.String('service').pipe(Argument.optional),
-  since: Flag.String('since').pipe(Flag.optional),
-  until: Flag.String('until').pipe(Flag.optional),
-  level: Flag.String('level').pipe(Flag.optional),
-  grep: Flag.String('grep').pipe(Flag.optional),
-  deploy: Flag.String('deploy').pipe(Flag.optional),
-  build: Flag.Boolean('build').pipe(Flag.withDefault(false)),
-  http: Flag.Boolean('http').pipe(Flag.withDefault(false)),
-  limit: Flag.Int('limit').pipe(Flag.withDefault(LOGS_LIMIT.default)),
-  cursor: Flag.String('cursor').pipe(Flag.optional),
+  service: Argument.String('service').pipe(
+    Argument.withDescription(
+      'service name from the config; optional when the project has exactly one',
+    ),
+    Argument.optional,
+  ),
+  since: Flag.String('since').pipe(
+    Flag.withDescription(
+      `30m | 1h | 2d | ISO timestamp (default ${DEFAULT_WINDOW}; with --build, no lower bound)`,
+    ),
+    Flag.optional,
+  ),
+  until: Flag.String('until').pipe(
+    Flag.withDescription('window end, same formats (default now)'),
+    Flag.optional,
+  ),
+  level: Flag.String('level').pipe(
+    Flag.withDescription(
+      'only these, comma-separated: debug,info,warn,error,fatal',
+    ),
+    Flag.optional,
+  ),
+  grep: Flag.String('grep').pipe(
+    Flag.withDescription(
+      'only messages containing text: a literal substring of the message, not a regex; attrs are not searched',
+    ),
+    Flag.optional,
+  ),
+  deploy: Flag.String('deploy').pipe(
+    Flag.withDescription(
+      'one deployment (id or latest) instead of the whole service',
+    ),
+    Flag.optional,
+  ),
+  build: Flag.Boolean('build').pipe(
+    Flag.withDescription(
+      'build logs of --deploy (default latest) instead of runtime logs',
+    ),
+    Flag.withDefault(false),
+  ),
+  http: Flag.Boolean('http').pipe(
+    Flag.withDescription(
+      'request records (method path status duration) instead of log lines',
+    ),
+    Flag.withDefault(false),
+  ),
+  limit: Flag.Int('limit').pipe(
+    Flag.withDescription(
+      `records per page, 1-${LOGS_LIMIT.max} (default ${LOGS_LIMIT.default})`,
+    ),
+    Flag.withDefault(LOGS_LIMIT.default),
+  ),
+  cursor: Flag.String('cursor').pipe(
+    Flag.withDescription('continue backwards from a `more:` line'),
+    Flag.optional,
+  ),
   follow: Flag.Boolean('follow').pipe(
+    Flag.withDescription(
+      `print the latest --limit records, then poll every ~${FOLLOW_INTERVAL_SECONDS}s until Ctrl-C`,
+    ),
+
     Flag.withAlias('f'),
     Flag.withDefault(false),
   ),
@@ -218,4 +268,22 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
       });
     }
   }),
+).pipe(
+  Command.withShortDescription(
+    'runtime logs, oldest to newest (also --build, --http)',
+  ),
+  Command.withDescription(
+    `Print logs for one service, oldest to newest. Default: runtime logs of the last ${DEFAULT_WINDOW}.`,
+  ),
+  Command.withExamples([
+    { command: 'traces logs api --since 30m --level error' },
+    {
+      command: 'traces logs api --http --level error',
+      description: '5xx requests',
+    },
+    {
+      command: 'traces logs web --build',
+      description: 'build logs of the latest deployment',
+    },
+  ]),
 );
