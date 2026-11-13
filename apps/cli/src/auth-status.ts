@@ -2,7 +2,7 @@ import {
   checkRailwayAccess,
   ProviderAuthError,
   ProviderNotFound,
-  RAILWAY_CLI_INSTALL_HINT,
+  ProviderToolMissing,
 } from '@traces/core';
 import { Effect, Redacted } from 'effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
@@ -66,13 +66,13 @@ export const railwayAuthStatus = (
       return { status: 'ok', detail: source } as const satisfies AuthStatus;
     }
     const error = checked.failure;
+    if (error instanceof ProviderToolMissing) {
+      return {
+        status: 'missing',
+        detail: error.hint,
+      } as const satisfies AuthStatus;
+    }
     if (error instanceof ProviderAuthError) {
-      if (error.hint === RAILWAY_CLI_INSTALL_HINT) {
-        return {
-          status: 'missing',
-          detail: error.hint,
-        } as const satisfies AuthStatus;
-      }
       return {
         status: 'invalid',
         detail: `${source}: ${error.hint}`,

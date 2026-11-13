@@ -106,7 +106,7 @@ describe('railway CLI client', () => {
     expect(failure).toMatchObject({ _tag: 'ProviderAuthError' });
   });
 
-  test('a missing binary is an auth error with the install hint', async () => {
+  test('a missing binary is a tool-missing error with the install hint', async () => {
     const failure = await withCli(
       (client) =>
         client
@@ -115,7 +115,10 @@ describe('railway CLI client', () => {
       [],
       { missingBinary: true },
     );
-    expect(failure).toMatchObject({ _tag: 'ProviderAuthError' });
+    expect(failure).toMatchObject({
+      _tag: 'ProviderToolMissing',
+      tool: 'railway',
+    });
     expect(JSON.stringify(failure)).toContain('install the Railway CLI');
   });
 

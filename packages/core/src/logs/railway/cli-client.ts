@@ -5,6 +5,7 @@ import {
   ProviderAuthError,
   type ProviderError,
   ProviderRequestError,
+  ProviderToolMissing,
 } from '../errors.js';
 import {
   decodeEnvelopeData,
@@ -15,8 +16,7 @@ import {
 } from './client.js';
 import { PROVIDER } from './normalize.js';
 
-/** Exported so callers can tell a missing binary from a rejected login; both are `ProviderAuthError`. */
-export const RAILWAY_CLI_INSTALL_HINT =
+const RAILWAY_CLI_INSTALL_HINT =
   'install the Railway CLI (https://docs.railway.com/guides/cli) and run `railway login`';
 const LOGIN_HINT = 'run `railway login`';
 
@@ -48,8 +48,9 @@ export const makeRailwayCliClient = Effect.gen(function* () {
       Effect.mapError(
         (error): ProviderError =>
           error.reason._tag === 'NotFound'
-            ? new ProviderAuthError({
+            ? new ProviderToolMissing({
                 provider: PROVIDER,
+                tool: 'railway',
                 hint: RAILWAY_CLI_INSTALL_HINT,
               })
             : new ProviderRequestError({ provider: PROVIDER, cause: error }),

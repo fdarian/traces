@@ -64,6 +64,7 @@ export {
   ProviderNotFound,
   ProviderRequestError,
   ProviderResponseInvalid,
+  ProviderToolMissing,
 } from './logs/errors.js';
 export type { ErrorGroup } from './logs/errors-group.js';
 export {
@@ -107,7 +108,6 @@ export {
   mapRailwayHttpLog,
   mapRailwayLog,
   mapRailwayStatus,
-  RAILWAY_CLI_INSTALL_HINT,
   RAILWAY_RETENTION_NOTE,
   type RailwayClient,
 } from './logs/railway/index.js';

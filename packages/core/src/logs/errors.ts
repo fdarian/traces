@@ -9,6 +9,15 @@ export class ProviderAuthError extends Schema.TaggedError<ProviderAuthError>()(
   },
 ) {}
 
+export class ProviderToolMissing extends Schema.TaggedError<ProviderToolMissing>()(
+  'ProviderToolMissing',
+  {
+    provider: Provider,
+    tool: Schema.String,
+    hint: Schema.String,
+  },
+) {}
+
 export class ProviderRequestError extends Schema.TaggedError<ProviderRequestError>()(
   'ProviderRequestError',
   {
@@ -44,6 +53,7 @@ export class InvalidCursor extends Schema.TaggedError<InvalidCursor>()(
 
 export type ProviderError =
   | ProviderAuthError
+  | ProviderToolMissing
   | ProviderRequestError
   | ProviderResponseInvalid
   | ProviderNotFound;

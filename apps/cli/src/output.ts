@@ -10,6 +10,7 @@ import {
   ProviderNotFound,
   ProviderRequestError,
   ProviderResponseInvalid,
+  ProviderToolMissing,
   type SpanRow,
   TraceAttributeSearchUnavailable,
   TraceBackendUnauthorized,
@@ -242,6 +243,13 @@ export const renderError = (error: unknown): RenderedError => {
   if (error instanceof ProviderAuthError) {
     return {
       message: `${error.provider}: not authorized`,
+      hint: error.hint,
+      code: EXIT_CODES.auth,
+    };
+  }
+  if (error instanceof ProviderToolMissing) {
+    return {
+      message: `${error.provider}: ${error.tool} not found`,
       hint: error.hint,
       code: EXIT_CODES.auth,
     };

@@ -4,6 +4,7 @@ import {
   type LogRecord,
   ProviderAuthError,
   ProviderNotFound,
+  ProviderToolMissing,
   TraceAttributeSearchUnavailable,
 } from '@traces/core';
 import { Console, Context, Effect } from 'effect';
@@ -103,6 +104,15 @@ describe('renderError', () => {
         new ProviderNotFound({ provider: 'railway', what: 'w', hint: 'h' }),
       ).code,
     ).toBe(EXIT_CODES.runtime);
+    expect(
+      renderError(
+        new ProviderToolMissing({
+          provider: 'railway',
+          tool: 'railway',
+          hint: 'h',
+        }),
+      ).code,
+    ).toBe(EXIT_CODES.auth);
     expect(renderError(new Error('boom')).code).toBe(EXIT_CODES.runtime);
   });
 
