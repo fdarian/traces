@@ -15,6 +15,7 @@ import { errorsCommand } from '#/commands/errors.ts';
 import { logsCommand } from '#/commands/logs.ts';
 import { secretCommand } from '#/commands/secret.ts';
 import { servicesCommand } from '#/commands/services.ts';
+import { skillsCommand } from '#/commands/skills.ts';
 import { spansCommand } from '#/commands/spans.ts';
 import { traceCommand } from '#/commands/trace.ts';
 import {
@@ -28,7 +29,7 @@ import { Secrets } from '#/secrets.ts';
 
 const root = Command.make('traces').pipe(
   Command.withDescription(
-    'read logs, deployments and traces from Vercel, Railway and Jaeger through one CLI',
+    'read logs, deployments and traces from Vercel, Railway and Jaeger through one CLI\nAI agents: start with traces skills get core',
   ),
   Command.withSubcommands([
     servicesCommand,
@@ -38,6 +39,7 @@ const root = Command.make('traces').pipe(
     spansCommand,
     traceCommand,
     secretCommand,
+    skillsCommand,
   ]),
 );
 

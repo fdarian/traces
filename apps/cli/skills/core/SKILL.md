@@ -1,8 +1,13 @@
+---
+name: core
+description: Read logs, deployments, traces and errors of a deployed service (Vercel, Railway, Jaeger) with the traces CLI. Use when debugging production or preview behaviour, checking whether a fix deployed, or finding what is failing and why.
+---
+
 # traces
 
 Read logs, deployments and traces from Vercel, Railway and Jaeger through one CLI. stdout carries records (compact lines on a TTY, NDJSON when piped or with `--json`); notes, hints and pagination go to stderr.
 
-Details per topic: [config](references/config.md), [tracing](references/tracing.md), [output, exit codes, limits, retention](references/output.md), [per-command output and notes](references/commands.md). Flags and examples: `traces <command> --help`.
+Flags and examples: `traces <command> --help`. Deeper topics are listed under References at the end.
 
 ## Resolution
 
@@ -38,3 +43,12 @@ Global flags: `--project <name>`, `--env <name>` (Railway environment name, or V
 | one bad deployment | `traces deploys api`, then `traces logs api --deploy <id> --level error` |
 | older than this page | run the command from the `more:` line |
 | preview or staging | `traces logs web --env preview` / `traces logs api --env staging` |
+
+## References
+
+Load one with `traces skills get core --ref <name>`, or all of them after this page with `traces skills get core --full`.
+
+- `config`: the config file, project matching, services, and how provider credentials and tracing headers are set up
+- `tracing`: Jaeger tracing: `tracing.url`, service names, attribute search, error detection from spans
+- `output`: stdout vs stderr, NDJSON, exit codes, pagination, limits and provider retention
+- `commands`: per-command output fields and notes for every command
