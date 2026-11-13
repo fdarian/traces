@@ -286,6 +286,7 @@ describe('traces init', () => {
       },
     });
     expect(config.tracing).toBeUndefined();
+    expect(config.railway).toEqual({ auth: 'cli' });
     expect(run.stderr).toContain('no token found');
   });
 
@@ -297,8 +298,11 @@ describe('traces init', () => {
     expect(first.stderr).toContain(`wrote ${path}`);
     expect(first.stderr).toContain('traces services');
     expect(first.stderr).toContain('commit traces.json');
+    expect(first.stderr).toContain('railway.auth is "cli"');
+    expect(first.stderr).not.toContain('add "railway"');
     expect(first.stdout).toContain('engine');
     const written = readFileSync(path, 'utf8');
+    expect((await decode(written)).railway).toEqual({ auth: 'cli' });
     expect(Object.keys((await decode(written)).services)).toEqual([
       'engine',
       'web',
@@ -360,7 +364,9 @@ describe('traces init', () => {
     const run = traces(repo, ['--dry-run'], 'unlinked');
     expect(run.code).toBe(0);
     expect(run.stderr).toContain('railway: skipped');
-    expect(Object.keys((await decode(run.stdout)).services)).toEqual(['site']);
+    const config = await decode(run.stdout);
+    expect(Object.keys(config.services)).toEqual(['site']);
+    expect(config.railway).toBeUndefined();
   });
 
   test('nothing discovered exits 1 with the link hint', () => {

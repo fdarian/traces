@@ -174,7 +174,12 @@ export const initCommand = Command.make('init', initOptions, (args) =>
     const candidates = [...railway, ...vercel];
     if (candidates.length === 0) return yield* new NothingDiscovered();
 
+    const usesRailway = candidates.some(
+      (candidate) => candidate.config.provider === 'railway',
+    );
+    // Discovery just ran through the `railway` CLI, so it is known to work for this user.
     const config = yield* validateRepoConfig({
+      ...(usesRailway ? { railway: { auth: 'cli' } } : {}),
       ...(Option.isSome(tracing) ? { tracing: tracing.value } : {}),
       services: assignServiceKeys(candidates),
     });
@@ -196,15 +201,12 @@ export const initCommand = Command.make('init', initOptions, (args) =>
       yield* emitRecord(mode, { path, service, ref }, formatService);
     }
     const secrets = keychainSecrets(config.tracing);
-    const usesRailway = Object.values(config.services).some(
-      (ref) => 'provider' in ref && ref.provider === 'railway',
-    );
     yield* Console.error(
       [
         'next:',
         ...(usesRailway
           ? [
-              '  add "railway": {"auth": ...} to traces.json: a token ({"keychain"} or {"env"}, recommended for agents) or "cli"; see `traces skills get core --ref config`',
+              '  railway.auth is "cli" (the logged-in railway CLI); to use a token instead, set {"keychain"} or {"env"}: see `traces skills get core --ref config`',
             ]
           : []),
         '  traces services   (verify)',
