@@ -1,6 +1,8 @@
 import {
   type LogSource,
   makeJaegerBackend,
+  makeRailwayCliClient,
+  makeRailwayHttpClient,
   makeRailwaySource,
   makeVercelSource,
   ProviderAuthError,
@@ -180,27 +182,31 @@ export const buildTarget = (
   });
 };
 
-export const missingRailwayToken = (resolved: ResolvedProject) =>
+export const missingRailwayAuth = (resolved: ResolvedProject) =>
   new ProviderAuthError({
     provider: 'railway',
-    hint: `project "${resolved.projectName}" has Railway services but no railway.token; add "railway": { "token": { "keychain": "${resolved.projectName}.railway" } } to the project config, then run traces secret set ${resolved.projectName}.railway`,
+    hint: `project "${resolved.projectName}" has Railway services but no railway.auth; either add "railway": { "auth": { "keychain": "${resolved.projectName}.railway" } } to the project config and run traces secret set ${resolved.projectName}.railway (a token; recommended for agents), or add "railway": { "auth": "cli" } to use the logged-in railway CLI`,
   });
 
-export const resolveRailwayToken = (resolved: ResolvedProject) =>
+/** The one place that picks the transport: a token goes over HTTP, `cli` shells out to `railway`. */
+export const resolveRailwayClient = (resolved: ResolvedProject) =>
   Effect.gen(function* () {
-    const ref = resolved.project.railway?.token;
-    if (ref === undefined) return yield* missingRailwayToken(resolved);
-    return Redacted.make(yield* resolveSecretRef(ref));
+    const auth = resolved.project.railway?.auth;
+    if (auth === undefined) return yield* missingRailwayAuth(resolved);
+    if (auth === 'cli') return yield* makeRailwayCliClient;
+    return yield* makeRailwayHttpClient(
+      Redacted.make(yield* resolveSecretRef(auth)),
+    );
   });
 
-/** `railwayToken` is passed in so one command run reads the secret once, however many Railway services it builds. */
+/** `railwayClient` is passed in so one command run reads the secret once, however many Railway services it builds. */
 export const buildSource = (
   target: ServiceTarget,
-  railwayToken: ReturnType<typeof resolveRailwayToken>,
+  railwayClient: ReturnType<typeof resolveRailwayClient>,
 ) =>
   target.provider === 'railway'
-    ? railwayToken.pipe(
-        Effect.flatMap((token) => makeRailwaySource(target, token)),
+    ? railwayClient.pipe(
+        Effect.flatMap((client) => makeRailwaySource(target, client)),
       )
     : Effect.gen(function* () {
         const token = yield* findVercelToken;
@@ -223,7 +229,7 @@ export const resolveService = (
     const selected = yield* selectService(resolved, service);
     const config = yield* requireLogProvider(selected.name, selected.config);
     const target = yield* buildTarget(selected.name, config, flags.env);
-    const source = yield* buildSource(target, resolveRailwayToken(resolved));
+    const source = yield* buildSource(target, resolveRailwayClient(resolved));
     return {
       resolved,
       name: selected.name,
@@ -369,7 +375,7 @@ export const resolveErrorScope = (
       });
     }
 
-    const railwayToken = yield* Effect.cached(resolveRailwayToken(resolved));
+    const railwayClient = yield* Effect.cached(resolveRailwayClient(resolved));
     const logEntries = logServices.map((selected) => ({
       name: selected.name,
       build: Effect.gen(function* () {
@@ -378,7 +384,7 @@ export const resolveErrorScope = (
           selected.config,
           flags.env,
         );
-        const source = yield* buildSource(target, railwayToken);
+        const source = yield* buildSource(target, railwayClient);
         return { target, source };
       }),
     }));

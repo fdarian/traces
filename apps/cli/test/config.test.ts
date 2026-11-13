@@ -35,30 +35,44 @@ describe('config decode', () => {
     expect(result._tag).toBe('Success');
   });
 
-  describe('railway.token', () => {
+  describe('railway.auth', () => {
     const withRailway = (railway: unknown) =>
       decode({
         projects: { app: { ...valid.projects.app, railway } },
       });
 
     test('accepts a keychain ref', async () => {
-      const result = await withRailway({ token: { keychain: 'app.railway' } });
+      const result = await withRailway({ auth: { keychain: 'app.railway' } });
       expect(result._tag).toBe('Success');
     });
 
     test('accepts an env ref', async () => {
-      const result = await withRailway({ token: { env: 'RAILWAY_TOKEN' } });
+      const result = await withRailway({ auth: { env: 'RAILWAY_API_TOKEN' } });
       expect(result._tag).toBe('Success');
     });
 
-    test('rejects a literal token', async () => {
-      const result = await withRailway({ token: 'abc' });
+    test('accepts "cli"', async () => {
+      const result = await withRailway({ auth: 'cli' });
+      expect(result._tag).toBe('Success');
+    });
+
+    test('rejects any other string, including a literal token', async () => {
+      for (const auth of ['abc', 'CLI', '']) {
+        const result = await withRailway({ auth });
+        expect(result._tag).toBe('Failure');
+      }
+    });
+
+    test('rejects the old `token` key', async () => {
+      const result = await withRailway({ token: { keychain: 'app.railway' } });
       expect(result._tag).toBe('Failure');
+      if (result._tag === 'Failure')
+        expect(result.failure.message).toContain('token');
     });
 
     test('rejects unknown keys', async () => {
       const result = await withRailway({
-        token: { keychain: 'app.railway' },
+        auth: { keychain: 'app.railway' },
         region: 'x',
       });
       expect(result._tag).toBe('Failure');

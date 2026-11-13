@@ -15,7 +15,8 @@ import {
 } from './client.js';
 import { PROVIDER } from './normalize.js';
 
-const INSTALL_HINT =
+/** Exported so callers can tell a missing binary from a rejected login; both are `ProviderAuthError`. */
+export const RAILWAY_CLI_INSTALL_HINT =
   'install the Railway CLI (https://docs.railway.com/guides/cli) and run `railway login`';
 const LOGIN_HINT = 'run `railway login`';
 
@@ -49,7 +50,7 @@ export const makeRailwayCliClient = Effect.gen(function* () {
           error.reason._tag === 'NotFound'
             ? new ProviderAuthError({
                 provider: PROVIDER,
-                hint: INSTALL_HINT,
+                hint: RAILWAY_CLI_INSTALL_HINT,
               })
             : new ProviderRequestError({ provider: PROVIDER, cause: error }),
       ),

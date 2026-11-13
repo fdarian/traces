@@ -107,6 +107,7 @@ export {
   mapRailwayHttpLog,
   mapRailwayLog,
   mapRailwayStatus,
+  RAILWAY_CLI_INSTALL_HINT,
   RAILWAY_RETENTION_NOTE,
   type RailwayClient,
 } from './logs/railway/index.js';

@@ -64,6 +64,9 @@ const SecretRef = Schema.Union([
   Schema.Struct({ keychain: NonEmpty }),
 ]);
 
+/** A token the CLI sends to Railway's API, or `cli` to borrow the logged-in `railway` binary. */
+const RailwayAuth = Schema.Union([SecretRef, Schema.Literal('cli')]);
+
 /** A literal or a `SecretRef`. */
 const HeaderValue = Schema.Union([NonEmpty, SecretRef]);
 
@@ -88,7 +91,7 @@ const ProjectConfig = Schema.Struct({
   matcher: Matcher,
   tracing: Schema.optional(TracingConfig),
   /** Optional at decode time: it is required only when a Railway service is actually used. */
-  railway: Schema.optional(Schema.Struct({ token: SecretRef })),
+  railway: Schema.optional(Schema.Struct({ auth: RailwayAuth })),
   services: Schema.Record(Identifier, ServiceConfig).check(
     Schema.makeFilter((services) => Object.keys(services).length > 0, {
       message: 'a project needs at least one service',
@@ -106,6 +109,7 @@ export type ServiceConfig = typeof ServiceConfig.Type;
 export type TracingConfig = typeof TracingConfig.Type;
 export type HeaderValue = typeof HeaderValue.Type;
 export type SecretRef = typeof SecretRef.Type;
+export type RailwayAuth = typeof RailwayAuth.Type;
 export type LogServiceConfig = Exclude<
   ServiceConfig,
   typeof TraceOnlyService.Type

@@ -1,16 +1,17 @@
 import {
-  checkRailwayToken,
+  checkRailwayAccess,
   ProviderAuthError,
   ProviderNotFound,
+  RAILWAY_CLI_INSTALL_HINT,
 } from '@traces/core';
 import { Effect, Redacted } from 'effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
-import type { SecretRef } from '#/config.ts';
+import type { RailwayAuth, SecretRef } from '#/config.ts';
 import { EnvVarMissing } from '#/errors.ts';
 import {
-  missingRailwayToken,
+  missingRailwayAuth,
   type ResolvedProject,
-  resolveSecretRef,
+  resolveRailwayClient,
 } from '#/resolve.ts';
 import { SecretMissing } from '#/secrets.ts';
 import { findVercelToken } from '#/vercel-token.ts';
@@ -23,23 +24,26 @@ export interface AuthStatus {
 const describeRef = (ref: SecretRef) =>
   'keychain' in ref ? `keychain ${ref.keychain}` : `env ${ref.env}`;
 
-/** Reads the project through the token, so it also proves the token can see that Railway project. */
+const describeAuth = (auth: RailwayAuth) =>
+  auth === 'cli' ? 'railway CLI login' : `token from ${describeRef(auth)}`;
+
+/** Reads the project through whichever transport is configured, so it also proves the credentials can see that Railway project. */
 export const railwayAuthStatus = (
   resolved: ResolvedProject,
   railwayProjectId: string,
 ) =>
   Effect.gen(function* () {
-    const ref = resolved.project.railway?.token;
-    if (ref === undefined) {
+    const auth = resolved.project.railway?.auth;
+    if (auth === undefined) {
       return {
         status: 'missing',
-        detail: missingRailwayToken(resolved).hint,
+        detail: missingRailwayAuth(resolved).hint,
       } as const satisfies AuthStatus;
     }
-    const source = `token from ${describeRef(ref)}`;
-    const secret = yield* resolveSecretRef(ref).pipe(Effect.result);
-    if (secret._tag === 'Failure') {
-      const error = secret.failure;
+    const source = describeAuth(auth);
+    const client = yield* resolveRailwayClient(resolved).pipe(Effect.result);
+    if (client._tag === 'Failure') {
+      const error = client.failure;
       if (error instanceof SecretMissing) {
         return {
           status: 'missing',
@@ -54,15 +58,21 @@ export const railwayAuthStatus = (
       }
       return yield* Effect.fail(error);
     }
-    const checked = yield* checkRailwayToken(
+    const checked = yield* checkRailwayAccess(
+      client.success,
       railwayProjectId,
-      Redacted.make(secret.success),
     ).pipe(Effect.result);
     if (checked._tag === 'Success') {
       return { status: 'ok', detail: source } as const satisfies AuthStatus;
     }
     const error = checked.failure;
     if (error instanceof ProviderAuthError) {
+      if (error.hint === RAILWAY_CLI_INSTALL_HINT) {
+        return {
+          status: 'missing',
+          detail: error.hint,
+        } as const satisfies AuthStatus;
+      }
       return {
         status: 'invalid',
         detail: `${source}: ${error.hint}`,
