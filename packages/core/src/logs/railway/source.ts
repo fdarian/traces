@@ -1,4 +1,4 @@
-import { Effect, type Redacted } from 'effect';
+import { Effect } from 'effect';
 import { type ProviderError, ProviderNotFound } from '../errors.js';
 import type {
   Cursor,
@@ -11,7 +11,7 @@ import type {
 } from '../model.js';
 import { floorMs, levelAllowed } from '../normalize.js';
 import type { LogSource } from '../source.js';
-import { makeRailwayClient } from './client.js';
+import type { RailwayClient } from './client.js';
 import {
   grepFilter,
   httpStatusFilter,
@@ -62,10 +62,9 @@ const describeNamed = (edges: ReadonlyArray<NamedEdge>): string =>
 
 export const makeRailwaySource = (
   target: RailwayTarget,
-  token: Redacted.Redacted<string>,
+  client: RailwayClient,
 ) =>
   Effect.gen(function* () {
-    const client = yield* makeRailwayClient(token);
     const query = client.query;
 
     const ids = yield* Effect.cached(

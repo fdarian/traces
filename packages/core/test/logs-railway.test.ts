@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Effect, Redacted } from 'effect';
 import {
   type Cursor,
+  makeRailwayHttpClient,
   makeRailwaySource,
   mapRailwayHttpLog,
   mapRailwayLog,
@@ -9,7 +10,12 @@ import {
   type RailwayTarget,
   shortHash,
 } from '#/index.js';
-import { fakeRailway, fixture, type RailwayCall } from './logs-helpers.ts';
+import {
+  fakeRailwayHttp,
+  fixture,
+  type RailwayCall,
+  type RailwayHttpCall,
+} from './logs-helpers.ts';
 
 const token = Redacted.make('rw-token');
 
@@ -45,9 +51,14 @@ const respondWith =
 const run = <A>(effect: Effect.Effect<A, unknown, never>) =>
   Effect.runPromise(effect);
 
-const sourceWith = (rows: unknown, calls: Array<RailwayCall> = []) =>
-  makeRailwaySource(target, token).pipe(
-    Effect.provide(fakeRailway(respondWith(rows), calls)),
+const httpSourceFor = (railwayTarget: RailwayTarget) =>
+  makeRailwayHttpClient(token).pipe(
+    Effect.flatMap((client) => makeRailwaySource(railwayTarget, client)),
+  );
+
+const sourceWith = (rows: unknown, calls: Array<RailwayHttpCall> = []) =>
+  httpSourceFor(target).pipe(
+    Effect.provide(fakeRailwayHttp(respondWith(rows), calls)),
   );
 
 describe('railway log mapping', () => {
@@ -206,7 +217,7 @@ describe('railway log mapping', () => {
 
 describe('railway source', () => {
   test('trims the limit+1 extra row and signals more history', async () => {
-    const calls: Array<RailwayCall> = [];
+    const calls: Array<RailwayHttpCall> = [];
     const page = await run(
       Effect.flatMap(sourceWith(logRows, calls), (source) =>
         source.logs({
@@ -238,7 +249,7 @@ describe('railway source', () => {
   });
 
   test('builds level and grep filters', async () => {
-    const calls: Array<RailwayCall> = [];
+    const calls: Array<RailwayHttpCall> = [];
     await run(
       Effect.flatMap(sourceWith([], calls), (source) =>
         source.logs({ levels: ['error', 'warn'], grep: 'say "hi"', limit: 10 }),
@@ -268,12 +279,9 @@ describe('railway source', () => {
   });
 
   test('resolves services and environments by name, failing with the available names', async () => {
-    const missing = makeRailwaySource(
-      { ...target, serviceName: 'ghost' },
-      token,
-    ).pipe(
+    const missing = httpSourceFor({ ...target, serviceName: 'ghost' }).pipe(
       Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
-      Effect.provide(fakeRailway(respondWith([]))),
+      Effect.provide(fakeRailwayHttp(respondWith([]))),
       Effect.result,
     );
     const result = await run(missing);
@@ -286,18 +294,15 @@ describe('railway source', () => {
   });
 
   test('resolves services and environments given by id', async () => {
-    const calls: Array<RailwayCall> = [];
+    const calls: Array<RailwayHttpCall> = [];
     await run(
-      makeRailwaySource(
-        {
-          ...target,
-          serviceName: 'svc-web',
-          environment: 'env-stg',
-        },
-        token,
-      ).pipe(
+      httpSourceFor({
+        ...target,
+        serviceName: 'svc-web',
+        environment: 'env-stg',
+      }).pipe(
         Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
-        Effect.provide(fakeRailway(respondWith([]), calls)),
+        Effect.provide(fakeRailwayHttp(respondWith([]), calls)),
       ),
     );
     const query = calls.find((c) => c.document.includes('environmentLogs'));
@@ -327,7 +332,7 @@ describe('railway source', () => {
   });
 
   test('latest deployment skips SKIPPED ones for build logs', async () => {
-    const calls: Array<RailwayCall> = [];
+    const calls: Array<RailwayHttpCall> = [];
     await run(
       Effect.flatMap(sourceWith([], calls), (source) =>
         source.buildLogs({ levels: [], limit: 5, deploymentId: 'latest' }),
@@ -340,18 +345,18 @@ describe('railway source', () => {
   describe('transport', () => {
     const failWith = (
       override: { readonly status?: number; readonly body: unknown },
-      calls: Array<RailwayCall> = [],
+      calls: Array<RailwayHttpCall> = [],
     ) =>
       run(
-        makeRailwaySource(target, token).pipe(
+        httpSourceFor(target).pipe(
           Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
-          Effect.provide(fakeRailway(() => null, calls, override)),
+          Effect.provide(fakeRailwayHttp(() => null, calls, override)),
           Effect.flip,
         ),
       );
 
     test('sends the token as a bearer header', async () => {
-      const calls: Array<RailwayCall> = [];
+      const calls: Array<RailwayHttpCall> = [];
       await run(
         Effect.flatMap(sourceWith([], calls), (source) =>
           source.logs({ levels: [], limit: 1 }),
@@ -364,7 +369,7 @@ describe('railway source', () => {
     });
 
     test('sends numeric variables as numbers and drops undefined ones', async () => {
-      const calls: Array<RailwayCall> = [];
+      const calls: Array<RailwayHttpCall> = [];
       await run(
         Effect.flatMap(sourceWith([], calls), (source) =>
           source.logs({ levels: [], limit: 1 }),

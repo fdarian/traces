@@ -1,4 +1,6 @@
-export { checkRailwayToken } from './client.js';
+export { makeRailwayCliClient } from './cli-client.js';
+export { checkRailwayAccess, type RailwayClient } from './client.js';
+export { makeRailwayHttpClient } from './http-client.js';
 export {
   mapRailwayDeployment,
   mapRailwayHttpLog,
