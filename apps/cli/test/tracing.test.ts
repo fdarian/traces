@@ -4,17 +4,27 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
 import { TraceBackendUnauthorized } from '@traces/core';
-import { ConfigProvider, Effect, Layer, Option, Stream } from 'effect';
-import { FetchHttpClient } from 'effect/http';
+import {
+  ConfigProvider,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Stream,
+} from 'effect';
+import { FetchHttpClient, HttpClient, HttpClientResponse } from 'effect/http';
 import { layerTest } from 'effect/Stdio';
+import { railwayAuthStatus } from '#/auth-status.ts';
 import { parseSecretValue, readSecretValue } from '#/commands/secret.ts';
 import { EnvVarMissing, UsageError } from '#/errors.ts';
 import { EXIT_CODES, renderError } from '#/output.ts';
 import {
+  buildSource,
   type ResolvedProject,
   requireLogProvider,
   resolveErrorScope,
   resolveHeaders,
+  resolveRailwayToken,
   resolveTraceBackend,
 } from '#/resolve.ts';
 import { SecretMissing, SecretStoreError, Secrets } from '#/secrets.ts';
@@ -433,5 +443,163 @@ describe('secret set input', () => {
       ),
     );
     expect(result._tag).toBe('Failure');
+  });
+});
+
+const railwayProject = (
+  railway: ResolvedProject['project']['railway'],
+): ResolvedProject => ({
+  configPath: '/cfg.json',
+  projectName: 'app',
+  matchedBy: 'flag',
+  project: {
+    matcher: { type: 'git', repo: 'acme/app' },
+    railway,
+    services: {
+      api: { provider: 'railway', project: 'proj-1', service: 'api' },
+    },
+  },
+});
+
+describe('railway token', () => {
+  test('is read from the keychain and wrapped as redacted', async () => {
+    const secrets = fakeSecrets({ 'app.railway': 'rw-secret' });
+    const token = await Effect.runPromise(
+      resolveRailwayToken(
+        railwayProject({ token: { keychain: 'app.railway' } }),
+      ).pipe(Effect.provide(secrets.layer)),
+    );
+    expect(Redacted.value(token)).toBe('rw-secret');
+    expect(secrets.reads).toEqual(['app.railway']);
+  });
+
+  test('is read from the environment', async () => {
+    const token = await Effect.runPromise(
+      resolveRailwayToken(
+        railwayProject({ token: { env: 'RAILWAY_TOKEN' } }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            fakeSecrets({}).layer,
+            env({ RAILWAY_TOKEN: 'envtok' }),
+          ),
+        ),
+      ),
+    );
+    expect(Redacted.value(token)).toBe('envtok');
+  });
+
+  test('a Railway service without railway.token fails with the config hint and never reads the keychain', async () => {
+    const secrets = fakeSecrets({});
+    const resolved = railwayProject(undefined);
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* buildSource(
+          {
+            provider: 'railway',
+            service: 'api',
+            project: 'proj-1',
+            serviceName: 'api',
+            environment: 'production',
+          },
+          resolveRailwayToken(resolved),
+        );
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            secrets.layer,
+            FetchHttpClient.layer,
+            BunServices.layer,
+          ),
+        ),
+        Effect.result,
+      ),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      const rendered = renderError(result.failure);
+      expect(rendered.code).toBe(EXIT_CODES.auth);
+      expect(rendered.hint).toContain(
+        'has Railway services but no railway.token',
+      );
+      expect(rendered.hint).toContain(
+        '"railway": { "token": { "keychain": "app.railway" } }',
+      );
+      expect(rendered.hint).toContain('traces secret set app.railway');
+    }
+    expect(secrets.reads).toEqual([]);
+  });
+});
+
+describe('railwayAuthStatus', () => {
+  const httpReply = (status: number, body: unknown) =>
+    Layer.succeed(
+      HttpClient.HttpClient,
+      HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(JSON.stringify(body), { status }),
+          ),
+        ),
+      ),
+    );
+  const status = (
+    resolved: ResolvedProject,
+    secrets: Layer.Layer<Secrets>,
+    http: Layer.Layer<HttpClient.HttpClient>,
+  ) =>
+    Effect.runPromise(
+      railwayAuthStatus(resolved, 'proj-1').pipe(
+        Effect.provide(Layer.mergeAll(secrets, http, env({}))),
+      ),
+    );
+  const configured = railwayProject({ token: { keychain: 'app.railway' } });
+  const projectData = {
+    data: { project: { services: { edges: [] }, environments: { edges: [] } } },
+  };
+
+  test('is missing, with the config hint, when railway.token is not configured', async () => {
+    const result = await status(
+      railwayProject(undefined),
+      fakeSecrets({}).layer,
+      httpReply(200, projectData),
+    );
+    expect(result.status).toBe('missing');
+    expect(result.detail).toContain('railway.token');
+  });
+
+  test('is missing, with the secret set hint, when the secret is absent', async () => {
+    const result = await status(
+      configured,
+      fakeSecrets({}).layer,
+      httpReply(200, projectData),
+    );
+    expect(result).toEqual({
+      status: 'missing',
+      detail: 'traces secret set app.railway',
+    });
+  });
+
+  test('is ok when the project read succeeds', async () => {
+    const result = await status(
+      configured,
+      fakeSecrets({ 'app.railway': 'rw' }).layer,
+      httpReply(200, projectData),
+    );
+    expect(result).toEqual({
+      status: 'ok',
+      detail: 'token from keychain app.railway',
+    });
+  });
+
+  test('is invalid when Railway rejects the token', async () => {
+    const result = await status(
+      configured,
+      fakeSecrets({ 'app.railway': 'rw' }).layer,
+      httpReply(200, { errors: [{ message: 'Not Authorized' }] }),
+    );
+    expect(result.status).toBe('invalid');
+    expect(result.detail).toContain('Railway rejected the token');
   });
 });

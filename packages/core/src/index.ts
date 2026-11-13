@@ -100,6 +100,7 @@ export type { BackwardPage, PageResume } from './logs/paging.js';
 export { pageBackwards } from './logs/paging.js';
 export { Provider } from './logs/provider.js';
 export {
+  checkRailwayToken,
   makeRailwaySource,
   mapRailwayHttpLog,
   mapRailwayLog,

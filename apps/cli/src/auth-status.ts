@@ -1,6 +1,18 @@
-import { Effect, Redacted, Stream } from 'effect';
+import {
+  checkRailwayToken,
+  ProviderAuthError,
+  ProviderNotFound,
+} from '@traces/core';
+import { Effect, Redacted } from 'effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
-import { ChildProcess } from 'effect/process';
+import type { SecretRef } from '#/config.ts';
+import { EnvVarMissing } from '#/errors.ts';
+import {
+  missingRailwayToken,
+  type ResolvedProject,
+  resolveSecretRef,
+} from '#/resolve.ts';
+import { SecretMissing } from '#/secrets.ts';
 import { findVercelToken } from '#/vercel-token.ts';
 
 export interface AuthStatus {
@@ -8,32 +20,62 @@ export interface AuthStatus {
   readonly detail: string;
 }
 
-export const railwayAuthStatus = Effect.scoped(
+const describeRef = (ref: SecretRef) =>
+  'keychain' in ref ? `keychain ${ref.keychain}` : `env ${ref.env}`;
+
+/** Reads the project through the token, so it also proves the token can see that Railway project. */
+export const railwayAuthStatus = (
+  resolved: ResolvedProject,
+  railwayProjectId: string,
+) =>
   Effect.gen(function* () {
-    const process = yield* ChildProcess.make('railway', ['whoami']);
-    const exitCode = yield* Effect.all(
-      [
-        process.stdout.pipe(Stream.runDrain),
-        process.stderr.pipe(Stream.runDrain),
-        process.exitCode,
-      ],
-      { concurrency: 'unbounded' },
-    ).pipe(Effect.map((results) => results[2]));
-    return exitCode === 0
-      ? ({ status: 'ok', detail: 'railway CLI logged in' } as const)
-      : ({ status: 'invalid', detail: 'run `railway login`' } as const);
-  }),
-).pipe(
-  Effect.catchTag('PlatformError', (error) =>
-    error.reason._tag === 'NotFound'
-      ? Effect.succeed({
+    const ref = resolved.project.railway?.token;
+    if (ref === undefined) {
+      return {
+        status: 'missing',
+        detail: missingRailwayToken(resolved).hint,
+      } as const satisfies AuthStatus;
+    }
+    const source = `token from ${describeRef(ref)}`;
+    const secret = yield* resolveSecretRef(ref).pipe(Effect.result);
+    if (secret._tag === 'Failure') {
+      const error = secret.failure;
+      if (error instanceof SecretMissing) {
+        return {
           status: 'missing',
-          detail:
-            'railway CLI not installed (https://docs.railway.com/guides/cli)',
-        } as const satisfies AuthStatus)
-      : Effect.fail(error),
-  ),
-);
+          detail: `traces secret set ${error.name}`,
+        } as const satisfies AuthStatus;
+      }
+      if (error instanceof EnvVarMissing) {
+        return {
+          status: 'missing',
+          detail: `export ${error.name}=<value>`,
+        } as const satisfies AuthStatus;
+      }
+      return yield* Effect.fail(error);
+    }
+    const checked = yield* checkRailwayToken(
+      railwayProjectId,
+      Redacted.make(secret.success),
+    ).pipe(Effect.result);
+    if (checked._tag === 'Success') {
+      return { status: 'ok', detail: source } as const satisfies AuthStatus;
+    }
+    const error = checked.failure;
+    if (error instanceof ProviderAuthError) {
+      return {
+        status: 'invalid',
+        detail: `${source}: ${error.hint}`,
+      } as const satisfies AuthStatus;
+    }
+    if (error instanceof ProviderNotFound) {
+      return {
+        status: 'invalid',
+        detail: `${source} cannot see ${error.what}; ${error.hint}`,
+      } as const satisfies AuthStatus;
+    }
+    return yield* Effect.fail(error);
+  });
 
 export const vercelAuthStatus = Effect.gen(function* () {
   const found = yield* findVercelToken.pipe(Effect.result);

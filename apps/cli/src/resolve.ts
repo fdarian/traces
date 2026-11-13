@@ -3,9 +3,10 @@ import {
   makeJaegerBackend,
   makeRailwaySource,
   makeVercelSource,
+  ProviderAuthError,
   type ServiceTarget,
 } from '@traces/core';
-import { Config, Effect, Option } from 'effect';
+import { Config, Effect, Option, Redacted } from 'effect';
 import { Flag } from 'effect/cli';
 import {
   type HeaderValue,
@@ -15,6 +16,7 @@ import {
   type ProjectConfig,
   readConfig,
   resolveDefaultConfigPath,
+  type SecretRef,
   type ServiceConfig,
 } from '#/config.ts';
 import { EnvVarMissing, UsageError } from '#/errors.ts';
@@ -178,9 +180,28 @@ export const buildTarget = (
   });
 };
 
-export const buildSource = (target: ServiceTarget) =>
+export const missingRailwayToken = (resolved: ResolvedProject) =>
+  new ProviderAuthError({
+    provider: 'railway',
+    hint: `project "${resolved.projectName}" has Railway services but no railway.token; add "railway": { "token": { "keychain": "${resolved.projectName}.railway" } } to the project config, then run traces secret set ${resolved.projectName}.railway`,
+  });
+
+export const resolveRailwayToken = (resolved: ResolvedProject) =>
+  Effect.gen(function* () {
+    const ref = resolved.project.railway?.token;
+    if (ref === undefined) return yield* missingRailwayToken(resolved);
+    return Redacted.make(yield* resolveSecretRef(ref));
+  });
+
+/** `railwayToken` is passed in so one command run reads the secret once, however many Railway services it builds. */
+export const buildSource = (
+  target: ServiceTarget,
+  railwayToken: ReturnType<typeof resolveRailwayToken>,
+) =>
   target.provider === 'railway'
-    ? makeRailwaySource(target)
+    ? railwayToken.pipe(
+        Effect.flatMap((token) => makeRailwaySource(target, token)),
+      )
     : Effect.gen(function* () {
         const token = yield* findVercelToken;
         return yield* makeVercelSource(target, token.token);
@@ -202,7 +223,7 @@ export const resolveService = (
     const selected = yield* selectService(resolved, service);
     const config = yield* requireLogProvider(selected.name, selected.config);
     const target = yield* buildTarget(selected.name, config, flags.env);
-    const source = yield* buildSource(target);
+    const source = yield* buildSource(target, resolveRailwayToken(resolved));
     return {
       resolved,
       name: selected.name,
@@ -214,26 +235,28 @@ export const resolveService = (
 const TRACING_HINT_EXAMPLE =
   '"tracing": {"provider":"jaeger","url":"https://jaeger.example.com","headers":{"X-API-Key":{"keychain":"<name>"}}}';
 
-const resolveHeaderValue = (
-  value: HeaderValue,
+export const resolveSecretRef = (
+  ref: SecretRef,
 ): Effect.Effect<
   string,
   SecretMissing | SecretStoreError | EnvVarMissing | Config.ConfigError,
   Secrets
 > => {
-  if (typeof value === 'string') return Effect.succeed(value);
-  if ('keychain' in value) {
-    return Secrets.use((secrets) => secrets.get(value.keychain));
+  if ('keychain' in ref) {
+    return Secrets.use((secrets) => secrets.get(ref.keychain));
   }
-  return Config.String(value.env).pipe(
+  return Config.String(ref.env).pipe(
     Config.option,
     Effect.flatMap((found) =>
       Option.isSome(found) && found.value !== ''
         ? Effect.succeed(found.value)
-        : new EnvVarMissing({ name: value.env }),
+        : new EnvVarMissing({ name: ref.env }),
     ),
   );
 };
+
+const resolveHeaderValue = (value: HeaderValue) =>
+  typeof value === 'string' ? Effect.succeed(value) : resolveSecretRef(value);
 
 /** Reads keychain and env values only when called, so log commands never touch either. */
 export const resolveHeaders = (
@@ -346,6 +369,7 @@ export const resolveErrorScope = (
       });
     }
 
+    const railwayToken = yield* Effect.cached(resolveRailwayToken(resolved));
     const logEntries = logServices.map((selected) => ({
       name: selected.name,
       build: Effect.gen(function* () {
@@ -354,7 +378,7 @@ export const resolveErrorScope = (
           selected.config,
           flags.env,
         );
-        const source = yield* buildSource(target);
+        const source = yield* buildSource(target, railwayToken);
         return { target, source };
       }),
     }));

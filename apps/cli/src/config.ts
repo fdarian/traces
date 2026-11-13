@@ -58,12 +58,14 @@ const HeaderName = Schema.String.check(
   }),
 );
 
-/** A literal, `{ env }` (read at use time) or `{ keychain }` (read from the OS keychain at use time). */
-const HeaderValue = Schema.Union([
-  NonEmpty,
+/** `{ env }` or `{ keychain }`, both read at use time. */
+const SecretRef = Schema.Union([
   Schema.Struct({ env: NonEmpty }),
   Schema.Struct({ keychain: NonEmpty }),
 ]);
+
+/** A literal or a `SecretRef`. */
+const HeaderValue = Schema.Union([NonEmpty, SecretRef]);
 
 const TracingConfig = Schema.Struct({
   provider: Schema.Literal('jaeger'),
@@ -85,6 +87,8 @@ const Matcher = Schema.Union([
 const ProjectConfig = Schema.Struct({
   matcher: Matcher,
   tracing: Schema.optional(TracingConfig),
+  /** Optional at decode time: it is required only when a Railway service is actually used. */
+  railway: Schema.optional(Schema.Struct({ token: SecretRef })),
   services: Schema.Record(Identifier, ServiceConfig).check(
     Schema.makeFilter((services) => Object.keys(services).length > 0, {
       message: 'a project needs at least one service',
@@ -101,6 +105,7 @@ export type ProjectConfig = typeof ProjectConfig.Type;
 export type ServiceConfig = typeof ServiceConfig.Type;
 export type TracingConfig = typeof TracingConfig.Type;
 export type HeaderValue = typeof HeaderValue.Type;
+export type SecretRef = typeof SecretRef.Type;
 export type LogServiceConfig = Exclude<
   ServiceConfig,
   typeof TraceOnlyService.Type

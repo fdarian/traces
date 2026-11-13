@@ -242,7 +242,7 @@ export const servicesCommand = Command.make(
           yield* Console.log(formatTracing(tracing, missing));
         }
       }
-      const authCache = new Map<'vercel' | 'railway', AuthStatus>();
+      const authCache = new Map<string, AuthStatus>();
       for (const [service, ref] of Object.entries(resolved.project.services)) {
         const found = inJaeger(otelServiceName(service, ref));
         const common = {
@@ -265,12 +265,14 @@ export const servicesCommand = Command.make(
           );
           continue;
         }
-        let auth = authCache.get(ref.provider);
+        const authKey =
+          ref.provider === 'railway' ? `railway:${ref.project}` : 'vercel';
+        let auth = authCache.get(authKey);
         if (auth === undefined) {
           auth = yield* ref.provider === 'railway'
-            ? railwayAuthStatus
+            ? railwayAuthStatus(resolved, ref.project)
             : vercelAuthStatus;
-          authCache.set(ref.provider, auth);
+          authCache.set(authKey, auth);
         }
         yield* emitRecord(
           mode,

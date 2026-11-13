@@ -35,6 +35,38 @@ describe('config decode', () => {
     expect(result._tag).toBe('Success');
   });
 
+  describe('railway.token', () => {
+    const withRailway = (railway: unknown) =>
+      decode({
+        projects: { app: { ...valid.projects.app, railway } },
+      });
+
+    test('accepts a keychain ref', async () => {
+      const result = await withRailway({ token: { keychain: 'app.railway' } });
+      expect(result._tag).toBe('Success');
+    });
+
+    test('accepts an env ref', async () => {
+      const result = await withRailway({ token: { env: 'RAILWAY_TOKEN' } });
+      expect(result._tag).toBe('Success');
+    });
+
+    test('rejects a literal token', async () => {
+      const result = await withRailway({ token: 'abc' });
+      expect(result._tag).toBe('Failure');
+    });
+
+    test('rejects unknown keys', async () => {
+      const result = await withRailway({
+        token: { keychain: 'app.railway' },
+        region: 'x',
+      });
+      expect(result._tag).toBe('Failure');
+      if (result._tag === 'Failure')
+        expect(result.failure.message).toContain('region');
+    });
+  });
+
   test('rejects excess properties with the offending key', async () => {
     const result = await decode({
       projects: {

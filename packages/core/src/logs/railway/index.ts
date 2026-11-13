@@ -1,3 +1,4 @@
+export { checkRailwayToken } from './client.js';
 export {
   mapRailwayDeployment,
   mapRailwayHttpLog,

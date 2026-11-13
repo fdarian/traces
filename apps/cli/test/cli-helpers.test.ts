@@ -224,10 +224,10 @@ describe('renderError', () => {
       renderError(
         new ProviderAuthError({
           provider: 'railway',
-          hint: 'run `railway login`',
+          hint: 'Railway rejected the token',
         }),
       ).hint,
-    ).toBe('run `railway login`');
+    ).toBe('Railway rejected the token');
   });
 });
 
