@@ -25,7 +25,7 @@ Global flags: `--project <name>`, `--env <name>` (Railway environment name, or V
 | `traces errors [service]` | error logs and error spans grouped by fingerprint, most frequent first |
 | `traces spans [service]` | search traces of a service in Jaeger, oldest to newest |
 | `traces trace <traceId>` | show one trace as a span tree from Jaeger |
-| `traces secret set\|delete <name>` | store or remove a keychain secret for tracing headers |
+| `traces secret set\|delete <name>` | store or remove a keychain secret (tracing headers, the Railway token) |
 
 ## Recipes
 

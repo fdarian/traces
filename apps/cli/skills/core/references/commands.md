@@ -15,7 +15,7 @@ one record per service: configPath, project, matchedBy (flag | path | git), serv
 ### Notes
 
 - Run this first when another command says no project matches or auth fails.
-- Auth check: Railway runs `railway whoami`; Vercel validates the token against the API.
+- Auth check: Railway reads the configured project through `railway.token` (`missing` without the token or its secret, `invalid` when Railway rejects it); Vercel validates the token against the API.
 - With a `tracing` block, one `/api/v3/services` request (5s timeout) checks the URL: reachable, unauthorized (credentials rejected), or error with a short reason (an HTML page, a redirect, a missing secret, no answer). A failed check still exits 0. Every service whose otelService Jaeger does not report is listed as `<service> → <otelService>: not in Jaeger`; a wrong name there is why `traces spans` comes back empty. Projects without `tracing` make no request.
 - Tracing: `traces secret set <ref>` fixes a missing keychain secret; an env header is `missing` until that variable is exported. Reading keychain entries here may prompt macOS for access.
 
@@ -125,7 +125,7 @@ SpanRow per line, depth first with children by start time: traceId, spanId, pare
 
 ## traces secret
 
-Manage the OS-keychain secrets that tracing headers refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged.
+Manage the OS-keychain secrets that tracing headers and `railway.token` refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged.
 
 Usage: `traces secret set|delete <name>`
 
@@ -136,8 +136,8 @@ no records on stdout. stderr confirms what was stored or deleted.
 ### Notes
 
 - `set` reads the value from a hidden prompt on a terminal, or from stdin when piped (one trailing newline is dropped). An empty value is refused.
-- Agents cannot answer the hidden prompt: the user runs `traces secret set <name>` once; after that every trace command reads the secret itself.
+- Agents cannot answer the hidden prompt: the user runs `traces secret set <name>` once; after that every trace and Railway command reads the secret itself.
 - `delete` of a name that does not exist exits 0 and says so on stderr.
 - There is no `list`: the keychain cannot be enumerated. `traces services` shows present or missing for every secret the config references.
-- A trace command with a missing secret exits 3 and prints the `traces secret set <name>` to run.
+- A command with a missing secret exits 3 and prints the `traces secret set <name>` to run.
 - Takes no global flags.
