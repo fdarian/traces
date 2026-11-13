@@ -35,8 +35,7 @@ const leadingGlobalFlags = (
  * The CLI framework only accepts a command's flags after the command token, so
  * `traces --config x services` is moved to `traces services --config x`.
  * Anything else before the command (`--help`, unknown flags) stops the scan
- * and leaves the arguments untouched. `help <cmd>` is left alone too, since
- * its topic must stay the second token.
+ * and leaves the arguments untouched.
  */
 export const hoistGlobalFlags = (
   args: ReadonlyArray<string>,
@@ -46,8 +45,7 @@ export const hoistGlobalFlags = (
   if (
     leading.hoisted.length === 0 ||
     command === undefined ||
-    command.startsWith('-') ||
-    command === 'help'
+    command.startsWith('-')
   ) {
     return args;
   }
