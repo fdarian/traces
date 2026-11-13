@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { TraceBackendUnauthorized } from '@traces/core';
 import { Cause, Config, Console, Effect, Option } from 'effect';
 import { Command } from 'effect/cli';
@@ -7,63 +8,28 @@ import {
   vercelAuthStatus,
 } from '#/auth-status.ts';
 import {
+  type HeaderStatus,
+  renderServices,
+  type SecretStatus,
+  type ServiceRecord,
+  type TracingCheck,
+  type TracingStatus,
+} from '#/commands/services-view.ts';
+import {
   type HeaderValue,
   hasLogProvider,
   otelServiceName,
-  type ServiceConfig,
   type TracingConfig,
 } from '#/config.ts';
-import { causeMessage, emitRecord, outputMode, renderError } from '#/output.ts';
+import { causeMessage, outputMode, renderError } from '#/output.ts';
 import {
-  type ConfigSource,
   globalOptions,
   type ResolvedProject,
   resolveProject,
   resolveTraceBackend,
 } from '#/resolve.ts';
 import { Secrets } from '#/secrets.ts';
-
-type SecretStatus =
-  | { readonly status: 'present' | 'missing' }
-  | { readonly status: 'error'; readonly detail: string };
-
-type HeaderStatus =
-  | { readonly name: string; readonly source: 'literal' }
-  | ({
-      readonly name: string;
-      readonly source: 'env' | 'keychain';
-      readonly ref: string;
-    } & SecretStatus);
-
-type TracingCheck =
-  | { readonly status: 'reachable'; readonly services: ReadonlyArray<string> }
-  | { readonly status: 'unauthorized' }
-  | { readonly status: 'error'; readonly detail: string };
-
-interface TracingStatus {
-  readonly provider: 'jaeger';
-  readonly url: string;
-  readonly headers: ReadonlyArray<HeaderStatus>;
-  readonly check: TracingCheck;
-}
-
-interface ServiceRecord {
-  readonly configPath: string;
-  readonly configSource: ConfigSource;
-  readonly project: string;
-  readonly matchedBy: ResolvedProject['matchedBy'];
-  readonly service: string;
-  /** Absent for trace-only services. */
-  readonly provider?: 'vercel' | 'railway';
-  readonly ref: ServiceConfig;
-  /** Absent for trace-only services. */
-  readonly auth?: AuthStatus;
-  /** The Jaeger service name; set only when the project has tracing or the entry names one. */
-  readonly otelService?: string;
-  /** Set only when the tracing check reached Jaeger: whether it reports `otelService`. */
-  readonly otelInJaeger?: boolean;
-  readonly tracing?: TracingStatus;
-}
+import { stdoutStyle } from '#/style.ts';
 
 const keychainStatus = (
   name: string,
@@ -162,53 +128,6 @@ const tracingStatus = (resolved: ResolvedProject, tracing: TracingConfig) =>
     ),
   );
 
-const formatHeader = (header: HeaderStatus): string => {
-  if (header.source === 'literal') return `${header.name}: literal`;
-  const state =
-    header.status === 'error' ? `error (${header.detail})` : header.status;
-  return `${header.name}: ${header.source} ${header.ref} ${state}`;
-};
-
-const formatCheck = (check: TracingCheck): string => {
-  if (check.status === 'reachable') {
-    return `reachable (${check.services.length === 0 ? 'no services yet' : check.services.join(', ')})`;
-  }
-  return check.status === 'error' ? `error: ${check.detail}` : check.status;
-};
-
-export const formatTracing = (
-  tracing: TracingStatus,
-  missing: ReadonlyArray<{
-    readonly service: string;
-    readonly otelService: string;
-  }>,
-): string =>
-  [
-    `tracing ${tracing.provider} ${tracing.url}`,
-    ...tracing.headers.map((header) => `  header ${formatHeader(header)}`),
-    `  status ${formatCheck(tracing.check)}`,
-    ...missing.map(
-      (entry) => `  ${entry.service} → ${entry.otelService}: not in Jaeger`,
-    ),
-  ].join('\n');
-
-const formatService = (record: ServiceRecord): string => {
-  const otel =
-    record.otelService === undefined ? '' : `  otel: ${record.otelService}`;
-  if (
-    !hasLogProvider(record.ref) ||
-    record.provider === undefined ||
-    record.auth === undefined
-  ) {
-    return `${record.service.padEnd(16)} trace-only${otel}`;
-  }
-  const ref =
-    record.ref.provider === 'railway'
-      ? `project ${record.ref.project} service ${record.ref.service} env ${record.ref.environment ?? 'production'}`
-      : `project ${record.ref.project}${record.ref.team === undefined ? '' : ` team ${record.ref.team}`}`;
-  return `${record.service.padEnd(16)} ${record.provider.padEnd(8)} ${ref}  auth: ${record.auth.status} (${record.auth.detail})${otel}`;
-};
-
 export const servicesOptions = { ...globalOptions };
 
 export const servicesCommand = Command.make(
@@ -230,20 +149,13 @@ export const servicesCommand = Command.make(
         jaegerServices === undefined
           ? undefined
           : jaegerServices.includes(otelService);
-      if (mode === 'human') {
-        yield* Console.log(
-          `config ${resolved.configPath} (${resolved.configSource})\nproject ${resolved.projectName} (matched by ${resolved.matchedBy})`,
-        );
-        if (tracing !== undefined) {
-          const missing = Object.entries(resolved.project.services)
-            .map(([service, ref]) => ({
-              service,
-              otelService: otelServiceName(service, ref),
-            }))
-            .filter((entry) => inJaeger(entry.otelService) === false);
-          yield* Console.log(formatTracing(tracing, missing));
-        }
-      }
+      const records: Array<ServiceRecord> = [];
+      const report = (record: ServiceRecord) =>
+        mode === 'ndjson'
+          ? Console.log(JSON.stringify(record))
+          : Effect.sync(() => {
+              records.push(record);
+            });
       const authCache = new Map<string, AuthStatus>();
       for (const [service, ref] of Object.entries(resolved.project.services)) {
         const found = inJaeger(otelServiceName(service, ref));
@@ -261,11 +173,7 @@ export const servicesCommand = Command.make(
           ...(found === undefined ? {} : { otelInJaeger: found }),
         };
         if (!hasLogProvider(ref)) {
-          yield* emitRecord(
-            mode,
-            common satisfies ServiceRecord,
-            formatService,
-          );
+          yield* report(common satisfies ServiceRecord);
           continue;
         }
         const authKey =
@@ -277,10 +185,26 @@ export const servicesCommand = Command.make(
             : vercelAuthStatus;
           authCache.set(authKey, auth);
         }
-        yield* emitRecord(
-          mode,
-          { ...common, provider: ref.provider, auth } satisfies ServiceRecord,
-          formatService,
+        yield* report({
+          ...common,
+          provider: ref.provider,
+          auth,
+        } satisfies ServiceRecord);
+      }
+      if (mode === 'human') {
+        yield* Console.log(
+          renderServices(
+            {
+              project: resolved.projectName,
+              configPath: resolved.configPath,
+              configSource: resolved.configSource,
+              matchedBy: resolved.matchedBy,
+              home: homedir(),
+              ...(tracing === undefined ? {} : { tracing }),
+              records,
+            },
+            stdoutStyle(),
+          ),
         );
       }
     }),

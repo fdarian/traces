@@ -22,4 +22,4 @@ traces secret set myapp.jaeger
 pbpaste | traces secret set myapp.jaeger
 ```
 
-`traces services` shows the URL, each referenced secret as present or missing, whether the URL answers (reachable, unauthorized or error), and the `otelService` per service, flagging any Jaeger does not report. A missing secret or env var exits 3 with the fix as a hint.
+`traces services` shows the URL, each referenced secret as present or missing, whether the URL answers (reachable, unauthorized or error), and the `otelService` per service, flagging any Jaeger does not report. A missing secret or env var is reported in that output (the `traces secret set <ref>` fix on the next line) and the command still exits 0.
