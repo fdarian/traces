@@ -11,7 +11,7 @@ Flags and examples: `traces <command> --help`. Deeper topics are listed under Re
 
 ## Resolution
 
-The project is matched from the cwd's git remote (or path) against the config; `--project <name>` overrides. The service is the positional argument, and may be omitted when the project has exactly one (`traces errors` without one covers all services). Global flags may come before the command. Run `traces services` to see what matched and whether each provider is authenticated.
+The project is matched from the cwd's git remote (or path) against the config; `--project <name>` overrides. The service is the positional argument, and may be omitted when the project has exactly one (`traces errors` without one covers all services). Global flags may come before the command. Run `traces services` to see what matched and whether each provider is authenticated. Railway services need `railway.auth` in the config: a token (`{"keychain"}` or `{"env"}`, recommended for agents) or `"cli"` for the logged-in `railway` CLI; see the config reference.
 
 Global flags: `--project <name>`, `--env <name>` (Railway environment name, or Vercel target: production | preview), `--config <path>`, `--json`.
 

@@ -15,7 +15,7 @@ one record per service: configPath, project, matchedBy (flag | path | git), serv
 ### Notes
 
 - Run this first when another command says no project matches or auth fails.
-- Auth check: Railway reads the configured project through `railway.token` (`missing` without the token or its secret, `invalid` when Railway rejects it); Vercel validates the token against the API.
+- Auth check: Railway reads the configured project through `railway.auth`, whether a token or the `railway` CLI login (`missing` without `railway.auth`, its secret, or the `railway` binary; `invalid` when Railway rejects the token or the login); Vercel validates the token against the API.
 - With a `tracing` block, one `/api/v3/services` request (5s timeout) checks the URL: reachable, unauthorized (credentials rejected), or error with a short reason (an HTML page, a redirect, a missing secret, no answer). A failed check still exits 0. Every service whose otelService Jaeger does not report is listed as `<service> → <otelService>: not in Jaeger`; a wrong name there is why `traces spans` comes back empty. Projects without `tracing` make no request.
 - Tracing: `traces secret set <ref>` fixes a missing keychain secret; an env header is `missing` until that variable is exported. Reading keychain entries here may prompt macOS for access.
 
@@ -125,7 +125,7 @@ SpanRow per line, depth first with children by start time: traceId, spanId, pare
 
 ## traces secret
 
-Manage the OS-keychain secrets that tracing headers and `railway.token` refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged.
+Manage the OS-keychain secrets that tracing headers and a Railway token (`railway.auth`) refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged.
 
 Usage: `traces secret set|delete <name>`
 

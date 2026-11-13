@@ -87,7 +87,7 @@ export const secretCommand = Command.make('secret').pipe(
     'store or remove a keychain secret (tracing headers, the Railway token)',
   ),
   Command.withDescription(
-    'Manage the OS-keychain secrets that tracing headers and `railway.token` refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged. There is no `list`: `traces services` shows present or missing for every secret the config references.',
+    'Manage the OS-keychain secrets that tracing headers and a Railway token (`railway.auth`) refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged. There is no `list`: `traces services` shows present or missing for every secret the config references.',
   ),
   Command.withSubcommands([setCommand, deleteCommand]),
 );
