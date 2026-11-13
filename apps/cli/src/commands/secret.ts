@@ -84,10 +84,10 @@ const deleteCommand = Command.make('delete', secretOptions, (args) =>
 
 export const secretCommand = Command.make('secret').pipe(
   Command.withShortDescription(
-    'store or remove a keychain secret for tracing headers',
+    'store or remove a keychain secret (tracing headers, the Railway token)',
   ),
   Command.withDescription(
-    'Manage the OS-keychain secrets that tracing headers refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged. There is no `list`: `traces services` shows present or missing for every secret the config references.',
+    'Manage the OS-keychain secrets that tracing headers and `railway.token` refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged. There is no `list`: `traces services` shows present or missing for every secret the config references.',
   ),
   Command.withSubcommands([setCommand, deleteCommand]),
 );
