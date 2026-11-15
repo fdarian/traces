@@ -11,14 +11,13 @@ import {
 } from '@traces/react';
 import * as S from 'effect/Schema';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { engine } from '#/lib/engine-client';
 import {
   GlobalFilterSchema,
   IssueFilterSchema,
   normalizeGlobalFilters,
   normalizeIssueFilters,
 } from '#/lib/filters';
-import { listIssues } from '#/server/list-issues.functions';
-import { resolveIssue } from '#/server/resolve-issue.functions';
 
 const HOUR_MS = 60 * 60 * 1000;
 const LIST_SPARKLINE_SLOTS = 24;
@@ -30,15 +29,13 @@ export const Route = createFileRoute('/_app/issues/')({
   component: IssuesPage,
   pendingComponent: IssuesPending,
   errorComponent: IssuesError,
+  loaderDeps: (opts) => ({ search: opts.search }),
   loader: async (ctx) => {
-    const search = ctx.location.search as Record<string, unknown>;
-    const global = normalizeGlobalFilters(search);
-    const local = normalizeIssueFilters(search);
-    const result = await listIssues({
-      data: {
-        status: local.status,
-        services: global.service.length > 0 ? [...global.service] : undefined,
-      },
+    const global = normalizeGlobalFilters(ctx.deps.search);
+    const local = normalizeIssueFilters(ctx.deps.search);
+    const result = await engine.issues.list({
+      status: local.status,
+      services: global.service.length > 0 ? [...global.service] : undefined,
     });
     return { result };
   },
@@ -149,7 +146,7 @@ function IssuesPage() {
       }
 
       try {
-        await resolveIssue({ data: { issueId } });
+        await engine.issues.resolve({ issueId });
       } catch (err) {
         setIssues(previousIssues);
         setSummary(previousSummary);

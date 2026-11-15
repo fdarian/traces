@@ -1,0 +1,710 @@
+{
+  "type": "base",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "e84f77aa-7080-42e0-91a7-0371610377ab",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "ingest_state"
+      ],
+      "writes": [
+        "s|tbl|public.ingest_state",
+        "n|tbl|public.ingest_state",
+        "e|tbl|public.ingest_state",
+        "n|rel|public.ingest_state",
+        "n|type|public.ingest_state",
+        "n|rel|public.ingest_state_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "issues"
+      ],
+      "writes": [
+        "s|tbl|public.issues",
+        "n|tbl|public.issues",
+        "e|tbl|public.issues",
+        "n|rel|public.issues",
+        "n|type|public.issues",
+        "n|rel|public.issues_pkey",
+        "n|rel|public.issues_fingerprint_unique"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "occurrences"
+      ],
+      "writes": [
+        "s|tbl|public.occurrences",
+        "n|tbl|public.occurrences",
+        "e|tbl|public.occurrences",
+        "n|rel|public.occurrences",
+        "n|type|public.occurrences",
+        "n|rel|public.occurrences_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "issues",
+        "issues_status_idx"
+      ],
+      "writes": [
+        "s|idx|public.issues_status_idx",
+        "n|idx|public.issues_status_idx",
+        "e|idx|public.issues_status_idx",
+        "n|rel|public.issues_status_idx"
+      ],
+      "reads": [
+        "n|tbl|public.issues",
+        "n|sch|public",
+        "n|col|public.issues.status"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "issues",
+        "issues_service_idx"
+      ],
+      "writes": [
+        "s|idx|public.issues_service_idx",
+        "n|idx|public.issues_service_idx",
+        "e|idx|public.issues_service_idx",
+        "n|rel|public.issues_service_idx"
+      ],
+      "reads": [
+        "n|tbl|public.issues",
+        "n|sch|public",
+        "n|col|public.issues.service"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "issues",
+        "issues_last_seen_idx"
+      ],
+      "writes": [
+        "s|idx|public.issues_last_seen_idx",
+        "n|idx|public.issues_last_seen_idx",
+        "e|idx|public.issues_last_seen_idx",
+        "n|rel|public.issues_last_seen_idx"
+      ],
+      "reads": [
+        "n|tbl|public.issues",
+        "n|sch|public",
+        "n|col|public.issues.lastSeen"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "occurrences",
+        "occurrences_issue_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.occurrences_issue_id_idx",
+        "n|idx|public.occurrences_issue_id_idx",
+        "e|idx|public.occurrences_issue_id_idx",
+        "n|rel|public.occurrences_issue_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.occurrences",
+        "n|sch|public",
+        "n|col|public.occurrences.issueId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "occurrences",
+        "occurrences_timestamp_idx"
+      ],
+      "writes": [
+        "s|idx|public.occurrences_timestamp_idx",
+        "n|idx|public.occurrences_timestamp_idx",
+        "e|idx|public.occurrences_timestamp_idx",
+        "n|rel|public.occurrences_timestamp_idx"
+      ],
+      "reads": [
+        "n|tbl|public.occurrences",
+        "n|sch|public",
+        "n|col|public.occurrences.timestamp"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "occurrences",
+        "occurrences_issue_span_idx"
+      ],
+      "writes": [
+        "s|idx|public.occurrences_issue_span_idx",
+        "n|idx|public.occurrences_issue_span_idx",
+        "e|idx|public.occurrences_issue_span_idx",
+        "n|rel|public.occurrences_issue_span_idx"
+      ],
+      "reads": [
+        "n|tbl|public.occurrences",
+        "n|sch|public",
+        "n|col|public.occurrences.issueId",
+        "n|col|public.occurrences.spanId"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "occurrences"
+      ],
+      "writes": [
+        "s|fk|public.occurrences.occurrences_issueId_issues_id_fk",
+        "n|fk|public.occurrences.occurrences_issueId_issues_id_fk",
+        "e|fk|public.occurrences.occurrences_issueId_issues_id_fk",
+        "n|con|public.occurrences.occurrences_issueId_issues_id_fk"
+      ],
+      "reads": [
+        "n|tbl|public.occurrences",
+        "n|sch|public",
+        "n|tbl|public.issues",
+        "n|sch|public",
+        "n|col|public.occurrences.issueId",
+        "n|col|public.issues.id",
+        "e|uniqueness|public.issues.id"
+      ]
+    }
+  ],
+  "ddl": [
+    {
+      "schema": "public",
+      "name": "ingest_state",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "issues",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "occurrences",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "table": "ingest_state",
+      "name": "service",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "ingest_state",
+      "name": "cursorEnd",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "ingest_state",
+      "name": "updatedAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "id",
+      "type": "bigserial",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "fingerprint",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "title",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "service",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "exceptionType",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "status",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "firstSeen",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "lastSeen",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "occurrenceCount",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "resolvedAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "id",
+      "type": "bigserial",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "issueId",
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "traceId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "spanId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "serviceName",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "timestamp",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "exceptionMessage",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "exceptionStacktrace",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "attributes",
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "issues_status_idx",
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "entityType": "indexes"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "issues_service_idx",
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "service",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "entityType": "indexes"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "issues_last_seen_idx",
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "lastSeen",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "entityType": "indexes"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "occurrences_issue_id_idx",
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "issueId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "entityType": "indexes"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "occurrences_timestamp_idx",
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "timestamp",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "entityType": "indexes"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "occurrences_issue_span_idx",
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "issueId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "spanId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "entityType": "indexes"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "occurrences_issueId_issues_id_fk",
+      "nameExplicit": false,
+      "columns": [
+        "issueId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "issues",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "ingest_state",
+      "name": "ingest_state_pkey",
+      "columns": [
+        "service"
+      ],
+      "nameExplicit": false,
+      "entityType": "pks"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "issues_pkey",
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "entityType": "pks"
+    },
+    {
+      "schema": "public",
+      "table": "occurrences",
+      "name": "occurrences_pkey",
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "entityType": "pks"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "issues_fingerprint_unique",
+      "nameExplicit": false,
+      "columns": [
+        "fingerprint"
+      ],
+      "nullsNotDistinct": false,
+      "entityType": "uniques"
+    }
+  ]
+}

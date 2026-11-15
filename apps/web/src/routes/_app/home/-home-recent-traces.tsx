@@ -1,8 +1,8 @@
+import type { ErrorTraceSummary } from '@traces/contract';
 import { Duration, ServiceBadge } from '@traces/react';
-import type { SerializableTraceSummary } from '#/server/home-recent-error-traces.functions';
 
 export function HomeRecentTraces(props: {
-  readonly traces: ReadonlyArray<SerializableTraceSummary>;
+  readonly traces: ReadonlyArray<ErrorTraceSummary>;
   readonly isLoading: boolean;
   readonly getTraceHref: (traceId: string) => string;
 }) {
@@ -61,7 +61,7 @@ export function HomeRecentTraces(props: {
 }
 
 function TraceRow(props: {
-  readonly trace: SerializableTraceSummary;
+  readonly trace: ErrorTraceSummary;
   readonly getTraceHref: (traceId: string) => string;
 }) {
   const trace = props.trace;

@@ -70,7 +70,9 @@ cd apps/web
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+This starts the web app on port 3000 and also starts the engine (the headless server that reads Jaeger and keeps the issue database) with a local SQLite file, so there is nothing else to run. Open [http://localhost:3000](http://localhost:3000).
+
+To use an engine you already run, set `ENGINE_URL` and none is started. see [configuration](/docs/app/configuration).
 
 ## What you'll see
 

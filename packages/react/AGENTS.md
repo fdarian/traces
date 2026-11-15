@@ -4,7 +4,7 @@ Publishable React SDK — controlled, presentational components that power the d
 
 ## Hard boundaries (load-bearing — these are WHY the structure is unusual)
 
-- **No app coupling**: no `@tanstack/react-router`, no server-fn imports, no app path aliases (`#/*` only inside this package where tsconfig is configured for it). Components never assume a host router or server.
+- **No app coupling**: no `@tanstack/react-router`, no oRPC/engine client imports, no app path aliases (`#/*` only inside this package where tsconfig is configured for it). Components never assume a host router or server.
 - **Navigation via callbacks only**: `onTraceClick`, `onSpanSelect`, `onResolve`, etc. The app provides all router glue.
 - **No `'use client'`**: TanStack Start has no RSC — this directive is meaningless and never used anywhere in the repo.
 - **`@traces/core` is type-only / devDependency only**: it is a workspace-only package — consumers can't install it. Do NOT `import ... from '@traces/core'` in any shippable source.
@@ -28,7 +28,7 @@ Publishable React SDK — controlled, presentational components that power the d
 
 ## SDK-vs-app boundary
 
-Pure presentation and pure utils live HERE. Data fetching, server functions, routing, URL state, the issue store, and the Jaeger backend live in the APP. If a component needs data → prop. If it needs to navigate → callback.
+Pure presentation and pure utils live HERE. Data fetching (the engine client), routing, and URL state live in the APP; the issue store and Jaeger backend live in `services/engine`. If a component needs data → prop. If it needs to navigate → callback.
 
 ## Dev commands
 

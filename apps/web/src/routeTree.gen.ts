@@ -16,6 +16,7 @@ import { Route as AppTracesRouteRouteImport } from './routes/_app/traces/route'
 import { Route as AppIssuesRouteRouteImport } from './routes/_app/issues/route'
 import { Route as AppTracesIndexRouteImport } from './routes/_app/traces/index'
 import { Route as AppIssuesIndexRouteImport } from './routes/_app/issues/index'
+import { Route as ApiRpcSplatRouteImport } from './routes/api/rpc/$'
 import { Route as AppTracesTraceIdRouteImport } from './routes/_app/traces/$traceId'
 import { Route as AppIssuesIssueIdRouteImport } from './routes/_app/issues/$issueId'
 
@@ -53,6 +54,11 @@ const AppIssuesIndexRoute = AppIssuesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppIssuesRouteRoute,
 } as any)
+const ApiRpcSplatRoute = ApiRpcSplatRouteImport.update({
+  id: '/api/rpc/$',
+  path: '/api/rpc/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppTracesTraceIdRoute = AppTracesTraceIdRouteImport.update({
   id: '/$traceId',
   path: '/$traceId',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/token-showcase': typeof AppTokenShowcaseRoute
   '/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/traces/$traceId': typeof AppTracesTraceIdRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
   '/issues/': typeof AppIssuesIndexRoute
   '/traces/': typeof AppTracesIndexRoute
 }
@@ -79,6 +86,7 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/traces/$traceId': typeof AppTracesTraceIdRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
   '/issues': typeof AppIssuesIndexRoute
   '/traces': typeof AppTracesIndexRoute
 }
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/_app/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/_app/traces/$traceId': typeof AppTracesTraceIdRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
   '/_app/issues/': typeof AppIssuesIndexRoute
   '/_app/traces/': typeof AppTracesIndexRoute
 }
@@ -103,6 +112,7 @@ export interface FileRouteTypes {
     | '/token-showcase'
     | '/issues/$issueId'
     | '/traces/$traceId'
+    | '/api/rpc/$'
     | '/issues/'
     | '/traces/'
   fileRoutesByTo: FileRoutesByTo
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
     | '/'
     | '/issues/$issueId'
     | '/traces/$traceId'
+    | '/api/rpc/$'
     | '/issues'
     | '/traces'
   id:
@@ -122,12 +133,14 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/issues/$issueId'
     | '/_app/traces/$traceId'
+    | '/api/rpc/$'
     | '/_app/issues/'
     | '/_app/traces/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren
+  ApiRpcSplatRoute: typeof ApiRpcSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -180,6 +193,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/issues/'
       preLoaderRoute: typeof AppIssuesIndexRouteImport
       parentRoute: typeof AppIssuesRouteRoute
+    }
+    '/api/rpc/$': {
+      id: '/api/rpc/$'
+      path: '/api/rpc/$'
+      fullPath: '/api/rpc/$'
+      preLoaderRoute: typeof ApiRpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/traces/$traceId': {
       id: '/_app/traces/$traceId'
@@ -246,17 +266,17 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
+  ApiRpcSplatRoute: ApiRpcSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
+import type { createStart } from '@tanstack/react-start'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

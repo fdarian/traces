@@ -1,8 +1,7 @@
-import type { HomeErrorRateResult } from '#/server/home-error-rate.functions';
-import type { SerializableIssueStoreStats } from '#/server/home-stats.functions';
+import type { HomeErrorRateResult, HomeStats } from '@traces/contract';
 
 export function HomeStatRow(props: {
-  readonly stats: SerializableIssueStoreStats;
+  readonly stats: HomeStats;
   readonly errorRate: HomeErrorRateResult | null;
   readonly isLoading: boolean;
 }) {

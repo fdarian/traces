@@ -1,11 +1,11 @@
+import type { TopIssue } from '@traces/contract';
 import { Sparkline, StatusBadge } from '@traces/react';
-import type { SerializableTopIssue } from '#/server/home-top-issues.functions';
 
 const HOUR_MS = 60 * 60 * 1000;
 const SPARKLINE_SLOTS = 24;
 
 export function HomeTopIssues(props: {
-  readonly issues: ReadonlyArray<SerializableTopIssue>;
+  readonly issues: ReadonlyArray<TopIssue>;
   readonly histograms: ReadonlyMap<
     number,
     ReadonlyArray<{ bucketStart: number; count: number }>
@@ -77,7 +77,7 @@ export function HomeTopIssues(props: {
 }
 
 function IssueRow(props: {
-  readonly issue: SerializableTopIssue;
+  readonly issue: TopIssue;
   readonly histogram: ReadonlyArray<{ bucketStart: number; count: number }>;
   readonly getIssueHref: (issueId: number) => string;
 }) {

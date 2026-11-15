@@ -7,5 +7,5 @@
       "#/*": ["./src/*"]
     }
   },
-  "include": ["src", "server", "scripts"]
+  "include": ["src", "scripts"]
 }

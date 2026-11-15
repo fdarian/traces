@@ -1,0 +1,101 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "e998ac59-5877-4b02-8dc3-d4d177d47088",
+  "prevIds": [
+    "8c4515ee-ba40-44b9-bb77-1eef14971c4f"
+  ],
+  "footprints": [
+    {
+      "statementType": "drop_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "occurrences",
+        "occurrences_issue_span_unique"
+      ],
+      "writes": [
+        "s|idx|public.occurrences_issue_span_unique",
+        "n|idx|public.occurrences_issue_span_unique",
+        "e|idx|public.occurrences_issue_span_unique",
+        "n|rel|public.occurrences_issue_span_unique"
+      ],
+      "reads": [
+        "n|tbl|public.occurrences",
+        "n|sch|public",
+        "e|col|public.occurrences.issueId",
+        "e|col|public.occurrences.spanId"
+      ],
+      "sharedWrites": [
+        "e|uniqueness|public.occurrences.issueId.spanId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "occurrences",
+        "occurrences_issue_trace_span_unique"
+      ],
+      "writes": [
+        "s|idx|public.occurrences_issue_trace_span_unique",
+        "n|idx|public.occurrences_issue_trace_span_unique",
+        "e|idx|public.occurrences_issue_trace_span_unique",
+        "n|rel|public.occurrences_issue_trace_span_unique"
+      ],
+      "reads": [
+        "n|tbl|public.occurrences",
+        "n|sch|public",
+        "n|col|public.occurrences.issueId",
+        "n|col|public.occurrences.traceId",
+        "n|col|public.occurrences.spanId"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "occurrences",
+        "name": "occurrences_issue_trace_span_unique",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "issueId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "traceId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "spanId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"occurrences_issue_span_unique\"]"
+    }
+  ]
+}

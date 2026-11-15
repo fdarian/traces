@@ -19,9 +19,9 @@ a span is treated as an **error span** when `status.code === 'error'`.
 
 ## Jaeger backend
 
-the app talks to Jaeger v2's HTTP query API (`/api/v3/…`). the `TraceBackend` interface in `@traces/core` abstracts the transport, so the same components work whether data comes from Jaeger, a test fixture, or a future backend.
+the engine talks to Jaeger v2's HTTP query API (`/api/v3/…`). the `TraceBackend` interface in `@traces/core` abstracts the transport, so the same components work whether data comes from Jaeger, a test fixture, or a future backend.
 
-all Jaeger requests are proxied through the app server — Jaeger does not need to be reachable from the browser, and no CORS configuration is required on the Jaeger side.
+only the engine talks to Jaeger — Jaeger does not need to be reachable from the browser or the web app, and no CORS configuration is required on the Jaeger side.
 
 ## Issues
 

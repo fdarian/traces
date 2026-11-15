@@ -6,17 +6,12 @@ import {
 } from '@tanstack/react-router';
 import * as S from 'effect/Schema';
 import { useCallback } from 'react';
+import { engine } from '#/lib/engine-client';
 import {
   computeTimeRange,
   GlobalFilterSchema,
   normalizeGlobalFilters,
 } from '#/lib/filters';
-import { homeErrorRate } from '#/server/home-error-rate.functions';
-import { homeRecentErrorTraces } from '#/server/home-recent-error-traces.functions';
-import { homeServiceHealth } from '#/server/home-service-health.functions';
-import { homeStats } from '#/server/home-stats.functions';
-import { homeTopIssues } from '#/server/home-top-issues.functions';
-import { homeTrend } from '#/server/home-trend.functions';
 import { HomeRecentTraces } from './home/-home-recent-traces.js';
 import { HomeServiceHealth } from './home/-home-service-health.js';
 import { HomeStatRow } from './home/-home-stat-row.js';
@@ -30,9 +25,9 @@ export const Route = createFileRoute('/_app/')({
   validateSearch: S.toStandardSchemaV1(GlobalFilterSchema),
   component: HomePage,
   pendingComponent: HomePending,
-  loader: async (ctx: { location: { search: Record<string, unknown> } }) => {
-    const search = ctx.location.search;
-    const global = normalizeGlobalFilters(search);
+  loaderDeps: (opts) => ({ search: opts.search }),
+  loader: async (ctx) => {
+    const global = normalizeGlobalFilters(ctx.deps.search);
     const timeRange = computeTimeRange(global.range);
     const startTime = new Date(timeRange.startTimeMin).getTime();
     const endTime = new Date(timeRange.startTimeMax).getTime();
@@ -43,55 +38,43 @@ export const Route = createFileRoute('/_app/')({
     const service = global.service[0];
 
     const [stats, trend, topIssues] = await Promise.all([
-      homeStats({
-        data: {
-          services,
-          startTime,
-          endTime,
-        },
+      engine.home.stats({
+        services,
+        startTime,
+        endTime,
       }),
-      homeTrend({
-        data: {
-          services,
-          startTime,
-          endTime,
-        },
+      engine.home.trend({
+        services,
+        startTime,
+        endTime,
       }),
-      homeTopIssues({
-        data: {
-          services,
-          limit: 8,
-          since: since.getTime(),
-        },
+      engine.home.topIssues({
+        services,
+        limit: 8,
+        since: since.getTime(),
       }),
     ]);
 
     const errorRatePromise =
       service !== undefined
-        ? homeErrorRate({
-            data: {
-              service,
-              startTimeMin: timeRange.startTimeMin,
-              startTimeMax: timeRange.startTimeMax,
-            },
+        ? engine.home.errorRate({
+            service,
+            startTimeMin: timeRange.startTimeMin,
+            startTimeMax: timeRange.startTimeMax,
           })
         : Promise.resolve(null);
 
-    const serviceHealthPromise = homeServiceHealth({
-      data: {
-        startTimeMin: timeRange.startTimeMin,
-        startTimeMax: timeRange.startTimeMax,
-      },
+    const serviceHealthPromise = engine.home.serviceHealth({
+      startTimeMin: timeRange.startTimeMin,
+      startTimeMax: timeRange.startTimeMax,
     });
 
     const recentTracesPromise =
       service !== undefined
-        ? homeRecentErrorTraces({
-            data: {
-              service,
-              startTimeMin: timeRange.startTimeMin,
-              startTimeMax: timeRange.startTimeMax,
-            },
+        ? engine.home.recentErrorTraces({
+            service,
+            startTimeMin: timeRange.startTimeMin,
+            startTimeMax: timeRange.startTimeMax,
           })
         : Promise.resolve([]);
 

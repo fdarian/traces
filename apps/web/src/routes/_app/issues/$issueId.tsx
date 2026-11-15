@@ -11,10 +11,8 @@ import {
 } from '@traces/react';
 import * as S from 'effect/Schema';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { IssueFilterSchema, normalizeIssueFilters } from '#/lib/filters';
-import { getIssue } from '#/server/get-issue.functions';
-import { resolveIssue } from '#/server/resolve-issue.functions';
-import { unresolveIssue } from '#/server/unresolve-issue.functions';
+import { engine } from '#/lib/engine-client';
+import { IssueFilterSchema } from '#/lib/filters';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DETAIL_SPARKLINE_SLOTS = 14;
@@ -26,14 +24,10 @@ export const Route = createFileRoute('/_app/issues/$issueId')({
   errorComponent: IssueDetailError,
   loader: async (ctx) => {
     const issueId = Number(ctx.params.issueId);
-    const search = ctx.location.search as Record<string, unknown>;
-    const local = normalizeIssueFilters(search);
     const page = 1;
-    const result = await getIssue({
-      data: {
-        issueId,
-        page,
-      },
+    const result = await engine.issues.get({
+      issueId,
+      page,
     });
     return { result, issueId };
   },
@@ -126,11 +120,9 @@ function IssueDetailPage() {
       setIsLoadingOccurrences(true);
       setError(null);
       try {
-        const result = await getIssue({
-          data: {
-            issueId: loaderData.issueId,
-            page: nextPage,
-          },
+        const result = await engine.issues.get({
+          issueId: loaderData.issueId,
+          page: nextPage,
         });
         setData((prev: typeof loaderData.result) => ({
           ...prev,
@@ -162,7 +154,7 @@ function IssueDetailPage() {
       },
     });
     try {
-      await resolveIssue({ data: { issueId: loaderData.issueId } });
+      await engine.issues.resolve({ issueId: loaderData.issueId });
     } catch (err) {
       setData(previous);
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -185,7 +177,7 @@ function IssueDetailPage() {
       },
     });
     try {
-      await unresolveIssue({ data: { issueId: loaderData.issueId } });
+      await engine.issues.unresolve({ issueId: loaderData.issueId });
     } catch (err) {
       setData(previous);
       setError(err instanceof Error ? err : new Error(String(err)));

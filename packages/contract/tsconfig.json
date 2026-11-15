@@ -1,0 +1,7 @@
+{
+  "extends": "../config/tsconfig-library.json",
+  "include": ["src", "test"],
+  "compilerOptions": {
+    "types": ["bun"]
+  }
+}

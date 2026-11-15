@@ -1,9 +1,17 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router';
+import {
+  createRootRoute,
+  HeadContent,
+  Outlet,
+  Scripts,
+} from '@tanstack/react-router';
 import * as S from 'effect/Schema';
+import type { ReactNode } from 'react';
 import { GlobalFilterSchema } from '#/lib/filters';
+import globalsCss from '../globals.css?url';
 
 export const Route = createRootRoute({
   validateSearch: S.toStandardSchemaV1(GlobalFilterSchema),
+  shellComponent: RootDocument,
   component: RootComponent,
   head: () => ({
     meta: [
@@ -12,6 +20,7 @@ export const Route = createRootRoute({
       { title: 'traces' },
     ],
     links: [
+      { rel: 'stylesheet', href: globalsCss },
       { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
       { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: '' },
       {
@@ -22,15 +31,20 @@ export const Route = createRootRoute({
   }),
 });
 
-function RootComponent() {
+function RootDocument(props: { children: ReactNode }) {
   return (
     <html lang="en" className="dark">
       <head>
-        <link rel="stylesheet" href="/src/globals.css" />
+        <HeadContent />
       </head>
       <body>
-        <Outlet />
+        {props.children}
+        <Scripts />
       </body>
     </html>
   );
+}
+
+function RootComponent() {
+  return <Outlet />;
 }

@@ -1,9 +1,9 @@
+import { safe } from '@orpc/client';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import type { Trace } from '@traces/core';
 import { EmptyState, SkeletonRow, TraceDetailView } from '@traces/react';
 import * as S from 'effect/Schema';
 import { useEffect, useState } from 'react';
-import { getTrace } from '#/server/get-trace.functions';
+import { engine } from '#/lib/engine-client';
 
 const TraceDetailSearchSchema = S.Struct({
   span: S.optional(S.String),
@@ -14,16 +14,30 @@ export const Route = createFileRoute('/_app/traces/$traceId')({
   component: TraceDetailPage,
   pendingComponent: TraceDetailPending,
   loader: async (ctx) => {
-    const traceId = ctx.params.traceId;
-    try {
-      const result = await getTrace({ data: { traceId } });
-      return { result, error: null as Error | null };
-    } catch (err) {
+    const result = await safe(
+      engine.traces.get({ traceId: ctx.params.traceId }),
+    );
+    if (result.isSuccess) {
       return {
-        result: null,
-        error: err instanceof Error ? err : new Error(String(err)),
+        trace: result.data,
+        notFound: false,
+        error: null as Error | null,
       };
     }
+    if (
+      result.definedError !== null &&
+      result.definedError.code === 'TRACE_NOT_FOUND'
+    ) {
+      return { trace: null, notFound: true, error: null as Error | null };
+    }
+    return {
+      trace: null,
+      notFound: false,
+      error:
+        result.error instanceof Error
+          ? result.error
+          : new Error(String(result.error)),
+    };
   },
 });
 
@@ -61,25 +75,7 @@ function TraceDetailPage() {
     } as Record<string, unknown>);
   };
 
-  if (loaderData.error !== null) {
-    return (
-      <div className="px-4 py-12 text-body text-status-error">
-        failed to load trace
-      </div>
-    );
-  }
-
-  if (loaderData.result === null) {
-    return (
-      <div className="px-4 py-12 text-body text-status-error">
-        failed to load trace
-      </div>
-    );
-  }
-
-  const result = loaderData.result;
-
-  if (result.notFound) {
+  if (loaderData.notFound) {
     return (
       <div className="px-4 py-6">
         <EmptyState message="trace not found or expired" />
@@ -87,10 +83,18 @@ function TraceDetailPage() {
     );
   }
 
+  if (loaderData.error !== null || loaderData.trace === null) {
+    return (
+      <div className="px-4 py-12 text-body text-status-error">
+        failed to load trace
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
       <TraceDetailView
-        trace={result.trace as Trace}
+        trace={loaderData.trace}
         selectedSpanId={selectedSpanId}
         onSelectSpan={handleSelectSpan}
         deepLinkSpanId={search.span ?? null}

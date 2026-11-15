@@ -1,100 +1,81 @@
 ---
 title: Self-hosting
-description: Deploy the traces dashboard to your own infrastructure alongside Jaeger.
+description: Run the traces engine and web app on your own infrastructure alongside Jaeger.
 ---
 
 ## Architecture
 
-the dashboard is a [TanStack Start](https://tanstack.com/start) app (Bun / Nitro server) that:
+traces is two processes in front of Jaeger:
 
-- talks to Jaeger's HTTP query API **server-side** — Jaeger does not need CORS headers, and the browser never calls Jaeger directly.
-- maintains its own **issue store** (SQLite or Postgres via Drizzle) for aggregated error history that survives Jaeger's retention window.
-- runs a **background ingester** fiber that polls Jaeger on a configurable interval and copies error spans into the issue store.
+- the **engine** (`services/engine`) is a headless Bun server. it talks to Jaeger's HTTP query API, owns the **issue store** (SQLite or Postgres) that keeps aggregated error history past Jaeger's retention window, and runs the **background ingester** that polls Jaeger and copies error spans into that store. it serves a typed [oRPC](https://orpc.dev) API at `/rpc/*` and a `/health` check.
+- the **web app** (`apps/web`) is a [TanStack Start](https://tanstack.com/start) server (Bun / Nitro) that renders the dashboard. it has no data of its own: server-rendered pages call the engine directly, and the browser's API calls go to the web server's `/api/rpc/*`, which forwards them to the engine.
 
-in 0.1.0, the app is **read-only** over Jaeger — it does not write traces, does not manage users or organizations, and does not send alerts.
+```
+browser → web (:3000) → engine (:4000) → Jaeger (:16686)
+                              └→ SQLite file or Postgres
+```
 
-## Docker Compose example
+Jaeger needs no CORS headers and the engine needs no public address: only the web app has to be reachable by users, and only the engine has to reach Jaeger and the database. [configuration](/docs/app/configuration) lists which environment variable belongs to which process.
 
-the repository ships a `docker-compose.yaml` that starts Jaeger alone (useful for local dev). for production you'll want to run Jaeger and the dashboard together:
+the app is **read-only** over Jaeger — it does not write traces, does not manage users or organizations, and does not send alerts.
 
-:::info
-the compose file and Dockerfile below are illustrative starting points. they are not tested in CI. adapt them to your infrastructure (secrets management, volume paths, network names, etc.) before deploying.
+:::warning
+the engine has no authentication. anyone who can reach it can read all data and resolve issues. keep it on a private network and expose only the web app.
 :::
 
-```yaml title="docker-compose.yaml"
-services:
-  jaeger:
-    image: jaegertracing/jaeger:latest
-    ports:
-      - "16686:16686"   # query API
-      - "4318:4318"     # OTLP HTTP
-      - "4317:4317"     # OTLP gRPC
-    volumes:
-      - ./jaeger-config.yaml:/etc/jaeger/config.yaml:ro
-    command: ["--config", "/etc/jaeger/config.yaml"]
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:16686/"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+## Running it
 
-  traces:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      JAEGER_URL: http://jaeger:16686
-      TRACES_DB: /data/traces.db
-    volumes:
-      - traces-data:/data
-    depends_on:
-      jaeger:
-        condition: service_healthy
+traces runs from a checkout of the repository; Docker images are not provided yet. you need [Bun](https://bun.sh) and [pnpm](https://pnpm.io), plus a Jaeger v2 instance (the repository's `docker-compose.yaml` starts one for local use).
 
-volumes:
-  traces-data:
+```bash
+pnpm install --frozen-lockfile
 ```
 
-## Dockerfile starting point
+start the engine:
 
-```dockerfile title="Dockerfile"
-FROM node:22 AS base
-COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
-RUN corepack enable
-WORKDIR /app
-
-# install dependencies
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.jsonc ./
-COPY apps/web/package.json ./apps/web/
-COPY apps/docs/package.json ./apps/docs/
-COPY packages/core/package.json ./packages/core/
-COPY packages/react/package.json ./packages/react/
-RUN pnpm install --frozen-lockfile
-
-# copy source
-COPY . .
-
-# build apps/web
-RUN cd apps/web && pnpm run build
-
-EXPOSE 3000
-CMD ["bun", "run", "./apps/web/server/index.ts"]
+```bash
+JAEGER_URL=http://jaeger:16686 \
+TRACES_DB=/var/lib/traces/traces.db \
+PORT=4000 \
+bun services/engine/src/main.ts
 ```
 
-the `start` script in `apps/web/package.json` is `pnpm run build && bun run ./server/index.ts`. the Dockerfile above separates the build step so the final image layer is only the compiled output and the runtime server.
+check it:
+
+```bash
+curl http://localhost:4000/health   # {"status":"ok"}
+```
+
+build and start the web app, pointing it at the engine:
+
+```bash
+cd apps/web
+pnpm run build
+ENGINE_URL=http://localhost:4000 PORT=3000 bun .output/server/index.mjs
+```
+
+### Running the engine without the web app
+
+the engine works on its own. start it as above and any oRPC client can use it; for example, listing the services Jaeger knows about:
+
+```bash
+curl -X POST http://localhost:4000/rpc/traces/listServices \
+  -H 'content-type: application/json' -d '{"json":{}}'
+# {"json":["api","payments","web"]}
+```
+
+the ingester starts with the engine, so issues accumulate even when no dashboard is running. the procedure types are in the workspace package `@traces/contract` (not published to npm). procedures use POST, and clients should branch on the error `code` in a failed response rather than on the HTTP status.
 
 ## Storage: SQLite vs. Postgres
 
-the issue store driver is selected automatically at startup based on whether `DATABASE_URL` is set. migrations run automatically for both drivers — there is no manual migrate step.
+the engine selects the issue store driver at startup based on whether `DATABASE_URL` is set. migrations run automatically for both drivers — there is no manual migrate step. these variables belong to the engine; the web app never touches the database.
 
 | | SQLite | Postgres |
 |-|--------|---------|
 | how to enable | absent `DATABASE_URL` (default) | set `DATABASE_URL` |
 | config | `TRACES_DB=./traces.db` (path to file) | `DATABASE_URL=postgresql://user:pass@host/db` |
 | best for | single-instance, zero-config, dev, small deployments | durability, multi-instance, shared access |
-| persistence | file on disk — mount a volume | external Postgres instance |
+| persistence | file on disk — put it on a persistent volume | external Postgres instance |
 
 :::info
 the issue store holds only the aggregated error data — fingerprints, occurrence counts, and pointers back to Jaeger trace/span IDs. pointing at a different database does not affect Jaeger traces; you only lose local issue history.
@@ -105,7 +86,7 @@ the issue store holds only the aggregated error data — fingerprints, occurrenc
 the pitch is small footprint:
 
 - **Jaeger in-memory** idles around 200 MB.
-- **the dashboard** is a lightweight Bun/Nitro server. memory usage scales with ingester concurrency and issue store size, but stays well under 200 MB for typical small-to-medium deployments.
+- **the engine and the web app** are two lightweight Bun processes. memory usage scales with ingester concurrency and issue store size.
 - compare: Sentry self-hosted or SigNoz require ~2 GB+ of auxiliary services (Redis, Kafka, Clickhouse, etc.).
 
 :::warning
@@ -117,11 +98,15 @@ the in-memory Jaeger backend is for local dev and demos. it caps at 10 000 trace
 see [configuration](/docs/app/configuration) for the full list. the minimum set for a production deployment:
 
 ```bash
+# engine
 JAEGER_URL=http://jaeger:16686
 
 # SQLite (single instance, simplest)
-TRACES_DB=/data/traces.db
+TRACES_DB=/var/lib/traces/traces.db
 
-# OR Postgres (durable, multi-instance)
+# OR Postgres (durable)
 # DATABASE_URL=postgresql://user:pass@postgres:5432/traces
+
+# web app
+ENGINE_URL=http://localhost:4000
 ```

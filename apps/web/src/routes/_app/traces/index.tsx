@@ -3,10 +3,11 @@ import {
   type ErrorComponentProps,
   useRouter,
 } from '@tanstack/react-router';
-import type { TraceSummary } from '@traces/core';
+import type { TraceSummary } from '@traces/contract';
 import { SkeletonRow, TraceListTable } from '@traces/react';
 import * as S from 'effect/Schema';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { engine } from '#/lib/engine-client';
 import {
   computeTimeRange,
   normalizeGlobalFilters,
@@ -15,18 +16,16 @@ import {
   type RangeValue,
   TraceFilterSchema,
 } from '#/lib/filters';
-import { listOperations } from '#/server/list-operations.functions';
-import { searchTraces } from '#/server/search-traces.functions';
 
 export const Route = createFileRoute('/_app/traces/')({
   validateSearch: S.toStandardSchemaV1(TraceFilterSchema),
   component: TracesPage,
   pendingComponent: TracesPending,
   errorComponent: TracesError,
+  loaderDeps: (opts) => ({ search: opts.search }),
   loader: async (ctx) => {
-    const search = ctx.location.search as Record<string, unknown>;
-    const global = normalizeGlobalFilters(search);
-    const local = normalizeTraceFilters(search);
+    const global = normalizeGlobalFilters(ctx.deps.search);
+    const local = normalizeTraceFilters(ctx.deps.search);
     const service = global.service[0];
     const timeRange = computeTimeRange(global.range);
     const limit = pageLimit(local.status);
@@ -41,8 +40,8 @@ export const Route = createFileRoute('/_app/traces/')({
     }
     const query = buildTraceQuery(service, timeRange, local, limit);
     const [traces, operations] = await Promise.all([
-      searchTraces({ data: query }),
-      listOperations({ data: service }),
+      engine.traces.search(query),
+      engine.traces.listOperations(service),
     ]);
     return {
       traces,
@@ -172,7 +171,7 @@ function TracesPage() {
         ...loaderData.query,
         startTimeMax: newStartTimeMax,
       };
-      const result = await searchTraces({ data: newQuery });
+      const result = await engine.traces.search(newQuery);
       if (result.length < loaderData.query.limit) {
         setHasMore(false);
       }

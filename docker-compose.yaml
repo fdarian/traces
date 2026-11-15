@@ -13,3 +13,18 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: traces
+      POSTGRES_PASSWORD: traces
+      POSTGRES_DB: traces
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U traces -d traces"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

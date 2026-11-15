@@ -1,11 +1,25 @@
 ---
 title: Configuration
-description: Every environment variable the app and ingester read, with defaults and descriptions.
+description: Every environment variable the engine and the web app read, with defaults and descriptions.
 ---
 
-All configuration is read at startup via Effect `Config`. No restart-on-change; restart the process to apply changes.
+traces runs as two processes: the **engine** (Jaeger access, issue store, ingester, oRPC API) and the **web app** (the dashboard UI). each reads its own environment variables, so set them on the process that owns them. all values are read at startup via Effect `Config`; restart the process to apply changes. [self-hosting](/docs/app/self-hosting) covers how the two fit together.
 
-## App and ingester variables
+| Process | Variables |
+|---------|-----------|
+| engine | `PORT`, `HOST`, `JAEGER_URL`, `DATABASE_URL`, `TRACES_DB`, `INGEST_*` |
+| web | `ENGINE_URL`, `PORT`, `HOST` |
+
+## Engine variables
+
+### Listening address
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `PORT` | number | `4000` | port the engine listens on |
+| `HOST` | string | `0.0.0.0` | interface the engine binds to |
+
+The engine has no authentication. bind it to a private interface or keep it on a private network, and let only the web app reach it.
 
 ### Jaeger connection
 
@@ -13,9 +27,9 @@ All configuration is read at startup via Effect `Config`. No restart-on-change; 
 |----------|------|---------|-------------|
 | `JAEGER_URL` | string | `http://localhost:16686` | base URL for all Jaeger v2 API calls (Jaeger's v3 HTTP API paths) — no trailing slash |
 
-`JAEGER_URL` must point at the Jaeger HTTP query endpoint. all API calls are proxied through the app server, so Jaeger does not need to be reachable from the browser.
+`JAEGER_URL` must point at the Jaeger HTTP query endpoint. only the engine talks to Jaeger, so Jaeger does not need to be reachable from the browser or from the web app.
 
-```bash title=".env.local"
+```bash
 JAEGER_URL=http://jaeger.internal.example.com:16686
 ```
 
@@ -24,15 +38,15 @@ JAEGER_URL=http://jaeger.internal.example.com:16686
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `DATABASE_URL` | string | _(absent)_ | Postgres connection string — presence switches the storage driver to Postgres |
-| `TRACES_DB` | string | `./traces.db` | SQLite file path — only used when `DATABASE_URL` is absent |
+| `TRACES_DB` | string | `./traces.db` | SQLite file path, relative to the engine's working directory — only used when `DATABASE_URL` is absent |
 
 :::info
-**storage selection**: if `DATABASE_URL` is absent, the issue store uses SQLite at the path given by `TRACES_DB`. if `DATABASE_URL` is set, it uses Postgres and `TRACES_DB` is ignored. migrations run automatically at startup for both drivers. see [self-hosting](/docs/app/self-hosting) for the SQLite vs. Postgres tradeoff.
+**storage selection**: if `DATABASE_URL` is absent, the issue store uses SQLite at the path given by `TRACES_DB`. if `DATABASE_URL` is set, it uses Postgres and `TRACES_DB` is ignored. migrations run automatically at engine startup for both drivers. see [self-hosting](/docs/app/self-hosting) for the SQLite vs. Postgres tradeoff.
 :::
 
 ### Ingester
 
-The background ingester polls Jaeger on a fixed interval and copies error spans into the local issue store. All timing values are in milliseconds.
+The ingester runs inside the engine from startup. it polls Jaeger on a fixed interval and copies error spans into the issue store. All timing values are in milliseconds.
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -42,6 +56,22 @@ The background ingester polls Jaeger on a fixed interval and copies error spans 
 | `INGEST_INITIAL_LOOKBACK_MS` | number | `3600000` (1 h) | how far back the first poll reaches for a service that has no cursor yet |
 
 `INGEST_TRACE_LIMIT` caps how many traces are fetched in a single Jaeger request. when the response hits the limit, the ingester halves the next window to avoid missing spans — see [concepts → ingester polling](/docs/app/concepts#ingester-polling-and-cursors) for details.
+
+## Web app variables
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ENGINE_URL` | string | `http://localhost:4000` | base URL of the engine, read by the web server at runtime |
+| `PORT` | number | `3000` | port the web server listens on |
+| `HOST` | string | _(runtime default)_ | interface the production server binds to |
+
+The browser never calls the engine directly. the web server calls the engine for server-rendered pages and forwards the browser's API calls from `/api/rpc/*` to `${ENGINE_URL}/rpc/*`, so `ENGINE_URL` only has to be reachable from the web server, and the engine needs no CORS configuration. if the engine is down, those forwarded calls return `502 Engine unreachable`.
+
+```bash
+ENGINE_URL=http://engine.internal:4000
+```
+
+When you run the dev server (`pnpm dev` in `apps/web`), it starts the engine for you unless `ENGINE_URL` is set; with `ENGINE_URL` set it uses that engine and starts none.
 
 ## Seed script variables
 

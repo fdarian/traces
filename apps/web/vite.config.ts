@@ -1,48 +1,42 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import tailwindcss from '@tailwindcss/vite';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import viteReact from '@vitejs/plugin-react';
 import { Config, Effect } from 'effect';
 import { nitro } from 'nitro/vite';
+import { searchForWorkspaceRoot } from 'vite';
 import tsConfigPaths from 'vite-tsconfig-paths';
 
-/** Recursively copies src directory into dest, creating dest if absent. */
-function copyDir(src: string, dest: string): void {
-  fs.mkdirSync(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      copyDir(srcPath, destPath);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
-const coreRoot = path.resolve(import.meta.dirname, '../../packages/core');
+// pnpm's global virtual store puts dependencies outside the workspace, where
+// Vite's default fs.allow rejects them and reports "Failed to load url".
+const pnpmVirtualStoreDir = () => {
+  const vitePackage = realpathSync(
+    createRequire(import.meta.url).resolve('vite/package.json'),
+  );
+  const marker = '/links/';
+  const markerIndex = vitePackage.indexOf(marker);
+  if (markerIndex === -1) return [];
+  return [vitePackage.slice(0, markerIndex + marker.length)];
+};
 
 const config = Effect.gen(function* () {
   const port = yield* Config.Number('PORT').pipe(Config.withDefault(3000));
   return {
-    server: { port },
+    server: {
+      port,
+      fs: {
+        allow: [
+          searchForWorkspaceRoot(process.cwd()),
+          ...pnpmVirtualStoreDir(),
+        ],
+      },
+    },
     plugins: [
       tsConfigPaths(),
+      tailwindcss(),
       tanstackStart(),
-      nitro({
-        preset: 'bun',
-        serverDir: 'server',
-        hooks: {
-          compiled(nitro) {
-            const outputDir = nitro.options.output.dir;
-            for (const dialect of ['sqlite', 'pg'] as const) {
-              const src = path.join(coreRoot, 'drizzle', dialect);
-              const dest = path.join(outputDir, 'drizzle', dialect);
-              copyDir(src, dest);
-            }
-          },
-        },
-      }),
+      nitro({ preset: 'bun' }),
       viteReact(),
     ],
   };

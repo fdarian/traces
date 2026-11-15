@@ -1,3 +1,4 @@
+import type { TrendBucket } from '@traces/contract';
 import {
   Area,
   AreaChart,
@@ -6,10 +7,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { SerializableTrendBucket } from '#/server/home-trend.functions';
 
 export function HomeTrendChart(props: {
-  readonly buckets: ReadonlyArray<SerializableTrendBucket>;
+  readonly buckets: ReadonlyArray<TrendBucket>;
   readonly isLoading: boolean;
 }) {
   if (props.isLoading) {

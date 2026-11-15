@@ -1,8 +1,8 @@
+import type { ServiceHealth } from '@traces/contract';
 import { Duration } from '@traces/react';
-import type { SerializableServiceHealth } from '#/server/home-service-health.functions';
 
 export function HomeServiceHealth(props: {
-  readonly health: ReadonlyArray<SerializableServiceHealth>;
+  readonly health: ReadonlyArray<ServiceHealth>;
   readonly isLoading: boolean;
   readonly onServiceClick: (service: string) => void;
 }) {
@@ -64,7 +64,7 @@ export function HomeServiceHealth(props: {
 }
 
 function ServiceRow(props: {
-  readonly health: SerializableServiceHealth;
+  readonly health: ServiceHealth;
   readonly onClick: () => void;
 }) {
   const health = props.health;

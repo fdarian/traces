@@ -6,15 +6,15 @@ import {
 } from '@tanstack/react-router';
 import * as S from 'effect/Schema';
 import { Activity, Home, Layers } from 'lucide-react';
+import { engine } from '#/lib/engine-client';
 import { GlobalFilterSchema, normalizeGlobalFilters } from '#/lib/filters';
-import { listServices } from '#/server/list-services.functions';
 
 export const Route = createFileRoute('/_app')({
   validateSearch: S.toStandardSchemaV1(GlobalFilterSchema),
   component: AppLayout,
   loader: async () => {
     try {
-      const services = await listServices();
+      const services = await engine.traces.listServices();
       return { services, error: null as null | Error };
     } catch (err) {
       return {

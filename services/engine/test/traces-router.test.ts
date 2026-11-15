@@ -1,0 +1,70 @@
+import { expect, test } from 'bun:test';
+import { call, ORPCError } from '@orpc/server';
+import {
+  JaegerUnreachable,
+  TraceBackend,
+  type TraceBackendInterface,
+  TraceNotFound,
+} from '@traces/core';
+import { Context, Effect } from 'effect';
+import { HttpServerResponse } from 'effect/http';
+import { handler } from '#/rpc/handler';
+import type { EngineContext } from '#/rpc/implementer';
+import { router } from '#/rpc/router';
+
+const stubBackend: TraceBackendInterface = {
+  listServices: Effect.succeed(['checkout', 'payments']),
+  listOperations: () => Effect.succeed([]),
+  searchTraces: () => Effect.succeed([]),
+  getTrace: (traceId) =>
+    traceId === 'unreachable'
+      ? Effect.fail(new JaegerUnreachable({ cause: new Error('down') }))
+      : Effect.fail(new TraceNotFound({ traceId })),
+};
+
+// The issue store is never touched by traces.* procedures.
+const context = {
+  'effect/context': Context.make(TraceBackend, stubBackend),
+} as unknown as EngineContext;
+
+test('traces.listServices returns the backend services', async () => {
+  const result = await call(router.traces.listServices, undefined, {
+    context,
+  });
+  expect(result).toEqual(['checkout', 'payments']);
+});
+
+test('traces.get on a missing trace yields TRACE_NOT_FOUND', async () => {
+  const error = await call(
+    router.traces.get,
+    { traceId: 'abc' },
+    { context },
+  ).catch((caught: unknown) => caught);
+  if (!(error instanceof ORPCError)) throw error;
+  expect(error.code).toBe('TRACE_NOT_FOUND');
+  expect(error.data).toEqual({ traceId: 'abc' });
+});
+
+test('traces.get maps JaegerUnreachable to JAEGER_UNREACHABLE', async () => {
+  const error = await call(
+    router.traces.get,
+    { traceId: 'unreachable' },
+    { context },
+  ).catch((caught: unknown) => caught);
+  if (!(error instanceof ORPCError)) throw error;
+  expect(error.code).toBe('JAEGER_UNREACHABLE');
+});
+
+test('RPC responses carry the contract status for defined errors', async () => {
+  const response = await handler.handle(
+    new Request('http://engine/rpc/traces/get', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ json: { traceId: 'abc' } }),
+    }),
+    { prefix: '/rpc', context },
+  );
+  if (!response.matched) throw new Error('procedure not matched');
+  // Global `Response` has no `status` under this tsconfig (no DOM lib).
+  expect(HttpServerResponse.fromWeb(response.response).status).toBe(404);
+});
