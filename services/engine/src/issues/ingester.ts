@@ -107,6 +107,13 @@ const ingestService = (
     }
 
     for (const summary of summaries) {
+      // a trace without error spans can't yield an issue, and getTrace is a full trace load in Jaeger
+      if (
+        summary.errorSpanCount === undefined ||
+        summary.errorSpanCount === 0
+      ) {
+        continue;
+      }
       const traceResult = yield* backend
         .getTrace(summary.traceId)
         .pipe(Effect.catchTag('TraceNotFound', () => Effect.succeed(null)));
