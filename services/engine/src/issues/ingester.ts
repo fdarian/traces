@@ -11,6 +11,7 @@ import {
 } from '@traces/core';
 import { Config, Effect, Fiber, Layer, Ref, Schedule } from 'effect';
 import type { IssueStoreError } from '#/issues/errors';
+import { excludedServicesConfig } from '#/issues/excluded-services';
 import { computeIngestCursorEnd } from '#/issues/ingest-cursor';
 import { IssueStore } from '#/issues/store';
 
@@ -184,6 +185,7 @@ const ingestTick = (
   traceLimit: number,
   overlapMs: number,
   initialLookbackMs: number,
+  excludedServices: ReadonlySet<string>,
   windowScaleRef: Ref.Ref<Map<string, number>>,
 ): Effect.Effect<
   void,
@@ -196,6 +198,9 @@ const ingestTick = (
     const now = new Date();
 
     for (const service of services) {
+      if (excludedServices.has(service)) {
+        continue;
+      }
       yield* ingestService(
         service,
         now,
@@ -218,8 +223,15 @@ export const runIngestOnce = Effect.gen(function* () {
   const initialLookbackMs = yield* Config.Number(
     'INGEST_INITIAL_LOOKBACK_MS',
   ).pipe(Config.withDefault(DEFAULT_INITIAL_LOOKBACK_MS));
+  const excludedServices = yield* excludedServicesConfig;
   const windowScaleRef = yield* Ref.make(new Map<string, number>());
-  yield* ingestTick(traceLimit, overlapMs, initialLookbackMs, windowScaleRef);
+  yield* ingestTick(
+    traceLimit,
+    overlapMs,
+    initialLookbackMs,
+    excludedServices,
+    windowScaleRef,
+  );
 });
 
 export const runIngester = Effect.gen(function* () {
@@ -235,6 +247,7 @@ export const runIngester = Effect.gen(function* () {
   const initialLookbackMs = yield* Config.Number(
     'INGEST_INITIAL_LOOKBACK_MS',
   ).pipe(Config.withDefault(DEFAULT_INITIAL_LOOKBACK_MS));
+  const excludedServices = yield* excludedServicesConfig;
 
   const windowScaleRef = yield* Ref.make(new Map<string, number>());
 
@@ -242,6 +255,7 @@ export const runIngester = Effect.gen(function* () {
     traceLimit,
     overlapMs,
     initialLookbackMs,
+    excludedServices,
     windowScaleRef,
   ).pipe(
     Effect.catchCause((cause) =>

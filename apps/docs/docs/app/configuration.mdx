@@ -54,6 +54,7 @@ The ingester runs inside the engine from startup. it polls Jaeger on a fixed int
 | `INGEST_TRACE_LIMIT` | number | `200` | max traces fetched per service per poll window (maps to Jaeger `query.num_traces`); hitting this limit triggers adaptive window shrink |
 | `INGEST_OVERLAP_MS` | number | `60000` (1 m) | how far before the cursor each poll reaches back, to catch late-arriving spans |
 | `INGEST_INITIAL_LOOKBACK_MS` | number | `3600000` (1 h) | how far back the first poll reaches for a service that has no cursor yet |
+| `INGEST_EXCLUDE_SERVICES` | string | `jaeger` | comma-separated service names the ingester skips. the default keeps Jaeger's own self-traces out. set to `none` to exclude nothing (an empty value is treated as unset and falls back to the default) |
 
 `INGEST_TRACE_LIMIT` caps how many traces are fetched in a single Jaeger request. when the response hits the limit, the ingester halves the next window to avoid missing spans — see [concepts → ingester polling](/docs/app/concepts#ingester-polling-and-cursors) for details.
 

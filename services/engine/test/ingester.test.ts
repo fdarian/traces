@@ -81,3 +81,29 @@ test('fetches full traces only for summaries with error spans', async () => {
   });
   expect(result.fetchedTraces).toEqual(['bad']);
 });
+
+test('skips the jaeger service by default', async () => {
+  const result = await runIngest({
+    services: ['jaeger', 'web'],
+    summaries: [],
+  });
+  expect(result.searchedServices).toEqual(['web']);
+});
+
+test('INGEST_EXCLUDE_SERVICES replaces the default list', async () => {
+  const result = await runIngest({
+    services: ['jaeger', 'web', 'db'],
+    summaries: [],
+    env: { INGEST_EXCLUDE_SERVICES: ' web , db ' },
+  });
+  expect(result.searchedServices).toEqual(['jaeger']);
+});
+
+test('INGEST_EXCLUDE_SERVICES=none excludes nothing', async () => {
+  const result = await runIngest({
+    services: ['jaeger', 'web'],
+    summaries: [],
+    env: { INGEST_EXCLUDE_SERVICES: 'none' },
+  });
+  expect(result.searchedServices).toEqual(['jaeger', 'web']);
+});
