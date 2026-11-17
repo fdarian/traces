@@ -22,9 +22,11 @@ export function normalizeDurationMs(
   start: string | number,
   end: string | number,
 ): number {
-  const startMs = normalizeTimestampToMs(start);
-  const endMs = normalizeTimestampToMs(end);
-  return endMs - startMs;
+  return nanosToMs(BigInt(end) - BigInt(start));
+}
+
+export function nanosToMs(nanos: bigint): number {
+  return Number(nanos) / 1_000_000;
 }
 
 export function normalizeAttributeValue(raw: unknown): unknown {

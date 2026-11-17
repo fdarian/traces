@@ -134,6 +134,30 @@ describe('computeTraceSummary', () => {
     expect(summary.durationMs).toBe(600);
     expect(summary.startTimeUnixNano).toBe('1700000000000000000');
   });
+
+  test('computes durationMs with sub-millisecond precision', () => {
+    const data = traceMultiSpan as {
+      result: { resourceSpans: Array<unknown> };
+    };
+    const trace = mapTrace(
+      data.result.resourceSpans as ReadonlyArray<OtelResourceSpan>,
+    );
+    const first = trace.spans[0];
+    assert(first);
+    const shifted = {
+      ...trace,
+      spans: [
+        {
+          ...first,
+          parentSpanId: undefined,
+          startTimeUnixNano: '1700000000000999000',
+          endTimeUnixNano: '1700000000001001000',
+        },
+      ],
+    };
+
+    expect(computeTraceSummary(shifted).durationMs).toBeCloseTo(0.002, 9);
+  });
 });
 
 describe('mapTraceSummary', () => {

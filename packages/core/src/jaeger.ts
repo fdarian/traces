@@ -25,6 +25,7 @@ import type {
   TraceSummary,
 } from './model.js';
 import {
+  nanosToMs,
   normalizeAttributes,
   normalizeDurationMs,
   normalizeSpanEvents,
@@ -149,7 +150,7 @@ export function computeTraceSummary(trace: Trace): TraceSummary {
     ([name, spanCount]) => ({ name, spanCount }),
   );
 
-  const durationMs = Number((maxEnd - minStart) / BigInt(1000000));
+  const durationMs = nanosToMs(maxEnd - minStart);
 
   return {
     traceId: trace.traceId,

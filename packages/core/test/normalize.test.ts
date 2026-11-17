@@ -40,6 +40,19 @@ describe('normalizeDurationMs', () => {
       normalizeDurationMs('1700000000000000000', '1700000000600000000'),
     ).toBe(600);
   });
+
+  test('keeps sub-millisecond precision across a ms boundary', () => {
+    // floor(…999_000 ns) and floor(…001_000 ns) differ by 1 ms, the true gap is 0.002 ms
+    expect(
+      normalizeDurationMs('1700000000000999000', '1700000000001001000'),
+    ).toBeCloseTo(0.002, 9);
+  });
+
+  test('returns fractional ms for a sub-ms duration within one ms', () => {
+    expect(
+      normalizeDurationMs('1700000000000100000', '1700000000000350000'),
+    ).toBeCloseTo(0.25, 9);
+  });
 });
 
 describe('normalizeAttributeValue', () => {
