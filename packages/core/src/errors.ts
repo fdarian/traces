@@ -11,6 +11,7 @@ export class JaegerBadResponse extends Schema.TaggedError<JaegerBadResponse>()(
   'JaegerBadResponse',
   {
     cause: Schema.Defect(),
+    status: Schema.optional(Schema.Number),
   },
 ) {}
 

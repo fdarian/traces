@@ -295,12 +295,12 @@ function makeBackend(
     return Effect.gen(function* () {
       const params = buildSearchParams(query);
       const response = yield* makeRequest('/api/v3/trace-summaries', params);
-      if (response.status === 404) {
-        return yield* Effect.fail(
-          new JaegerBadResponse({
-            cause: new Error('trace-summaries endpoint not found'),
-          }),
-        );
+      if (response.status < 200 || response.status >= 300) {
+        // Jaeger's error bodies decode as an empty summaries result, so a non-2xx must fail here
+        return yield* new JaegerBadResponse({
+          cause: new Error(`trace-summaries returned HTTP ${response.status}`),
+          status: response.status,
+        });
       }
       const parsed = yield* parseJson(response.body);
       const validated = yield* validate(OtelTraceSummariesResultSchema, parsed);
@@ -362,8 +362,11 @@ function makeBackend(
       }
 
       const result = yield* searchTracesViaSummaries(query).pipe(
-        Effect.catchTag('JaegerBadResponse', (_e) =>
+        Effect.catchTag('JaegerBadResponse', (error) =>
           Effect.gen(function* () {
+            if (error.status !== 404) {
+              return yield* error;
+            }
             yield* Ref.set(summariesAvailable, false);
             return yield* searchTracesViaFullTraces(query);
           }),

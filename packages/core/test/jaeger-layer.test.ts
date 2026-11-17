@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { ConfigProvider, Effect, Layer } from 'effect';
+import { ConfigProvider, Effect, Exit, Layer } from 'effect';
 import { HttpClient, HttpClientResponse } from 'effect/http';
 import { TraceBackend } from '#/backend.js';
 import { JaegerBackendLayer } from '#/jaeger.js';
@@ -144,5 +144,77 @@ describe('JaegerBackendLayer', () => {
     const result = await runWithMockClient(handlers, effect);
     expect(result.length).toBeGreaterThan(0);
     expect(result[0]?.traceId).toBeDefined();
+  });
+
+  test('searchTraces propagates a 400 from summaries without falling back', async () => {
+    const summariesUrl =
+      '/api/v3/trace-summaries?query.service_name=web&query.start_time_min=2020-01-01T00%3A00%3A00Z&query.start_time_max=2030-01-01T00%3A00%3A00Z';
+    const handlers = {
+      [summariesUrl]: { body: { error: 'bad range' }, status: 400 },
+      '/api/v3/traces?query.service_name=web&query.start_time_min=2020-01-01T00%3A00%3A00Z&query.start_time_max=2030-01-01T00%3A00%3A00Z':
+        { body: tracesFixture },
+    };
+    const effect = Effect.gen(function* () {
+      const backend = yield* TraceBackend;
+      return yield* Effect.exit(
+        backend.searchTraces({
+          service: 'web',
+          startTimeMin: '2020-01-01T00:00:00Z',
+          startTimeMax: '2030-01-01T00:00:00Z',
+        }),
+      );
+    });
+    const exit = await runWithMockClient(handlers, effect);
+    expect(Exit.isFailure(exit)).toBe(true);
+  });
+
+  test('a 400 does not disable summaries for later searches', async () => {
+    const query = {
+      service: 'web',
+      startTimeMin: '2020-01-01T00:00:00Z',
+      startTimeMax: '2030-01-01T00:00:00Z',
+    };
+    let summariesStatus = 400;
+    const requested: Array<string> = [];
+    const client = HttpClient.make((request) => {
+      const path = new URL(request.url).pathname;
+      requested.push(path);
+      if (path === '/api/v3/trace-summaries') {
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            mockResponse(
+              summariesStatus === 200 ? traceSummariesFixture : {},
+              summariesStatus,
+            ),
+          ),
+        );
+      }
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(request, mockResponse(tracesFixture)),
+      );
+    });
+    const program = Effect.gen(function* () {
+      const backend = yield* TraceBackend;
+      const first = yield* Effect.exit(backend.searchTraces(query));
+      summariesStatus = 200;
+      const second = yield* backend.searchTraces(query);
+      return { first, second };
+    }).pipe(
+      Effect.provide(JaegerBackendLayer),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, client)),
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({ JAEGER_URL: 'http://localhost:16686' }),
+        ),
+      ),
+    );
+    const result = await Effect.runPromise(program);
+    expect(Exit.isFailure(result.first)).toBe(true);
+    expect(result.second.length).toBeGreaterThan(0);
+    expect(requested).toEqual([
+      '/api/v3/trace-summaries',
+      '/api/v3/trace-summaries',
+    ]);
   });
 });
