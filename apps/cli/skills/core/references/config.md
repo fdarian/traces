@@ -53,4 +53,4 @@ One project, no `projects` map and no `matcher`: the file's location is the matc
 
 - `name` is optional and defaults to the git root's folder name; `railway`, `tracing` and `services` take the same shape as a project in the global file. `"$schema"` is allowed and ignored; unknown keys are an error.
 - Safe to commit: header secrets and the Railway token are `{"keychain"}` / `{"env"}` refs. Keep literal header values in the global file.
-- `traces init` writes `services` (and `tracing` with `--jaeger-url`), plus `"railway": {"auth": "cli"}` when it writes a Railway service; swap in a token ref by hand if you prefer. See `traces skills get core --ref commands` for what init discovers.
+- `traces init` writes `services` (and `tracing` with `--jaeger-url`), plus `"railway": {"auth": "cli"}` when it writes a Railway service; swap in a token ref by hand if you prefer. See `traces skills get core --file references/commands.md` for what init discovers.

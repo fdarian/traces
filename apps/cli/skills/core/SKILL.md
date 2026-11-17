@@ -48,7 +48,7 @@ Global flags (not on `init`): `--project <name>`, `--env <name>` (Railway enviro
 
 ## References
 
-Load one with `traces skills get core --ref <name>`, or all of them after this page with `traces skills get core --full`.
+Load one with `traces skills get core --file references/<name>.md`, or all of them after this page with `traces skills get core --full`.
 
 - `config`: the config file, project matching, services, and how provider credentials and tracing headers are set up
 - `tracing`: Jaeger tracing: `tracing.url`, service names, attribute search, error detection from spans

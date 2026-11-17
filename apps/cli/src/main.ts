@@ -9,6 +9,7 @@ import {
   GlobalFlag,
 } from 'effect/cli';
 import { FetchHttpClient } from 'effect/http';
+import { SkillSource, skills } from 'effect-cli-skills';
 import { hoistGlobalFlags } from '#/argv.ts';
 import { deploysCommand } from '#/commands/deploys.ts';
 import { errorsCommand } from '#/commands/errors.ts';
@@ -16,7 +17,6 @@ import { initCommand } from '#/commands/init.ts';
 import { logsCommand } from '#/commands/logs.ts';
 import { secretCommand } from '#/commands/secret.ts';
 import { servicesCommand } from '#/commands/services.ts';
-import { skillsCommand } from '#/commands/skills.ts';
 import { spansCommand } from '#/commands/spans.ts';
 import { traceCommand } from '#/commands/trace.ts';
 import {
@@ -27,6 +27,9 @@ import {
   reportError,
 } from '#/output.ts';
 import { Secrets } from '#/secrets.ts';
+import { skills as embeddedSkills } from '#/skills.macro.ts' with {
+  type: 'macro',
+};
 
 const root = Command.make('traces').pipe(
   Command.withDescription(
@@ -41,7 +44,7 @@ const root = Command.make('traces').pipe(
     spansCommand,
     traceCommand,
     secretCommand,
-    skillsCommand,
+    skills({ cli: 'traces' }),
   ]),
 );
 
@@ -72,6 +75,7 @@ program.pipe(
       BunServices.layer,
       FetchHttpClient.layer,
       Secrets.layer,
+      SkillSource.inline(embeddedSkills()),
       CliConfig.layer({ builtIns: [GlobalFlag.Help] }),
       CliOutput.layerPresenter(parseErrorPresenter),
     ),

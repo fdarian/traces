@@ -206,7 +206,7 @@ export const initCommand = Command.make('init', initOptions, (args) =>
         'next:',
         ...(usesRailway
           ? [
-              '  railway.auth is "cli" (the logged-in railway CLI); to use a token instead, set {"keychain"} or {"env"}: see `traces skills get core --ref config`',
+              '  railway.auth is "cli" (the logged-in railway CLI); to use a token instead, set {"keychain"} or {"env"}: see `traces skills get core --file references/config.md`',
             ]
           : []),
         '  traces services   (verify)',
@@ -220,7 +220,7 @@ export const initCommand = Command.make('init', initOptions, (args) =>
     'write traces.json at the git root from Railway and Vercel',
   ),
   Command.withDescription(
-    'Write <git root>/traces.json, discovering the services from the linked Railway project and every Vercel-linked folder, so no config has to be written by hand. Run it from inside the repo; outside a git repository it exits 2. Takes no global flags. See `traces skills get core --ref commands` for what it discovers.',
+    'Write <git root>/traces.json, discovering the services from the linked Railway project and every Vercel-linked folder, so no config has to be written by hand. Run it from inside the repo; outside a git repository it exits 2. Takes no global flags. See `traces skills get core --file references/commands.md` for what it discovers.',
   ),
   Command.withExamples([
     { command: 'traces init --dry-run' },

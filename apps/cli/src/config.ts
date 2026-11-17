@@ -147,7 +147,7 @@ export const resolveDefaultConfigPath = Effect.gen(function* () {
 });
 
 const EXAMPLE_HINT =
-  '`traces skills get core --ref config` shows a minimal example for each provider';
+  '`traces skills get core --file references/config.md` shows a minimal example for each provider';
 
 const createFileHint = (path: string) =>
   `run \`traces init\` in the repo to write traces.json, or create ${path}; ${EXAMPLE_HINT}`;

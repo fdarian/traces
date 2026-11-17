@@ -383,7 +383,7 @@ export const resolveHeaders = (
 const noTracingConfig = (resolved: ResolvedProject) =>
   new UsageError({
     message: `project "${resolved.projectName}" has no tracing config`,
-    hint: `add to ${resolved.configSource === 'repo' ? 'the top level of' : 'the project in'} ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces skills get core --ref tracing\``,
+    hint: `add to ${resolved.configSource === 'repo' ? 'the top level of' : 'the project in'} ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces skills get core --file references/tracing.md\``,
   });
 
 export const resolveTraceBackend = (resolved: ResolvedProject) =>

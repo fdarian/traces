@@ -20,6 +20,13 @@ import {
 import { Console, Effect, Schema } from 'effect';
 import { CliError, CliOutput } from 'effect/cli';
 import {
+  ConflictingFlags,
+  FileNotFound,
+  InvalidPath,
+  InvalidSkill,
+  SkillNotFound,
+} from 'effect-cli-skills';
+import {
   ConfigError,
   EnvVarMissing,
   NothingDiscovered,
@@ -233,6 +240,22 @@ export const renderError = (error: unknown): RenderedError => {
   if (CliError.isCliError(error)) return renderCliError(error);
   if (error instanceof UsageError) {
     return { message: error.message, hint: error.hint, code: EXIT_CODES.usage };
+  }
+  if (
+    error instanceof SkillNotFound ||
+    error instanceof FileNotFound ||
+    error instanceof InvalidPath ||
+    error instanceof ConflictingFlags
+  ) {
+    return { message: error.message, hint: error.hint, code: EXIT_CODES.usage };
+  }
+  // A shipped skill that breaks the layout is a bug in traces, not in the invocation.
+  if (error instanceof InvalidSkill) {
+    return {
+      message: error.message,
+      hint: error.hint,
+      code: EXIT_CODES.runtime,
+    };
   }
   if (error instanceof ConfigError) {
     return {
