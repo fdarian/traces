@@ -146,6 +146,33 @@ describe('JaegerBackendLayer', () => {
     expect(result[0]?.traceId).toBeDefined();
   });
 
+  test('searchTraces fails with JaegerBadResponse when the full-traces fallback returns non-2xx', async () => {
+    const query =
+      '?query.service_name=web&query.start_time_min=2020-01-01T00%3A00%3A00Z&query.start_time_max=2030-01-01T00%3A00%3A00Z';
+    const handlers = {
+      [`/api/v3/trace-summaries${query}`]: {
+        body: { error: 'not found' },
+        status: 404,
+      },
+      [`/api/v3/traces${query}`]: { body: { error: 'boom' }, status: 500 },
+    };
+    const effect = Effect.gen(function* () {
+      const backend = yield* TraceBackend;
+      return yield* Effect.flip(
+        backend.searchTraces({
+          service: 'web',
+          startTimeMin: '2020-01-01T00:00:00Z',
+          startTimeMax: '2030-01-01T00:00:00Z',
+        }),
+      );
+    });
+    const error = await runWithMockClient(handlers, effect);
+    expect(error._tag).toBe('JaegerBadResponse');
+    if (error._tag === 'JaegerBadResponse') {
+      expect(error.status).toBe(500);
+    }
+  });
+
   test('searchTraces propagates a 400 from summaries without falling back', async () => {
     const summariesUrl =
       '/api/v3/trace-summaries?query.service_name=web&query.start_time_min=2020-01-01T00%3A00%3A00Z&query.start_time_max=2030-01-01T00%3A00%3A00Z';

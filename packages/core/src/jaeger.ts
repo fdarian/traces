@@ -319,6 +319,13 @@ function makeBackend(
     return Effect.gen(function* () {
       const params = buildSearchParams(query);
       const response = yield* makeRequest('/api/v3/traces', params);
+      if (response.status < 200 || response.status >= 300) {
+        // Jaeger's error bodies decode as an empty result, so a non-2xx must fail here
+        return yield* new JaegerBadResponse({
+          cause: new Error(`traces returned HTTP ${response.status}`),
+          status: response.status,
+        });
+      }
       const parsed = yield* parseJson(response.body);
       const validated = yield* validate(OtelTracesResultSchema, parsed);
       const resourceSpans = validated.result?.resourceSpans ?? [];
