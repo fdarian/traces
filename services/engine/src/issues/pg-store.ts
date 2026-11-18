@@ -1,5 +1,3 @@
-import { fileURLToPath } from 'node:url';
-import { PgClient } from '@effect/sql-pg';
 import type {
   HistogramGranularity,
   Issue,
@@ -16,12 +14,8 @@ import type {
 } from '@traces/core';
 import { OCCURRENCES_PAGE_SIZE } from '@traces/core';
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
-import {
-  type EffectPgDatabase,
-  makeWithDefaults,
-} from 'drizzle-orm/effect-postgres';
-import { migrate } from 'drizzle-orm/effect-postgres/migrator';
-import { Config, Context, Effect, Layer } from 'effect';
+import { Effect, Layer } from 'effect';
+import { PgDb } from '#/db/pg';
 import { pgSchema } from '#/issues/drizzle/schema-pg';
 import { IssueNotFound, type IssueStoreError } from '#/issues/errors';
 import { mapIssueRow, mapOccurrenceRow } from '#/issues/map-row';
@@ -40,14 +34,7 @@ type UpsertTransactionResult =
   | 'insert-failed'
   | 'missing-issue';
 
-const migrationsFolder = fileURLToPath(
-  new URL('../../drizzle/pg', import.meta.url),
-);
-
-export type PgDb = EffectPgDatabase;
-export const PgDb = Context.Service<PgDb>('traces/PgDb');
-
-function makePgStore(db: EffectPgDatabase) {
+function makePgStore(db: PgDb) {
   const upsertOccurrence = (
     input: UpsertOccurrenceInput,
   ): Effect.Effect<void, IssueStoreError, never> => {
@@ -862,26 +849,10 @@ function makePgStore(db: EffectPgDatabase) {
   };
 }
 
-const PgClientLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const url = yield* Config.Redacted('DATABASE_URL');
-    return PgClient.layer({ url });
-  }),
-);
-
-const PgDbLayer = Layer.effect(
-  PgDb,
-  Effect.gen(function* () {
-    const db = yield* makeWithDefaults();
-    yield* wrapStoreError(migrate(db, { migrationsFolder }));
-    return db;
-  }),
-).pipe(Layer.provide(PgClientLayer));
-
 export const PgIssueStoreLayer = Layer.effect(
   IssueStore,
   Effect.gen(function* () {
     const db = yield* PgDb;
     return makePgStore(db);
   }),
-).pipe(Layer.provide(PgDbLayer));
+);

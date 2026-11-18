@@ -3,12 +3,9 @@ import assert from 'node:assert';
 import { unlinkSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { ConfigProvider, Effect, Layer } from 'effect';
+import { SqliteDb, SqliteDbLayer } from '#/db/sqlite';
 import { sqliteSchema } from '#/issues/drizzle/schema-sqlite';
-import {
-  SqliteDb,
-  SqliteDbLayer,
-  SqliteIssueStoreLayer,
-} from '#/issues/sqlite-store';
+import { SqliteIssueStoreLayer } from '#/issues/sqlite-store';
 import { IssueStore } from '#/issues/store';
 
 function tempDbPath(): string {
@@ -33,7 +30,10 @@ function runStore<A, E>(
   const configLayer = ConfigProvider.layer(
     ConfigProvider.fromUnknown({ TRACES_DB: dbPath }),
   );
-  const layer = Layer.provide(SqliteIssueStoreLayer, configLayer);
+  const layer = Layer.provide(
+    Layer.provide(SqliteIssueStoreLayer, SqliteDbLayer),
+    configLayer,
+  );
   return Effect.runPromise(Effect.provide(program, layer));
 }
 

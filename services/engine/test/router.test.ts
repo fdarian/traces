@@ -18,6 +18,7 @@ import {
   type TraceBackendInterface,
 } from '@traces/core';
 import { ConfigProvider, Context, Effect, Layer, Schema, Scope } from 'effect';
+import { SqliteDbLayer } from '#/db/sqlite';
 import { SqliteIssueStoreLayer } from '#/issues/sqlite-store';
 import {
   IssueStore,
@@ -74,7 +75,7 @@ let issueId: number;
 
 beforeAll(async () => {
   const layer = Layer.provide(
-    SqliteIssueStoreLayer,
+    Layer.provide(SqliteIssueStoreLayer, SqliteDbLayer),
     ConfigProvider.layer(ConfigProvider.fromUnknown({ TRACES_DB: dbPath })),
   );
   const services = await Effect.runPromise(Layer.buildWithScope(layer, scope));

@@ -6,6 +6,7 @@ import {
   type TraceSummary,
 } from '@traces/core';
 import { ConfigProvider, Effect, Layer } from 'effect';
+import { SqliteDbLayer } from '#/db/sqlite';
 import { runIngestOnce } from '#/issues/ingester';
 import { SqliteIssueStoreLayer } from '#/issues/sqlite-store';
 
@@ -63,7 +64,7 @@ function runIngest(options: {
   );
   const layer = Layer.mergeAll(
     Layer.succeed(TraceBackend, backend),
-    SqliteIssueStoreLayer,
+    Layer.provide(SqliteIssueStoreLayer, SqliteDbLayer),
   ).pipe(Layer.provide(configLayer));
   return Effect.runPromise(
     runIngestOnce.pipe(Effect.provide(layer), Effect.provide(configLayer)),

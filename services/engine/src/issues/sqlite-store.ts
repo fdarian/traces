@@ -1,5 +1,3 @@
-import { fileURLToPath } from 'node:url';
-import { SqliteClient } from '@effect/sql-sqlite-bun';
 import type {
   HistogramGranularity,
   Issue,
@@ -16,12 +14,8 @@ import type {
 } from '@traces/core';
 import { OCCURRENCES_PAGE_SIZE } from '@traces/core';
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
-import {
-  type EffectSQLiteBunDatabase,
-  makeWithDefaults,
-} from 'drizzle-orm/effect-sqlite-bun';
-import { migrate } from 'drizzle-orm/effect-sqlite-bun/migrator';
-import { Config, Context, Effect, Layer } from 'effect';
+import { Effect, Layer } from 'effect';
+import { SqliteDb } from '#/db/sqlite';
 import { sqliteSchema } from '#/issues/drizzle/schema-sqlite';
 import { IssueNotFound, type IssueStoreError } from '#/issues/errors';
 import { mapIssueRow, mapOccurrenceRow } from '#/issues/map-row';
@@ -40,14 +34,7 @@ type UpsertTransactionResult =
   | 'insert-failed'
   | 'missing-issue';
 
-const migrationsFolder = fileURLToPath(
-  new URL('../../drizzle/sqlite', import.meta.url),
-);
-
-export type SqliteDb = EffectSQLiteBunDatabase;
-export const SqliteDb = Context.Service<SqliteDb>('traces/SqliteDb');
-
-function makeSqliteStore(db: EffectSQLiteBunDatabase) {
+function makeSqliteStore(db: SqliteDb) {
   const upsertOccurrence = (
     input: UpsertOccurrenceInput,
   ): Effect.Effect<void, IssueStoreError, never> => {
@@ -879,33 +866,10 @@ function makeSqliteStore(db: EffectSQLiteBunDatabase) {
   };
 }
 
-const SqliteClientLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const filename = yield* Config.String('TRACES_DB').pipe(
-      Config.withDefault('./traces.db'),
-    );
-    return SqliteClient.layer({ filename });
-  }),
-);
-
-export const SqliteDbLayer = Layer.effect(
-  SqliteDb,
-  Effect.gen(function* () {
-    const db = yield* makeWithDefaults();
-    yield* wrapStoreError(migrate(db, { migrationsFolder }));
-    // SQLite rebuild migrations drop tables, which would cascade-delete
-    // occurrences if foreign keys were already enforced. Enable it afterwards;
-    // the occurrences -> issues cascade relies on it, and @effect/sql-sqlite-bun
-    // leaves it off.
-    yield* wrapStoreError(db.run(sql`PRAGMA foreign_keys = ON`));
-    return db;
-  }),
-).pipe(Layer.provide(SqliteClientLayer));
-
 export const SqliteIssueStoreLayer = Layer.effect(
   IssueStore,
   Effect.gen(function* () {
     const db = yield* SqliteDb;
     return makeSqliteStore(db);
   }),
-).pipe(Layer.provide(SqliteDbLayer));
+);
