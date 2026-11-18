@@ -206,6 +206,29 @@ function storeSuite(
       expect(buckets[0]?.traceCount).toBe(3);
     });
 
+    test('a non-finite duration fails the commit with ServiceStatsStoreError and writes nothing', async () => {
+      const result = await run(
+        Effect.gen(function* () {
+          const failure = yield* Effect.flip(
+            commit('api', [
+              trace('ok', NOW - 5000),
+              trace('bad', NOW - 4000, { durationMs: Number.NaN }),
+            ]),
+          );
+          const store = yield* ServiceStatsStore;
+          return {
+            failure,
+            cursor: yield* store.getCursor('api'),
+            buckets: yield* minuteBuckets(),
+          };
+        }),
+      );
+
+      expect(result.failure._tag).toBe('ServiceStatsStoreError');
+      expect(result.cursor).toBeNull();
+      expect(result.buckets).toEqual([]);
+    });
+
     test('merges counts and sketches into minute and hour rows', async () => {
       const minuteStart = NOW - 30 * MINUTE_MS;
       const first = [

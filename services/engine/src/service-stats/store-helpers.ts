@@ -82,6 +82,15 @@ export interface BucketDelta {
 
 export function aggregateBuckets(
   traces: ReadonlyArray<CountedTrace>,
+): Effect.Effect<ReadonlyArray<BucketDelta>, ServiceStatsStoreError> {
+  return Effect.try({
+    try: () => aggregateBucketsUnsafe(traces),
+    catch: (cause) => new ServiceStatsStoreError({ cause }),
+  });
+}
+
+function aggregateBucketsUnsafe(
+  traces: ReadonlyArray<CountedTrace>,
 ): ReadonlyArray<BucketDelta> {
   const deltas = new Map<string, BucketDelta>();
   for (const trace of traces) {

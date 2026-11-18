@@ -26,6 +26,7 @@ interface FakeTrace {
   readonly startMs: number;
   /** Start times of the trace's other spans in the same service; a trace matches a search when any span starts in range. */
   readonly otherSpanStartsMs: ReadonlyArray<number>;
+  readonly durationMs?: number;
 }
 
 interface SearchCall {
@@ -77,7 +78,7 @@ function summaryOf(trace: FakeTrace): TraceSummary {
     errorSpanCount: 0,
     services: [{ name: trace.service, spanCount: 1 }],
     startTimeUnixNano: (BigInt(trace.startMs) * NS_PER_MS).toString(),
-    durationMs: 10,
+    durationMs: trace.durationMs === undefined ? 10 : trace.durationMs,
   };
 }
 
@@ -289,6 +290,20 @@ test("one service's Jaeger failure does not block the others", async () => {
     traces: [fakeTrace('web', 'w', START + 1000)],
   });
   expect(result.cursor('broken')).toBeUndefined();
+  expect(result.cursor('web')?.forwardMs).toBe(END);
+  expect(result.countFor('web')).toBe(1);
+});
+
+test('a trace with a NaN duration fails only its own service and leaves other services counting', async () => {
+  const result = await runTick({
+    services: ['poisoned', 'web'],
+    traces: [
+      { ...fakeTrace('poisoned', 'p', START + 1000), durationMs: Number.NaN },
+      fakeTrace('web', 'w', START + 1000),
+    ],
+  });
+  expect(result.cursor('poisoned')).toBeUndefined();
+  expect(result.countFor('poisoned')).toBe(0);
   expect(result.cursor('web')?.forwardMs).toBe(END);
   expect(result.countFor('web')).toBe(1);
 });

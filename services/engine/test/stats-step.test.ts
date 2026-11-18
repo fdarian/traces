@@ -102,3 +102,10 @@ test('toCountedTrace floors start to ms from BigInt ns and defaults missing erro
   });
   expect(toCountedTrace(summary({ errorSpanCount: 2 })).errorSpanCount).toBe(2);
 });
+
+test('toCountedTrace clamps a negative duration to 0 and leaves NaN for the store to reject', () => {
+  expect(toCountedTrace(summary({ durationMs: -3 })).durationMs).toBe(0);
+  expect(
+    toCountedTrace(summary({ durationMs: Number.NaN })).durationMs,
+  ).toBeNaN();
+});

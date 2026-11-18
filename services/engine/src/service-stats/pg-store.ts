@@ -127,7 +127,7 @@ function makePgStatsStore(db: PgDb) {
               fresh.has(trace.traceId),
             );
 
-            for (const delta of aggregateBuckets(counted)) {
+            for (const delta of yield* aggregateBuckets(counted)) {
               const existingRows = yield* tx
                 .select({
                   traceCount: schema.serviceStatBuckets.traceCount,
