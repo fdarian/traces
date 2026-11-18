@@ -5,6 +5,7 @@ import { FetchHttpClient, HttpRouter, HttpServerResponse } from 'effect/http';
 import { IngesterLayer } from '#/issues/ingester';
 import { IssueStoreLayer } from '#/issues/issue-store-layer';
 import { RpcRoute } from '#/rpc/handler';
+import { ServiceStatsStoreLayer } from '#/service-stats/service-stats-store-layer';
 
 const Health = HttpRouter.add(
   'GET',
@@ -14,7 +15,11 @@ const Health = HttpRouter.add(
 
 const JaegerLive = Layer.provide(JaegerBackendLayer, FetchHttpClient.layer);
 
-export const Services = Layer.mergeAll(JaegerLive, IssueStoreLayer);
+export const Services = Layer.mergeAll(
+  JaegerLive,
+  IssueStoreLayer,
+  ServiceStatsStoreLayer,
+);
 
 // Ingester is built on top of the same store/backend instances as the RPC services.
 const IngesterLive = Layer.provide(IngesterLayer, Services);
