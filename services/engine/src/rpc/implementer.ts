@@ -4,8 +4,12 @@ import { implement } from '@orpc/server';
 import { contract } from '@traces/contract';
 import type { TraceBackendInterface } from '@traces/core';
 import type { IssueStore as IssueStoreInterface } from '#/issues/store';
+import type { ServiceStatsStore as ServiceStatsStoreInterface } from '#/service-stats/store';
 
-export type EngineServices = TraceBackendInterface | IssueStoreInterface;
+export type EngineServices =
+  | TraceBackendInterface
+  | IssueStoreInterface
+  | ServiceStatsStoreInterface;
 
 export interface EngineContext extends WithEffectContext<EngineServices> {}
 

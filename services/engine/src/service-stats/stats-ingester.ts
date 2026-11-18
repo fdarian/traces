@@ -39,6 +39,11 @@ const CAUGHT_UP_MARGIN_MS = 1000;
 const numberWithDefault = (name: string, fallback: number) =>
   Config.Number(name).pipe(Config.withDefault(fallback));
 
+export const minuteRetentionMsConfig = numberWithDefault(
+  'STATS_MINUTE_RETENTION_MS',
+  DEFAULT_MINUTE_RETENTION_MS,
+);
+
 export const statsIngesterConfig = Config.all({
   pollIntervalMs: numberWithDefault(
     'STATS_POLL_INTERVAL_MS',
@@ -56,10 +61,7 @@ export const statsIngesterConfig = Config.all({
     'STATS_TICK_TRACE_BUDGET',
     DEFAULT_TICK_TRACE_BUDGET,
   ),
-  minuteRetentionMs: numberWithDefault(
-    'STATS_MINUTE_RETENTION_MS',
-    DEFAULT_MINUTE_RETENTION_MS,
-  ),
+  minuteRetentionMs: minuteRetentionMsConfig,
   hourRetentionMs: numberWithDefault(
     'STATS_HOUR_RETENTION_MS',
     DEFAULT_HOUR_RETENTION_MS,

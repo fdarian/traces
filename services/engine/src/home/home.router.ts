@@ -1,28 +1,19 @@
-import { computeServiceHealth, TraceBackend } from '@traces/core';
-import { Effect } from 'effect';
+import { Clock, Effect } from 'effect';
+import { excludedServicesConfig } from '#/issues/excluded-services';
 import {
   serializeOccurrenceBuckets,
   serializeTopIssue,
 } from '#/issues/issue-serialize';
 import { servicesFilter } from '#/issues/services-filter';
 import { IssueStore } from '#/issues/store';
-import { mapJaegerErrors } from '#/rpc/errors';
 import { os } from '#/rpc/implementer';
+import { readRangeStats } from '#/service-stats/range-stats';
+import { minuteRetentionMsConfig } from '#/service-stats/stats-ingester';
+import { ServiceStatsStore } from '#/service-stats/store';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-function hasErrors(trace: { errorSpanCount?: number }): boolean {
-  return trace.errorSpanCount !== undefined && trace.errorSpanCount > 0;
-}
-
-function computeErrorRate(traces: ReadonlyArray<{ errorSpanCount?: number }>): {
-  readonly errorRate: number;
-  readonly sampledTraceCount: number;
-} {
-  const errorCount = traces.filter(hasErrors).length;
-  const errorRate = traces.length > 0 ? (errorCount / traces.length) * 100 : 0;
-  return { errorRate, sampledTraceCount: traces.length };
-}
+const RECENT_ERROR_TRACE_LIMIT = 6;
+const PREVIOUS_WINDOW_MIN_COVERAGE = 0.9;
 
 const stats = os.home.stats.effect(function* ({ input }) {
   const store = yield* IssueStore;
@@ -78,92 +69,96 @@ const topIssues = os.home.topIssues.effect(function* ({ input }) {
   };
 });
 
-const errorRate = os.home.errorRate.effect(function* ({ input, errors }) {
-  const limit = input.limit ?? 200;
-  const backend = yield* TraceBackend;
+const errorRate = os.home.errorRate.effect(function* ({ input }) {
+  const startMs = new Date(input.startTimeMin).getTime();
+  const endMs = new Date(input.startTimeMax).getTime();
+  const windowMs = endMs - startMs;
+  const minuteRetentionMs = yield* minuteRetentionMsConfig;
+  const nowMs = yield* Clock.currentTimeMillis;
+  const range = (from: number, to: number) =>
+    readRangeStats({
+      startMs: from,
+      endMs: to,
+      nowMs,
+      minuteRetentionMs,
+      include: (service) => service === input.service,
+    }).pipe(Effect.map((stats) => stats[0]));
 
-  const startTime = new Date(input.startTimeMin);
-  const endTime = new Date(input.startTimeMax);
-  const windowMs = endTime.getTime() - startTime.getTime();
-  const prevStartTime = new Date(startTime.getTime() - windowMs);
-
-  return yield* Effect.gen(function* () {
-    const currentTraces = yield* backend.searchTraces({
-      service: input.service,
-      startTimeMin: input.startTimeMin,
-      startTimeMax: input.startTimeMax,
-      limit,
-    });
-    const prevTraces = yield* backend.searchTraces({
-      service: input.service,
-      startTimeMin: prevStartTime.toISOString(),
-      startTimeMax: startTime.toISOString(),
-      limit,
-    });
-
-    const current = computeErrorRate(currentTraces);
-    const prev = computeErrorRate(prevTraces);
-
+  const current = yield* range(startMs, endMs);
+  if (current === undefined) {
     return {
-      errorRate: current.errorRate,
-      errorRateDelta: current.errorRate - prev.errorRate,
-      sampledTraceCount: current.sampledTraceCount,
+      errorRate: 0,
+      errorRateDelta: null,
+      traceCount: 0,
+      coverage: 0,
+      exact: true,
+      collectingSince: null,
+      asOf: startMs,
     };
-  }).pipe(mapJaegerErrors(errors));
+  }
+  const previous = yield* range(startMs - windowMs, startMs);
+  const deltaIsMeaningful =
+    previous !== undefined &&
+    previous.coverage >= PREVIOUS_WINDOW_MIN_COVERAGE &&
+    previous.traceCount > 0;
+
+  return {
+    errorRate: current.errorRate,
+    errorRateDelta: deltaIsMeaningful
+      ? current.errorRate - previous.errorRate
+      : null,
+    traceCount: current.traceCount,
+    coverage: current.coverage,
+    exact: current.exact,
+    collectingSince: current.collectingSince,
+    asOf: current.asOf,
+  };
 });
 
-const serviceHealth = os.home.serviceHealth.effect(function* ({
-  input,
-  errors,
-}) {
-  const limit = input.limit ?? 200;
-  const backend = yield* TraceBackend;
-
-  return yield* Effect.gen(function* () {
-    const services = yield* backend.listServices;
-    return yield* Effect.forEach(
-      services,
-      (service) =>
-        backend
-          .searchTraces({
-            service,
-            startTimeMin: input.startTimeMin,
-            startTimeMax: input.startTimeMax,
-            limit,
-          })
-          .pipe(Effect.map((traces) => computeServiceHealth(service, traces))),
-      { concurrency: 4 },
-    );
-  }).pipe(mapJaegerErrors(errors));
+const serviceHealth = os.home.serviceHealth.effect(function* ({ input }) {
+  const excludedServices = yield* excludedServicesConfig;
+  const stats = yield* readRangeStats({
+    startMs: new Date(input.startTimeMin).getTime(),
+    endMs: new Date(input.startTimeMax).getTime(),
+    nowMs: yield* Clock.currentTimeMillis,
+    minuteRetentionMs: yield* minuteRetentionMsConfig,
+    include: (service) => !excludedServices.has(service),
+  });
+  return {
+    services: stats.map((entry) => ({
+      service: entry.service,
+      traceCount: entry.traceCount,
+      errorRate: entry.errorRate,
+      p50: entry.p50,
+      p95: entry.p95,
+      p99: entry.p99,
+      coverage: entry.coverage,
+      exact: entry.exact,
+      collectingSince: entry.collectingSince,
+      asOf: entry.asOf,
+    })),
+  };
 });
 
 const recentErrorTraces = os.home.recentErrorTraces.effect(function* ({
   input,
-  errors,
 }) {
-  const limit = input.limit ?? 50;
-  const backend = yield* TraceBackend;
-  const traces = yield* backend
-    .searchTraces({
-      service: input.service,
-      startTimeMin: input.startTimeMin,
-      startTimeMax: input.startTimeMax,
-      limit,
-    })
-    .pipe(mapJaegerErrors(errors));
-
-  return traces
-    .filter(hasErrors)
-    .slice(0, 6)
-    .map((trace) => ({
-      traceId: trace.traceId,
-      rootService: trace.rootService,
-      rootOperation: trace.rootOperation,
-      spanCount: trace.spanCount,
-      errorSpanCount: trace.errorSpanCount,
-      durationMs: trace.durationMs,
-      startTimeUnixNano: trace.startTimeUnixNano,
-    }));
+  const store = yield* ServiceStatsStore;
+  const rows = yield* store.recentErrorTraces({
+    service: input.service,
+    fromMs: new Date(input.startTimeMin).getTime(),
+    toMs: new Date(input.startTimeMax).getTime(),
+    limit: RECENT_ERROR_TRACE_LIMIT,
+  });
+  return rows.map((row) => ({
+    traceId: row.traceId,
+    rootService: row.rootService,
+    rootOperation: row.rootOperation,
+    spanCount: row.spanCount,
+    errorSpanCount: row.errorSpanCount,
+    durationMs: row.durationMs,
+    startTimeUnixNano: (BigInt(row.startMs) * 1_000_000n).toString(),
+  }));
 });
 
 export const homeRouter = {

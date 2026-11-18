@@ -5,9 +5,9 @@ import {
   ErrorTraceSummary,
   GetIssueResult,
   HomeErrorRateResult,
+  HomeServiceHealthResult,
   HomeStats,
   ListIssuesResult,
-  ServiceHealth,
   Trace,
   TraceSummary,
   TrendBucket,
@@ -26,6 +26,12 @@ import {
 } from '#/issues/store';
 import type { EngineContext } from '#/rpc/implementer';
 import { router } from '#/rpc/router';
+import { SqliteServiceStatsStoreLayer } from '#/service-stats/sqlite-store';
+import {
+  type CountedTrace,
+  ServiceStatsStore,
+  type ServiceStatsStore as ServiceStatsStoreInterface,
+} from '#/service-stats/store';
 
 const summary = (
   traceId: string,
@@ -70,16 +76,21 @@ const stubBackend: TraceBackendInterface = {
 const dbPath = `/tmp/traces-engine-router-${Date.now()}-${Math.random().toString(16).slice(2)}.db`;
 const scope = Scope.makeUnsafe();
 let store: IssueStoreInterface;
+let statsStore: ServiceStatsStoreInterface;
 let context: EngineContext;
 let issueId: number;
 
 beforeAll(async () => {
   const layer = Layer.provide(
-    Layer.provide(SqliteIssueStoreLayer, SqliteDbLayer),
+    Layer.provide(
+      Layer.mergeAll(SqliteIssueStoreLayer, SqliteServiceStatsStoreLayer),
+      SqliteDbLayer,
+    ),
     ConfigProvider.layer(ConfigProvider.fromUnknown({ TRACES_DB: dbPath })),
   );
   const services = await Effect.runPromise(Layer.buildWithScope(layer, scope));
   store = Context.get(services, IssueStore);
+  statsStore = Context.get(services, ServiceStatsStore);
   context = {
     'effect/context': Context.merge(
       services,
@@ -106,6 +117,8 @@ beforeAll(async () => {
   const first = issues[0];
   if (first === undefined) throw new Error('seeded issue missing');
   issueId = first.id;
+
+  await Effect.runPromise(seedServiceStats());
 });
 
 afterAll(async () => {
@@ -116,6 +129,52 @@ afterAll(async () => {
     // temp file may already be removed
   }
 });
+
+const HOUR_MS = 60 * 60 * 1000;
+const seedNow = Date.now();
+
+const countedTrace = (
+  traceId: string,
+  startMs: number,
+  errorSpanCount: number,
+): CountedTrace => ({
+  traceId,
+  startMs,
+  durationMs: 120,
+  errorSpanCount,
+  rootService: 'checkout',
+  rootOperation: 'POST /pay',
+  spanCount: 3,
+});
+
+// checkout: 2 traces (1 error) in the last hour, 2 clean traces in the hour
+// before. payments has a cursor and no traffic; jaeger is an excluded service.
+const seedServiceStats = () =>
+  Effect.gen(function* () {
+    const seed = (service: string, traces: ReadonlyArray<CountedTrace>) =>
+      statsStore.commitStep({
+        service,
+        expectedForwardMs: null,
+        startedMs: seedNow - 3 * HOUR_MS,
+        newForwardMs: seedNow - 30_000,
+        nowMs: seedNow,
+        traces,
+        gap: null,
+      });
+    yield* seed('checkout', [
+      countedTrace('t1', seedNow - 10 * 60_000, 1),
+      countedTrace('t2', seedNow - 20 * 60_000, 0),
+      countedTrace('t3', seedNow - 90 * 60_000, 0),
+      countedTrace('t4', seedNow - 100 * 60_000, 0),
+    ]);
+    yield* seed('payments', []);
+    yield* seed('jaeger', [countedTrace('t5', seedNow - 60_000, 0)]);
+  });
+
+const homeWindow = {
+  startTimeMin: new Date(seedNow - HOUR_MS).toISOString(),
+  startTimeMax: new Date(seedNow).toISOString(),
+};
 
 const window = {
   startTime: Date.now() - 24 * 60 * 60 * 1000,
@@ -250,40 +309,88 @@ describe('home.*', () => {
   });
 
   test('errorRate', async () => {
-    const result = await call(router.home.errorRate, traceWindow, { context });
+    const result = await call(
+      router.home.errorRate,
+      { service: 'checkout', ...homeWindow },
+      { context },
+    );
     const decoded = Schema.decodeUnknownSync(HomeErrorRateResult)(result);
     expect(decoded).toEqual({
       errorRate: 50,
-      errorRateDelta: 0,
-      sampledTraceCount: 2,
+      errorRateDelta: 50,
+      traceCount: 2,
+      coverage: 1,
+      exact: true,
+      collectingSince: null,
+      asOf: seedNow - 30_000,
     });
   });
 
-  test('serviceHealth', async () => {
+  test('errorRate has no delta when the previous window is not covered', async () => {
     const result = await call(
-      router.home.serviceHealth,
+      router.home.errorRate,
       {
-        startTimeMin: traceWindow.startTimeMin,
-        startTimeMax: traceWindow.startTimeMax,
+        service: 'checkout',
+        startTimeMin: new Date(seedNow - 2 * HOUR_MS).toISOString(),
+        startTimeMax: homeWindow.startTimeMax,
       },
       { context },
     );
-    const decoded = Schema.decodeUnknownSync(Schema.Array(ServiceHealth))(
-      result,
+    expect(result.errorRateDelta).toBeNull();
+    expect(result.traceCount).toBe(4);
+  });
+
+  test('errorRate for a service without a cursor is empty', async () => {
+    const result = await call(
+      router.home.errorRate,
+      { service: 'unknown', ...homeWindow },
+      { context },
     );
-    expect(decoded.map((health) => health.service)).toEqual([
+    expect(result).toEqual({
+      errorRate: 0,
+      errorRateDelta: null,
+      traceCount: 0,
+      coverage: 0,
+      exact: true,
+      collectingSince: null,
+      asOf: Date.parse(homeWindow.startTimeMin),
+    });
+  });
+
+  test('serviceHealth lists non-excluded services by name', async () => {
+    const result = await call(router.home.serviceHealth, homeWindow, {
+      context,
+    });
+    const decoded = Schema.decodeUnknownSync(HomeServiceHealthResult)(result);
+    expect(decoded.services.map((health) => health.service)).toEqual([
       'checkout',
       'payments',
     ]);
+    const checkout = decoded.services[0];
+    expect(checkout?.traceCount).toBe(2);
+    expect(checkout?.errorRate).toBe(50);
+    expect(checkout?.p50).not.toBeNull();
+    const payments = decoded.services[1];
+    expect(payments?.traceCount).toBe(0);
+    expect(payments?.p99).toBeNull();
   });
 
-  test('recentErrorTraces keeps only traces with error spans', async () => {
-    const result = await call(router.home.recentErrorTraces, traceWindow, {
-      context,
-    });
+  test('recentErrorTraces returns stored error traces newest first', async () => {
+    const result = await call(
+      router.home.recentErrorTraces,
+      {
+        service: 'checkout',
+        startTimeMin: new Date(seedNow - 2 * HOUR_MS).toISOString(),
+        startTimeMax: homeWindow.startTimeMax,
+      },
+      { context },
+    );
     const decoded = Schema.decodeUnknownSync(Schema.Array(ErrorTraceSummary))(
       result,
     );
     expect(decoded.map((trace) => trace.traceId)).toEqual(['t1']);
+    expect(decoded[0]?.startTimeUnixNano).toBe(
+      (BigInt(seedNow - 10 * 60_000) * 1_000_000n).toString(),
+    );
   });
 });
