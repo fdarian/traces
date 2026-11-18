@@ -6,6 +6,7 @@ import { IngesterLayer } from '#/issues/ingester';
 import { IssueStoreLayer } from '#/issues/issue-store-layer';
 import { RpcRoute } from '#/rpc/handler';
 import { ServiceStatsStoreLayer } from '#/service-stats/service-stats-store-layer';
+import { StatsIngesterLayer } from '#/service-stats/stats-ingester';
 
 const Health = HttpRouter.add(
   'GET',
@@ -23,6 +24,7 @@ export const Services = Layer.mergeAll(
 
 // Ingester is built on top of the same store/backend instances as the RPC services.
 const IngesterLive = Layer.provide(IngesterLayer, Services);
+const StatsIngesterLive = Layer.provide(StatsIngesterLayer, Services);
 
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -37,6 +39,6 @@ const ServerLive = Layer.unwrap(
 export const Routes = Layer.mergeAll(Health, RpcRoute);
 
 export const Server = HttpRouter.serve(Routes).pipe(
-  Layer.provide(Layer.mergeAll(Services, IngesterLive)),
+  Layer.provide(Layer.mergeAll(Services, IngesterLive, StatsIngesterLive)),
   Layer.provide(ServerLive),
 );
