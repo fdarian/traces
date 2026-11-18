@@ -1,6 +1,6 @@
 # @traces/engine
 
-Headless Bun server behind the dashboard: serves the oRPC API at `/rpc/*` and `/health`, reads traces from Jaeger through `@traces/core`, owns the issue store, and runs the error ingester from boot. Usable without the web app (any oRPC client built from `@traces/contract`). It has no auth — keep it behind the web proxy or a private network.
+Headless Bun server behind the dashboard: serves the oRPC API at `/rpc/*` and `/health`, reads traces from Jaeger through `@traces/core`, owns the issue store and the per-service stats store, and runs the error ingester and the stats ingester from boot. Usable without the web app (any oRPC client built from `@traces/contract`). It has no auth — keep it behind the web proxy or a private network.
 
 ## Stack
 - Effect 4.1.4 + `@effect/platform-bun`; oRPC v2 `@orpc/server` + `@orpc/effect`
@@ -9,14 +9,16 @@ Headless Bun server behind the dashboard: serves the oRPC API at `/rpc/*` and `/
 ## Dev
 - `pnpm dev` — devsess runner (`scripts/dev.ts`): `bun --watch`, sticky port named `engine`, session-local `TRACES_DB` unless `TRACES_DB`/`DATABASE_URL` is set
 - `pnpm start` — `bun src/main.ts`
-- `pnpm test` — bun tests (stores run on temp SQLite; the Postgres store has no tests)
+- `pnpm test` — bun tests (stores run on temp SQLite; the Postgres store tests run only when `DATABASE_URL` is set)
 - `pnpm check:tsc` / `pnpm check:lint`
 - Migrations: `pnpm exec drizzle-kit generate --config drizzle.config.<sqlite|pg>.ts` (or `pnpm db:generate:sqlite|pg`) from this directory. Use `pnpm exec`, not bun, to run drizzle-kit. Commit rules: `code-db-isolate-migrations` skill
 
 ## Architecture
-- `src/server.ts` — `HttpRouter` layers: `/health`, `/rpc/*`; services and ingester wired here. Env: `PORT` (4000), `HOST` (`0.0.0.0`), `JAEGER_URL`, `TRACES_DB` (`./traces.db`), `DATABASE_URL` (presence selects Postgres), `INGEST_*`
+- `src/server.ts` — `HttpRouter` layers: `/health`, `/rpc/*`; services and both ingesters wired here. Env: `PORT` (4000), `HOST` (`0.0.0.0`), `JAEGER_URL`, `TRACES_DB` (`./traces.db`), `DATABASE_URL` (presence selects Postgres), `INGEST_*`, `STATS_*`
 - `src/rpc/` — `implement(contract)` router, error mapping, fetch-handler glue
+- `src/db/` — SQLite and Postgres client layers shared by every store
 - `src/{traces,issues,home}/` — one router per contract domain; `issues/` also holds the stores, ingester, and `drizzle/schema-{sqlite,pg}.ts`
+- `src/service-stats/` — per-service trace counts, error counts and latency sketches in minute/hour buckets, fed by `stats-ingester.ts` on its own fiber (separate from the issue ingester so serial `getTrace` calls can't stretch its cadence). `stats-step.ts` holds the pure step-size/interval helpers; stores and `drizzle/schema-{sqlite,pg}.ts` sit alongside
 - `drizzle/{sqlite,pg}/` — generated migrations, applied by the store layers at boot
 
 ## Gotchas

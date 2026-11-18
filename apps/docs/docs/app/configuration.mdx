@@ -7,7 +7,7 @@ traces runs as two processes: the **engine** (Jaeger access, issue store, ingest
 
 | Process | Variables |
 |---------|-----------|
-| engine | `PORT`, `HOST`, `JAEGER_URL`, `DATABASE_URL`, `TRACES_DB`, `INGEST_*` |
+| engine | `PORT`, `HOST`, `JAEGER_URL`, `DATABASE_URL`, `TRACES_DB`, `INGEST_*`, `STATS_*` |
 | web | `ENGINE_URL`, `PORT`, `HOST` |
 
 ## Engine variables
@@ -54,9 +54,25 @@ The ingester runs inside the engine from startup. it polls Jaeger on a fixed int
 | `INGEST_TRACE_LIMIT` | number | `200` | max traces fetched per service per poll window (maps to Jaeger `query.num_traces`); hitting this limit triggers adaptive window shrink |
 | `INGEST_OVERLAP_MS` | number | `60000` (1 m) | how far before the cursor each poll reaches back, to catch late-arriving spans |
 | `INGEST_INITIAL_LOOKBACK_MS` | number | `3600000` (1 h) | how far back the first poll reaches for a service that has no cursor yet |
-| `INGEST_EXCLUDE_SERVICES` | string | `jaeger` | comma-separated service names the ingester skips. the default keeps Jaeger's own self-traces out. set to `none` to exclude nothing (an empty value is treated as unset and falls back to the default) |
+| `INGEST_EXCLUDE_SERVICES` | string | `jaeger` | comma-separated service names both the ingester and the stats ingester skip. the default keeps Jaeger's own self-traces out. set to `none` to exclude nothing (an empty value is treated as unset and falls back to the default) |
 
 `INGEST_TRACE_LIMIT` caps how many traces are fetched in a single Jaeger request. when the response hits the limit, the ingester halves the next window to avoid missing spans — see [concepts → ingester polling](/docs/app/concepts#ingester-polling-and-cursors) for details.
+
+### Stats ingester
+
+a second loop inside the engine counts traces per service (totals, errors, latency) for the dashboard. it walks forward from a per-service cursor in steps, shrinking the step when Jaeger returns the trace limit. timing values are in milliseconds.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `STATS_POLL_INTERVAL_MS` | number | `10000` (10 s) | how often the stats loop runs |
+| `STATS_SETTLE_MS` | number | `60000` (1 m) | how far behind now the stats loop stops, so late spans have arrived |
+| `STATS_TRACE_LIMIT` | number | `1000` | max traces per Jaeger request; reaching it makes the step shrink |
+| `STATS_MIN_STEP_MS` | number | `5000` (5 s) | smallest step; if it still reaches the limit, the traces returned are counted as a sample |
+| `STATS_MAX_STEP_MS` | number | `900000` (15 m) | largest step after consecutive clean results |
+| `STATS_INITIAL_LOOKBACK_MS` | number | `3600000` (1 h) | how far back a service with no cursor starts counting |
+| `STATS_TICK_TRACE_BUDGET` | number | `5000` | traces Jaeger may return per run across all services (at least `STATS_TRACE_LIMIT` per service); the loop resumes next run |
+| `STATS_MINUTE_RETENTION_MS` | number | `93600000` (26 h) | how long per-minute buckets are kept |
+| `STATS_HOUR_RETENTION_MS` | number | `1296000000` (15 d) | how long per-hour buckets are kept |
 
 ## Web app variables
 
