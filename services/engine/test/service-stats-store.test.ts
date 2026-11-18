@@ -229,6 +229,27 @@ function storeSuite(
       expect(result.buckets).toEqual([]);
     });
 
+    test('a long-running trace stays deduped after prune because seen rows age by counting time', async () => {
+      const buckets = await run(
+        Effect.gen(function* () {
+          const store = yield* ServiceStatsStore;
+          yield* commit('api', [trace('long', NOW - HOUR_MS)]);
+          yield* commit('api', [], { newForwardMs: NOW + MINUTE_MS });
+          yield* store.prune({
+            nowMs: NOW,
+            minuteRetentionMs: 26 * HOUR_MS,
+            hourRetentionMs: 15 * DAY_MS,
+          });
+          yield* commit('api', [trace('long', NOW - HOUR_MS)], {
+            newForwardMs: NOW + 2 * MINUTE_MS,
+          });
+          return yield* minuteBuckets();
+        }),
+      );
+
+      expect(buckets.reduce((sum, row) => sum + row.traceCount, 0)).toBe(1);
+    });
+
     test('merges counts and sketches into minute and hour rows', async () => {
       const minuteStart = NOW - 30 * MINUTE_MS;
       const first = [
@@ -390,10 +411,12 @@ function storeSuite(
       const result = await run(
         Effect.gen(function* () {
           const store = yield* ServiceStatsStore;
+          yield* commit('api', [trace('seen-old', NOW - 20 * MINUTE_MS)], {
+            newForwardMs: NOW - 20 * MINUTE_MS,
+          });
           yield* commit('api', [
             trace('past-minute', NOW - 27 * HOUR_MS),
             trace('past-hour', NOW - 16 * DAY_MS),
-            trace('seen-old', NOW - 20 * MINUTE_MS),
             trace('seen-recent', NOW - 5 * MINUTE_MS),
             ...Array.from({ length: 8 }, (_, i) =>
               errorTrace(`min-a-${i}`, recentMinute + i * 1000),

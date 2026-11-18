@@ -114,7 +114,7 @@ function makeSqliteStatsStore(db: SqliteDb) {
                   batch.map((trace) => ({
                     service: input.service,
                     traceId: trace.traceId,
-                    startMs: trace.startMs,
+                    countedMs: input.newForwardMs,
                   })),
                 )
                 .onConflictDoNothing()
@@ -333,7 +333,7 @@ function makeSqliteStatsStore(db: SqliteDb) {
             .delete(schema.serviceStatSeen)
             .where(
               lt(
-                schema.serviceStatSeen.startMs,
+                schema.serviceStatSeen.countedMs,
                 sql`(SELECT ${schema.serviceStatCursors.forwardMs} - ${SEEN_RETENTION_MS} FROM ${schema.serviceStatCursors} WHERE ${schema.serviceStatCursors.service} = ${schema.serviceStatSeen.service})`,
               ),
             );

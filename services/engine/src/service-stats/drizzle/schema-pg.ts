@@ -51,11 +51,11 @@ export const serviceStatSeen = pgTable(
   {
     service: text().notNull(),
     traceId: text().notNull(),
-    startMs: bigint({ mode: 'number' }).notNull(),
+    countedMs: bigint({ mode: 'number' }).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.service, table.traceId] }),
-    index('service_stat_seen_start_idx').on(table.startMs),
+    index('service_stat_seen_counted_idx').on(table.countedMs),
   ],
 );
 

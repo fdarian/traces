@@ -49,11 +49,11 @@ export const serviceStatSeen = sqliteTable(
   {
     service: text().notNull(),
     traceId: text().notNull(),
-    startMs: integer().notNull(),
+    countedMs: integer().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.service, table.traceId] }),
-    index('service_stat_seen_start_idx').on(table.startMs),
+    index('service_stat_seen_counted_idx').on(table.countedMs),
   ],
 );
 

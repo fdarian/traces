@@ -121,5 +121,10 @@ export const ServiceStatsStore = Context.Service<ServiceStatsStore>(
 
 export const MINUTE_MS = 60_000;
 export const HOUR_MS = 3_600_000;
+/**
+ * How far the cursor must advance past the step that counted a trace before its
+ * dedupe row is pruned. Keyed on the counting step, not the trace start, so a
+ * long-running trace is remembered as long as a short one.
+ */
 export const SEEN_RETENTION_MS = 10 * MINUTE_MS;
 export const ERROR_TRACES_PER_BUCKET = 6;
