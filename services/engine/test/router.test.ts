@@ -168,8 +168,24 @@ const seedServiceStats = () =>
       countedTrace('t4', seedNow - 100 * 60_000, 0),
     ]);
     yield* seed('payments', []);
+    yield* seed('edge-window', [
+      countedTrace('edge-prev', edgeBoundaryMinuteMs - 5 * MINUTE_MS, 0),
+      countedTrace('edge-boundary', edgeBoundaryMinuteMs + 10_000, 1),
+    ]);
     yield* seed('jaeger', [countedTrace('t5', seedNow - 60_000, 0)]);
   });
+
+// An unaligned window whose start falls mid-minute: 'edge-boundary' sits in
+// that minute, before the window start, so only one of the two windows may count it.
+const MINUTE_MS = 60_000;
+const edgeBoundaryMinuteMs =
+  Math.floor(seedNow / MINUTE_MS) * MINUTE_MS - 15 * MINUTE_MS;
+const edgeWindow = {
+  startTimeMin: new Date(edgeBoundaryMinuteMs + 30_000).toISOString(),
+  startTimeMax: new Date(
+    edgeBoundaryMinuteMs + 30_000 + 10 * MINUTE_MS,
+  ).toISOString(),
+};
 
 const homeWindow = {
   startTimeMin: new Date(seedNow - HOUR_MS).toISOString(),
@@ -353,8 +369,22 @@ describe('home.*', () => {
       coverage: 0,
       exact: true,
       collectingSince: null,
-      asOf: Date.parse(homeWindow.startTimeMin),
+      asOf:
+        Math.floor(Date.parse(homeWindow.startTimeMin) / MINUTE_MS) * MINUTE_MS,
     });
+  });
+
+  test('errorRate windows are minute-aligned so the previous window shares no bucket with the current one', async () => {
+    const result = await call(
+      router.home.errorRate,
+      { service: 'edge-window', ...edgeWindow },
+      { context },
+    );
+    // the boundary-minute error trace belongs to the current window only: counting
+    // it in both would give a previous rate of 50% and a delta of 50
+    expect(result.traceCount).toBe(1);
+    expect(result.errorRate).toBe(100);
+    expect(result.errorRateDelta).toBe(100);
   });
 
   test('serviceHealth lists non-excluded services by name', async () => {
@@ -364,13 +394,18 @@ describe('home.*', () => {
     const decoded = Schema.decodeUnknownSync(HomeServiceHealthResult)(result);
     expect(decoded.services.map((health) => health.service)).toEqual([
       'checkout',
+      'edge-window',
       'payments',
     ]);
-    const checkout = decoded.services[0];
+    const checkout = decoded.services.find(
+      (health) => health.service === 'checkout',
+    );
     expect(checkout?.traceCount).toBe(2);
     expect(checkout?.errorRate).toBe(50);
     expect(checkout?.p50).not.toBeNull();
-    const payments = decoded.services[1];
+    const payments = decoded.services.find(
+      (health) => health.service === 'payments',
+    );
     expect(payments?.traceCount).toBe(0);
     expect(payments?.p99).toBeNull();
   });

@@ -14,6 +14,20 @@ import { ServiceStatsStore } from '#/service-stats/store';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RECENT_ERROR_TRACE_LIMIT = 6;
 const PREVIOUS_WINDOW_MIN_COVERAGE = 0.9;
+const MINUTE_MS = 60_000;
+
+/**
+ * Stats buckets are whole minutes and range reads round outward, so unaligned
+ * bounds would make adjacent windows both read the minute they meet in.
+ */
+const floorToMinute = (ms: number) => Math.floor(ms / MINUTE_MS) * MINUTE_MS;
+const minuteAlignedWindow = (input: {
+  readonly startTimeMin: string;
+  readonly startTimeMax: string;
+}) => ({
+  startMs: floorToMinute(new Date(input.startTimeMin).getTime()),
+  endMs: floorToMinute(new Date(input.startTimeMax).getTime()),
+});
 
 const stats = os.home.stats.effect(function* ({ input }) {
   const store = yield* IssueStore;
@@ -70,8 +84,9 @@ const topIssues = os.home.topIssues.effect(function* ({ input }) {
 });
 
 const errorRate = os.home.errorRate.effect(function* ({ input }) {
-  const startMs = new Date(input.startTimeMin).getTime();
-  const endMs = new Date(input.startTimeMax).getTime();
+  const window = minuteAlignedWindow(input);
+  const startMs = window.startMs;
+  const endMs = window.endMs;
   const windowMs = endMs - startMs;
   const minuteRetentionMs = yield* minuteRetentionMsConfig;
   const nowMs = yield* Clock.currentTimeMillis;
@@ -117,9 +132,10 @@ const errorRate = os.home.errorRate.effect(function* ({ input }) {
 
 const serviceHealth = os.home.serviceHealth.effect(function* ({ input }) {
   const excludedServices = yield* excludedServicesConfig;
+  const window = minuteAlignedWindow(input);
   const stats = yield* readRangeStats({
-    startMs: new Date(input.startTimeMin).getTime(),
-    endMs: new Date(input.startTimeMax).getTime(),
+    startMs: window.startMs,
+    endMs: window.endMs,
     nowMs: yield* Clock.currentTimeMillis,
     minuteRetentionMs: yield* minuteRetentionMsConfig,
     include: (service) => !excludedServices.has(service),
@@ -144,10 +160,11 @@ const recentErrorTraces = os.home.recentErrorTraces.effect(function* ({
   input,
 }) {
   const store = yield* ServiceStatsStore;
+  const window = minuteAlignedWindow(input);
   const rows = yield* store.recentErrorTraces({
     service: input.service,
-    fromMs: new Date(input.startTimeMin).getTime(),
-    toMs: new Date(input.startTimeMax).getTime(),
+    fromMs: window.startMs,
+    toMs: window.endMs,
     limit: RECENT_ERROR_TRACE_LIMIT,
   });
   return rows.map((row) => ({
