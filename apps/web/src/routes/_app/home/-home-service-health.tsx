@@ -1,5 +1,6 @@
 import type { ServiceHealth } from '@traces/contract';
 import { Duration } from '@traces/react';
+import { formatClock, SAMPLED_TITLE, traceCountLabel } from '#/lib/utils';
 
 export function HomeServiceHealth(props: {
   readonly health: ReadonlyArray<ServiceHealth>;
@@ -38,12 +39,22 @@ export function HomeServiceHealth(props: {
     );
   }
 
+  const collectingStarts = props.health.flatMap((svc) =>
+    svc.collectingSince === null ? [] : [svc.collectingSince],
+  );
+  const collectingSince =
+    collectingStarts.length > 0 ? Math.max(...collectingStarts) : null;
+
   return (
     <div className="rounded border border-border-subtle bg-bg-subtle">
-      <div className="flex h-8 items-center justify-between border-b border-border-default px-3 text-label uppercase tracking-wide text-text-tertiary">
-        <span>service health</span>
-        <span className="text-text-tertiary">sampled</span>
+      <div className="flex h-8 items-center border-b border-border-default px-3 text-label uppercase tracking-wide text-text-tertiary">
+        service health
       </div>
+      {collectingSince !== null && (
+        <div className="flex h-6 items-center border-b border-border-subtle px-3 text-label text-text-tertiary">
+          collecting since {formatClock(collectingSince)}
+        </div>
+      )}
       <div className="flex h-8 items-center gap-3 border-b border-border-default px-3 text-label uppercase tracking-wide text-text-tertiary">
         <span className="min-w-0 flex-1 text-left">service</span>
         <span className="w-16 shrink-0 text-right">traces</span>
@@ -85,8 +96,11 @@ function ServiceRow(props: {
         {health.service}
       </span>
 
-      <span className="w-16 shrink-0 text-right font-data text-data text-text-primary">
-        {health.traceCount}
+      <span
+        className="w-16 shrink-0 text-right font-data text-data text-text-primary"
+        title={health.exact ? undefined : SAMPLED_TITLE}
+      >
+        {traceCountLabel(health.traceCount, health.exact)}
       </span>
 
       <span
@@ -105,10 +119,6 @@ function ServiceRow(props: {
 
       <span className="w-20 shrink-0 text-right font-data text-data text-text-primary">
         {health.p99 !== null ? <Duration ms={health.p99} /> : '—'}
-      </span>
-
-      <span className="shrink-0 text-label text-text-tertiary">
-        from last {health.traceCount} traces
       </span>
     </button>
   );

@@ -12,9 +12,9 @@ import {
   GlobalFilterSchema,
   normalizeGlobalFilters,
 } from '#/lib/filters';
+import { formatClock, SAMPLED_TITLE, traceCountLabel } from '#/lib/utils';
 import { HomeRecentTraces } from './home/-home-recent-traces.js';
 import { HomeServiceHealth } from './home/-home-service-health.js';
-import { HomeStatRow } from './home/-home-stat-row.js';
 import { HomeTopIssues } from './home/-home-top-issues.js';
 import { HomeTrendChart } from './home/-home-trend-chart.js';
 import { SectionErrorBoundary } from './home/-section-error-boundary.js';
@@ -64,10 +64,12 @@ export const Route = createFileRoute('/_app/')({
           })
         : Promise.resolve(null);
 
-    const serviceHealthPromise = engine.home.serviceHealth({
-      startTimeMin: timeRange.startTimeMin,
-      startTimeMax: timeRange.startTimeMax,
-    });
+    const serviceHealthPromise = engine.home
+      .serviceHealth({
+        startTimeMin: timeRange.startTimeMin,
+        startTimeMax: timeRange.startTimeMax,
+      })
+      .then((result) => result.services);
 
     const recentTracesPromise =
       service !== undefined
@@ -237,9 +239,7 @@ function HomePage() {
                   value={errorRate !== null ? errorRate.errorRate : null}
                   delta={errorRate !== null ? errorRate.errorRateDelta : null}
                   format="percent"
-                  sampleSize={
-                    errorRate !== null ? errorRate.sampledTraceCount : null
-                  }
+                  coverage={errorRate}
                 />
               )}
             </Await>
@@ -341,10 +341,15 @@ function StatCell(props: {
   readonly value: number | null;
   readonly delta: number | null;
   readonly format: 'count' | 'percent';
-  readonly sampleSize?: number | null;
+  readonly coverage?: {
+    readonly traceCount: number;
+    readonly exact: boolean;
+    readonly collectingSince: number | null;
+  } | null;
 }) {
   const value = props.value;
   const delta = props.delta;
+  const coverage = props.coverage;
 
   const formattedValue = (() => {
     if (value === null) return '—';
@@ -386,9 +391,14 @@ function StatCell(props: {
           </span>
         )}
       </div>
-      {props.sampleSize !== undefined && props.sampleSize !== null && (
-        <span className="text-label text-text-tertiary">
-          from last {props.sampleSize} traces
+      {coverage !== undefined && coverage !== null && (
+        <span
+          className="text-label text-text-tertiary"
+          title={coverage.exact ? undefined : SAMPLED_TITLE}
+        >
+          {traceCountLabel(coverage.traceCount, coverage.exact)} traces
+          {coverage.collectingSince !== null &&
+            ` · collecting since ${formatClock(coverage.collectingSince)}`}
         </span>
       )}
     </div>

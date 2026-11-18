@@ -112,9 +112,9 @@ the `occurrences` table keeps `traceId` and `spanId`, so issue history and links
 these are real constraints, not roadmap items. understanding them helps you interpret the data correctly.
 :::
 
-**sampled metrics**
+**approximate latency and partial history**
 
-the home error rate and per-service latency percentiles (p50 / p95 / p99) are computed from a sample of recent traces — the same `INGEST_TRACE_LIMIT`-capped request used by the ingester, not a dedicated metrics or SPM pipeline. they are directional indicators, not exact measurements. Jaeger's SPM endpoint (`/api/metrics/…`) requires Prometheus or Elasticsearch storage that lightweight setups typically do not have.
+the home error rate and per-service latency percentiles (p50 / p95 / p99) come from the engine's own stats ingester, not a dedicated metrics or SPM pipeline. percentiles come from a log-scale sketch and are accurate to about ±2 %. a service's stats start when the engine first sees it (the initial lookback is `STATS_INITIAL_LOOKBACK_MS`, 1 h by default), so longer ranges show "collecting since" until enough history exists. when a short interval still hits `STATS_TRACE_LIMIT`, its traces are counted as a sample and the dashboard prefixes counts with `≥`. Jaeger's SPM endpoint (`/api/metrics/…`) requires Prometheus or Elasticsearch storage that lightweight setups typically do not have.
 
 **no upstream pagination**
 

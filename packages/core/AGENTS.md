@@ -1,6 +1,6 @@
 # @traces/core
 
-Pure domain layer: the trace/issue model, the `TraceBackend` interface, the Jaeger adapter, and helpers (fingerprinting, message normalization, percentiles, service health). It owns no persistence — the issue store lives in `services/engine`.
+Pure domain layer: the trace/issue model, the `TraceBackend` interface, the Jaeger adapter, and helpers (fingerprinting, message normalization). It owns no persistence — the issue store lives in `services/engine`.
 
 ## Stack
 - Effect.ts (4.1.4)
