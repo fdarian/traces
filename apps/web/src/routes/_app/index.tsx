@@ -12,7 +12,11 @@ import {
   GlobalFilterSchema,
   normalizeGlobalFilters,
 } from '#/lib/filters';
-import { formatClock, SAMPLED_TITLE, traceCountLabel } from '#/lib/utils';
+import {
+  formatClock,
+  SAMPLED_TITLE,
+  traceCountLabel,
+} from '#/routes/_app/home/-trace-count';
 import { HomeRecentTraces } from './home/-home-recent-traces.js';
 import { HomeServiceHealth } from './home/-home-service-health.js';
 import { HomeTopIssues } from './home/-home-top-issues.js';

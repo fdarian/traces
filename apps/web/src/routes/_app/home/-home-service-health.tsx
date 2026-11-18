@@ -1,6 +1,10 @@
 import type { ServiceHealth } from '@traces/contract';
 import { Duration } from '@traces/react';
-import { formatClock, SAMPLED_TITLE, traceCountLabel } from '#/lib/utils';
+import {
+  formatClock,
+  SAMPLED_TITLE,
+  traceCountLabel,
+} from '#/routes/_app/home/-trace-count';
 
 export function HomeServiceHealth(props: {
   readonly health: ReadonlyArray<ServiceHealth>;
