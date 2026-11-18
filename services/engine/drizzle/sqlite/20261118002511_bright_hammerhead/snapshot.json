@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "0fbb59be-6117-4300-8712-8bbb7ef38e80",
+  "id": "c18f7e58-7b05-4126-bf92-bf03d619f80e",
   "prevIds": [
     "cb01d855-5938-481a-bf3b-ab02e312f704"
   ],
@@ -500,7 +500,7 @@
     },
     {
       "table": "service_stat_seen",
-      "name": "startMs",
+      "name": "countedMs",
       "type": "integer",
       "notNull": true,
       "autoincrement": false,
@@ -652,10 +652,10 @@
     },
     {
       "table": "service_stat_seen",
-      "name": "service_stat_seen_start_idx",
+      "name": "service_stat_seen_counted_idx",
       "columns": [
         {
-          "value": "startMs",
+          "value": "countedMs",
           "isExpression": false
         }
       ],

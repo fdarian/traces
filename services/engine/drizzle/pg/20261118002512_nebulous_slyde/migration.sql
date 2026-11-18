@@ -37,10 +37,10 @@ CREATE TABLE "service_stat_gaps" (
 CREATE TABLE "service_stat_seen" (
 	"service" text,
 	"traceId" text,
-	"startMs" bigint NOT NULL,
+	"countedMs" bigint NOT NULL,
 	CONSTRAINT "service_stat_seen_pkey" PRIMARY KEY("service","traceId")
 );
 --> statement-breakpoint
 CREATE INDEX "service_error_traces_service_start_idx" ON "service_error_traces" ("service","startMs");--> statement-breakpoint
 CREATE INDEX "service_stat_gaps_service_end_idx" ON "service_stat_gaps" ("service","endMs");--> statement-breakpoint
-CREATE INDEX "service_stat_seen_start_idx" ON "service_stat_seen" ("startMs");
+CREATE INDEX "service_stat_seen_counted_idx" ON "service_stat_seen" ("countedMs");

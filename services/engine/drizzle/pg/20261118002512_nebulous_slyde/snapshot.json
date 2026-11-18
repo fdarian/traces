@@ -2,7 +2,7 @@
   "type": "diff",
   "version": "9",
   "dialect": "postgres",
-  "id": "12fbcae1-1ccc-418e-beb5-20422fd1409b",
+  "id": "21b3ddc0-e1da-46a0-af3d-66ac75a3db34",
   "prevIds": [
     "e998ac59-5877-4b02-8dc3-d4d177d47088"
   ],
@@ -150,18 +150,18 @@
         "index",
         "public",
         "service_stat_seen",
-        "service_stat_seen_start_idx"
+        "service_stat_seen_counted_idx"
       ],
       "writes": [
-        "s|idx|public.service_stat_seen_start_idx",
-        "n|idx|public.service_stat_seen_start_idx",
-        "e|idx|public.service_stat_seen_start_idx",
-        "n|rel|public.service_stat_seen_start_idx"
+        "s|idx|public.service_stat_seen_counted_idx",
+        "n|idx|public.service_stat_seen_counted_idx",
+        "e|idx|public.service_stat_seen_counted_idx",
+        "n|rel|public.service_stat_seen_counted_idx"
       ],
       "reads": [
         "n|tbl|public.service_stat_seen",
         "n|sch|public",
-        "n|col|public.service_stat_seen.startMs"
+        "n|col|public.service_stat_seen.countedMs"
       ]
     }
   ],
@@ -600,7 +600,7 @@
       "row": {
         "schema": "public",
         "table": "service_stat_seen",
-        "name": "startMs",
+        "name": "countedMs",
         "type": "bigint",
         "typeSchema": null,
         "notNull": true,
@@ -678,11 +678,11 @@
       "row": {
         "schema": "public",
         "table": "service_stat_seen",
-        "name": "service_stat_seen_start_idx",
+        "name": "service_stat_seen_counted_idx",
         "nameExplicit": true,
         "columns": [
           {
-            "value": "startMs",
+            "value": "countedMs",
             "isExpression": false,
             "asc": true,
             "nullsFirst": false,
