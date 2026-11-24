@@ -2,7 +2,7 @@
 
 ## Output
 
-stdout: compact lines on a TTY; NDJSON when piped or with `--json` (one record per line: LogRecord, Deployment, error group, TraceRow or SpanRow; fields are stable). When older records exist, stderr gets `more: <full command with --cursor>`. Errors are one stderr line plus a `hint:` line (parse errors too, with no usage block). Empty results print a note on stderr, with the retention caveat when the window starts past it, and exit 0.
+stdout: compact text by default, piped or on a terminal; `--json` prints JSON instead, one record per line (LogRecord, Deployment, error group, TraceRow or SpanRow; fields are stable), except `traces services`, which prints one document. A terminal only adds color and shortens ids to 8 characters (`trace=a042d0ba`, `a042d0ba…`); piped text has no ANSI codes and full ids. When older records exist, stderr gets `more: <full command with --cursor>`. Errors are one stderr line plus a `hint:` line (parse errors too, with no usage block). Empty results print a note on stderr, with the retention caveat when the window starts past it, and exit 0.
 
 ## Exit codes
 

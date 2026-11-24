@@ -1,6 +1,6 @@
 # Commands: output and notes
 
-Per-command record shape and behaviour notes. Flags and examples: `traces <command> --help`. On a pipe or with `--json`, stdout is NDJSON.
+Per-command record shape and behaviour notes. Flags and examples: `traces <command> --help`. Output is text by default; `--json` prints one JSON object per line (`services`: one document). On a terminal the text gains color and 8-character ids (`trace=` and `…` forms below); piped, ids are full.
 
 ## traces init
 
@@ -20,7 +20,7 @@ traces init --jaeger-url https://jaeger.example.com --jaeger-header X-API-Key=ke
 
 ### Output
 
-with --dry-run, the traces.json content (pretty-printed JSON, not NDJSON). Otherwise one record per service {path, service, ref} (NDJSON when piped, lines on a TTY; init has no --json flag); stderr has `wrote <path>` and the next steps.
+with --dry-run, the traces.json content (pretty-printed JSON, not NDJSON). Otherwise one text line per service with a log provider (`<service> <provider> project <id>`; init has no --json flag); stderr has `wrote <path>` and the next steps.
 
 ### Notes
 
@@ -39,14 +39,14 @@ Usage: `traces services [flags]`
 
 ### Output
 
-one record per service: configPath, configSource (flag | repo | global), project, matchedBy (flag | path | git | repo), service, provider (absent for trace-only), ref (the config entry), auth {status: ok | missing | invalid, detail} (absent for trace-only), otelService (the Jaeger service name; set when the project has tracing or the entry names one), tracing (when the project has it) {provider, url, headers[], check}, check being {status: reachable, services[]} (the Jaeger service names) | {status: unauthorized} | {status: error, detail}, and otelInJaeger (boolean, only when check is reachable): whether Jaeger reports the otelService. Each tracing header is {name, source: literal | env | keychain, ref, status: present | missing | error, detail?}; literal headers carry no ref or status. Values are never printed.
+`--json` prints one document: configPath, configSource (flag | repo | global), project, matchedBy (flag | path | git | repo), services[] {service, provider (absent for trace-only), ref (the config entry), otelService (the Jaeger service name; set when the project has tracing or the entry names one), otelInJaeger (boolean, only when check is reachable: whether Jaeger reports the otelService; `false` means not reporting)}, providers[] {provider, scope (`project <id>` or `team <id>`), auth {status: ok | missing | invalid, detail}} (one per Railway project, Vercel team or project), and tracing (when the project has it) {provider, url, headers[], check}, check being {status: reachable, services[]} (the Jaeger service names) | {status: unauthorized} | {status: error, detail}. Each tracing header is {name, source: literal | env | keychain, ref, status: present | missing | error, detail?}; literal headers carry no ref or status. Values are never printed.
 
 ### Notes
 
 - Run this first when another command says no project matches or auth fails.
 - Auth check: Railway reads the configured project through `railway.auth`, whether a token or the `railway` CLI login (`missing` without `railway.auth`, its secret, or the `railway` binary; `invalid` when Railway rejects the token or the login); Vercel validates the token against the API.
-- With a `tracing` block, one `/api/v3/services` request (5s timeout) checks the URL: reachable, unauthorized (credentials rejected), or error with a short reason (an HTML page, a redirect, a missing secret, no answer). A failed check still exits 0. A service whose otelService Jaeger does not report is marked `traces – not reporting` in the TTY view and has `otelInJaeger: false` in `--json`; a wrong name there is why `traces spans` comes back empty. Projects without `tracing` make no request.
-- On a TTY the output is two sections after a header naming the project and config file. `Services`: one row per configured service (key, provider and Railway environment, and a `traces ✓` / `traces – not reporting` column when Jaeger answered). `Providers`: one line per Railway project, Vercel team or project and for Jaeger, with the auth or reachability result, the fix on the next line when something is wrong, and the Jaeger services no configured service maps to. Ids and the full config entry are only in `--json`.
+- With a `tracing` block, one `/api/v3/services` request (5s timeout) checks the URL: reachable, unauthorized (credentials rejected), or error with a short reason (an HTML page, a redirect, a missing secret, no answer). A failed check still exits 0. A service whose otelService Jaeger does not report shows `– no spans` in the TRACES column and has `otelInJaeger: false` in `--json`; a wrong name there is why `traces spans` comes back empty. Projects without `tracing` make no request.
+- Text output is two sections after a header naming the project and config file. `Services`: a header row `SERVICE PROVIDER [PROJECT] ENV TRACES`, then one row per configured service (key, provider, the Railway environment, and when Jaeger answered a TRACES cell: `✓`, `✓ <otelService>` when the Jaeger name differs from the key, or `– no spans`). PROJECT (first 8 characters of the Railway project id) appears only when the services span more than one Railway project; a trace-only service reads `traces only`. `Providers`: one line per Railway project, Vercel team or project and for Jaeger, with the auth or reachability result, the fix on the next line when something is wrong, and the Jaeger services no configured service maps to. The full config entry is only in `--json`.
 - Tracing: `traces secret set <ref>` fixes a missing keychain secret; an env header is `missing` until that variable is exported. Reading keychain entries here may prompt macOS for access.
 
 ## traces logs
@@ -59,7 +59,7 @@ Usage: `traces logs [service] [flags]`
 
 ### Output
 
-LogRecord per line: ts, appTs?, service, provider, environment, deploymentId?, source (runtime | build | http), level (debug | info | warn | error | fatal | unknown), message, request? {method, path, status, durationMs?, requestId?}, traceId?, spanId?, attrs. Compact text on a TTY.
+LogRecord per line: ts, appTs?, service, provider, environment, deploymentId?, source (runtime | build | http), level (debug | info | warn | error | fatal | unknown), message, request? {method, path, status, durationMs?, requestId?}, traceId?, spanId?, attrs. Text line: `<time> <LEVEL> <service> [<deployment id>] [trace=<id>] <message>`, continuation lines indented.
 
 ### Notes
 
@@ -73,11 +73,11 @@ LogRecord per line: ts, appTs?, service, provider, environment, deploymentId?, s
 - Railway has no fatal level, so --level fatal alone matches nothing there.
 - --cursor continues the original window; repeat the original flags exactly as the `more:` line prints them.
 - --grep is a literal substring match on the message only: it is not a regex and does not search attrs. Matching is case-insensitive on Railway and Vercel.
-- `ts` is the provider receive (ingest) time: on Railway it runs a few seconds after the app logged the line. Paging, --since and --until use it. `appTs` (ISO, UTC) is the app's own time, set only when `attrs.timestamp` is an ISO-8601 string with a zone (a number is left in attrs); use it to line a log up against span times from `traces trace`. TTY lines show `ts`.
+- `ts` is the provider receive (ingest) time: on Railway it runs a few seconds after the app logged the line. Paging, --since and --until use it. `appTs` (ISO, UTC) is the app's own time, set only when `attrs.timestamp` is an ISO-8601 string with a zone (a number is left in attrs); use it to line a log up against span times from `traces trace`. Text lines show `ts`.
 - `attrs` values are JSON-decoded once on Railway: Effect loggers' `annotations` and `spans` are real objects, and a value that is not valid JSON stays a string.
-- `traceId` / `spanId` are set only when the record carries a 32-hex trace id (16-hex span id): Vercel from the request row, Railway from `attrs.annotations.traceId` or a top-level `traceId` / `trace_id` attr. A TTY shows `trace=<first 8>`.
-- On a TTY, times are UTC with a Z suffix, and the date is prefixed when the window spans more than one day. JSON `ts` is always the full ISO timestamp.
-- -f prints `following <service> ...` once on stderr; stdout stays NDJSON.
+- `traceId` / `spanId` are set only when the record carries a 32-hex trace id (16-hex span id): Vercel from the request row, Railway from `attrs.annotations.traceId` or a top-level `traceId` / `trace_id` attr. Text shows `trace=<id>`: the full id piped, the first 8 characters on a terminal.
+- In text, times are UTC with a Z suffix, and the date is prefixed when the window spans more than one day. JSON `ts` is always the full ISO timestamp.
+- -f prints `following <service> ...` once on stderr; stdout stays text (or JSON with `--json`).
 
 ## traces deploys
 
@@ -108,7 +108,7 @@ Usage: `traces errors [service] [flags]`
 
 ### Output
 
-one group per line: source (logs | traces), fingerprint, service, count (events: the lines of one multi-line error, such as a stack trace, count once), lines (log groups only: the log lines behind count, which is what grep counts), firstSeen, lastSeen, deploymentIds (always empty for trace groups), sample (full message of the first occurrence; `<exception type>: <message>` for traces), traceId (optional; the first record that carries one, or the newest sampled trace), traceIds (trace groups only: up to 3 distinct traces), provider (railway | vercel | jaeger), environment (absent for trace groups), hint, partial, countedSince (only when partial), and with `--since deploy` `new`, `deploymentId`, `deployedAt`. `hint` is a ready-to-run `traces logs ... --grep` command for a log group and `traces trace <traceId>` for a trace group. On a TTY, trace groups carry a `[traces]` marker, and a log group whose lines differ from its count reads `14x (96 lines)`.
+one group per line: source (logs | traces), fingerprint, service, count (events: the lines of one multi-line error, such as a stack trace, count once), lines (log groups only: the log lines behind count, which is what grep counts), firstSeen, lastSeen, deploymentIds (always empty for trace groups), sample (full message of the first occurrence; `<exception type>: <message>` for traces), traceId (optional; the first record that carries one, or the newest sampled trace), traceIds (trace groups only: up to 3 distinct traces), provider (railway | vercel | jaeger), environment (absent for trace groups), hint, partial, countedSince (only when partial), and with `--since deploy` `new`, `deploymentId`, `deployedAt`. `hint` is a ready-to-run `traces logs ... --grep` command for a log group and `traces trace <traceId>` for a trace group. In text, trace groups carry a `[traces]` marker, and a log group whose lines differ from its count reads `14x (96 lines)`; deployment ids and `trace=` are full piped, 8 characters on a terminal.
 
 ### Notes
 
@@ -132,7 +132,7 @@ Usage: `traces spans [service] [flags]`
 
 ### Output
 
-TraceRow per line: traceId, rootService, rootOperation, startTs (ISO, nanosecond precision), durationMs, spanCount, errorSpanCount (0 when the backend reports none), services[]. On a TTY: `02:55:09.123Z 412ms ERR×2 mockingbird-web GET /api/x  a042d0ba…` (ERR×n only when the trace has error spans; the last column is the first 8 of the traceId).
+TraceRow per line: traceId, rootService, rootOperation, startTs (ISO, nanosecond precision), durationMs, spanCount, errorSpanCount (0 when the backend reports none), services[]. Text: `02:55:09.123Z 412ms ERR×2 mockingbird-web GET /api/x  a042d0ba…` (ERR×n only when the trace has error spans; the last column is the traceId: full piped, first 8 characters plus `…` on a terminal).
 
 ### Notes
 
@@ -143,7 +143,7 @@ TraceRow per line: traceId, rootService, rootOperation, startTs (ISO, nanosecond
 - --attr is searched through Jaeger's legacy `/api/traces`, because the v3 API ignores attribute filters. If tracing.url does not serve it (404 or 405), the CLI reads the window through /api/v3/traces and keeps the traces where some span or its resource has the attribute with exactly that string value; that reads whole traces, so it is slower. Like --errors it reads pages until --limit matches are found, the window ends, or 1000 traces were read; at the cap stderr says how many traces were scanned and `more:` continues the scan.
 - An empty result exits 0 and says so on stderr. An empty result for a service Jaeger has never seen usually means a wrong otelService: `traces services` shows the name searched.
 - Jaeger keeps traces only as long as its storage backend does (in-memory Jaeger drops them on restart): an empty old window is not proof of no traffic.
-- On a TTY, times are UTC with a Z suffix, and the date is prefixed when the window spans more than one day. JSON `startTs` is always the full ISO timestamp.
+- In text, times are UTC with a Z suffix, and the date is prefixed when the window spans more than one day. JSON `startTs` is always the full ISO timestamp.
 
 ## traces trace
 
@@ -153,14 +153,14 @@ Usage: `traces trace <traceId> [flags]`
 
 ### Output
 
-SpanRow per line, depth first with children by start time: traceId, spanId, parentSpanId (absent on roots), depth, service, name, kind (server | client | producer | consumer | internal | unspecified), startTs (ISO, nanosecond precision), durationMs, status (ok | error | unset), statusMessage (optional), attrs (span attributes as an object), events[] ({name, ts, attrs}), exception ({type, message, stacktrace?}, optional; moved out of the first exception event, so events does not repeat the stacktrace; later exception events stay in events). On a TTY: an indented tree, `+offset duration service name`, offset from the earliest span; error spans add ERR, then the exception type and message and its top 3 stack frames.
+SpanRow per line, depth first with children by start time: traceId, spanId, parentSpanId (absent on roots), depth, service, name, kind (server | client | producer | consumer | internal | unspecified), startTs (ISO, nanosecond precision), durationMs, status (ok | error | unset), statusMessage (optional), attrs (span attributes as an object), events[] ({name, ts, attrs}), exception ({type, message, stacktrace?}, optional; moved out of the first exception event, so events does not repeat the stacktrace; later exception events stay in events). Text: an indented tree, `+offset duration service name`, offset from the earliest span; error spans add ERR, then the exception type and message and its top 3 stack frames.
 
 ### Notes
 
 - A span whose parent is not in the trace (partly retained or still arriving) is a root at depth 0 and keeps its parentSpanId.
 - Span durations are whole milliseconds: spans under 1ms show 0ms.
 - A trace Jaeger does not have exits 1 with a hint. Jaeger keeps traces only as long as its storage backend does (in-memory Jaeger drops them on restart), so an old id may have expired.
-- A string that is not a trace id exits 2 before any request; the 8-char `trace=` prefix on a log line is too short, use `traces logs <service> --json` for the full id.
+- A string that is not a trace id exits 2 before any request; the 8-character `trace=` id a terminal shows is too short; piped (or with `--json`), `traces logs <service>` prints the full id.
 
 ## traces secret
 

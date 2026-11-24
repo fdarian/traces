@@ -16,4 +16,4 @@
 - The limits in `skills/core/references/output.md` are literal numbers, update them with `src/limits.ts`. A new reference file needs a line in the References list at the end of `SKILL.md`.
 - Railway GraphQL goes through one `RailwayClient` (`packages/core/src/logs/railway/`), picked by `resolveRailwayClient` in `src/resolve.ts` from the project's `railway.auth`: a `SecretRef` token uses `http-client.ts` (HTTP, bearer); `"cli"` uses `cli-client.ts` (spawns the logged-in `railway api`). The token is recommended for agents: the CLI login exposes every `railway` command. `traces services` probes either with the same project read (`checkRailwayAccess`).
 - Adapter tests, fixtures and fakes live in `packages/core/test`; config, matcher and output tests live here.
-- stdout carries one record type only (NDJSON when piped); hints and pagination go to stderr.
+- stdout carries one record type only (text by default, JSON only with `--json`; piped text is plain with full ids, a terminal adds color and 8-char ids); hints and pagination go to stderr.

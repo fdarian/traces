@@ -5,7 +5,7 @@ description: Read logs, deployments, traces and errors of a deployed service (Ve
 
 # traces
 
-Read logs, deployments and traces from Vercel, Railway and Jaeger through one CLI. stdout carries records (compact lines on a TTY, NDJSON when piped or with `--json`); notes, hints and pagination go to stderr.
+Read logs, deployments and traces from Vercel, Railway and Jaeger through one CLI. stdout carries records as compact text, the same layout piped or on a terminal; `--json` switches to JSON (one object per line); notes, hints and pagination go to stderr.
 
 Flags and examples: `traces <command> --help`. Deeper topics are listed under References at the end.
 
@@ -52,5 +52,5 @@ Load one with `traces skills get core --file references/<name>.md`, or all of th
 
 - `config`: the config file, project matching, services, and how provider credentials and tracing headers are set up
 - `tracing`: Jaeger tracing: `tracing.url`, service names, attribute search, error detection from spans
-- `output`: stdout vs stderr, NDJSON, exit codes, pagination, limits and provider retention
+- `output`: stdout text vs `--json`, stderr, exit codes, pagination, limits and provider retention
 - `commands`: per-command output fields and notes for every command
