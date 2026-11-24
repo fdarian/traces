@@ -578,7 +578,7 @@ describe('text output when piped', () => {
     expect(result.code).toBe(0);
     const lines = result.stdout.split('\n');
     expect(lines[0]).toBe(
-      `    1x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:10:00.000Z deploys ${LONG_DEPLOY} trace=${LONG_TRACE}`,
+      `1x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:10:00.000Z deploys ${LONG_DEPLOY} trace=${LONG_TRACE}`,
     );
     expect(lines[1]).toBe('       ECONNRESET talking to db');
     expect(result.stdout).not.toContain('\u001b');

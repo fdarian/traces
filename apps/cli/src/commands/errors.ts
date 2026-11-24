@@ -48,9 +48,34 @@ import {
 import { globalOptions, resolveErrorScope } from '#/resolve.ts';
 import { parseInstant, parseWhen } from '#/time.ts';
 
+const countText = (record: ErrorGroupRecord): string => {
+  const count = `${record.count}x`;
+  return record.lines === undefined || record.lines === record.count
+    ? count
+    : `${count} (${record.lines} lines)`;
+};
+
+/** Every group of one listing pads its count to this width so the columns after it line up. */
+export const countColumnWidth = (
+  records: ReadonlyArray<ErrorGroupRecord>,
+): number => Math.max(0, ...records.map((record) => countText(record).length));
+
+const toMilliseconds = (iso: string): string =>
+  iso.replace(/(\.\d{3})\d+/, '$1');
+
+/** The first non-empty sample line, plus how many more non-empty lines the sample has. */
+const sampleSummary = (sample: string): string => {
+  const extra =
+    sample.split('\n').filter((line) => line.trim() !== '').length - 1;
+  return extra > 0
+    ? `${firstLine(sample)} (+${extra} lines)`
+    : firstLine(sample);
+};
+
 export const formatGroup = (
   record: ErrorGroupRecord,
   terminal: boolean,
+  countWidth: number,
 ): string => {
   const deploys =
     record.deploymentIds.length === 0
@@ -62,13 +87,7 @@ export const formatGroup = (
       : ` trace=${displayId(record.traceId, terminal)}`;
   const origin = record.source === 'traces' ? ' [traces]' : '';
   const fresh = record.new === true ? ' NEW' : '';
-  const count = `${record.count}x`;
-  const counted =
-    record.lines === undefined || record.lines === record.count
-      ? count
-      : `${count} (${record.lines} lines)`;
-  const sample = record.sample.split('\n').slice(0, 1).join('');
-  return `${counted.padStart(6)} ${record.service}${origin}${fresh} ${record.firstSeen} -> ${record.lastSeen}${deploys}${trace}\n       ${sample}\n       $ ${record.hint}`;
+  return `${countText(record).padStart(countWidth)} ${record.service}${origin}${fresh} ${toMilliseconds(record.firstSeen)} -> ${toMilliseconds(record.lastSeen)}${deploys}${trace}\n       ${sampleSummary(record.sample)}\n       $ ${record.hint}`;
 };
 
 export interface ErrorGroupRecord extends ErrorGroup {
@@ -402,7 +421,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
       ['project', Option.getOrUndefined(args.project)],
       ['config', Option.getOrUndefined(args.config)],
     ] as const;
-    for (const group of groups) {
+    const groupRecords = groups.map((group): ErrorGroupRecord => {
       if (group.source === 'traces') {
         const traceId = group.traceId;
         if (traceId === undefined) {
@@ -410,18 +429,13 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
             `trace error group "${group.fingerprint}" has no trace`,
           );
         }
-        yield* emitRecord(
-          mode,
-          {
-            ...group,
-            provider: 'jaeger',
-            hint: commandLine('trace', [traceId], globalFlags),
-            ...partialFields(coverages, group),
-            ...deployFields(group),
-          } satisfies ErrorGroupRecord,
-          (group) => formatGroup(group, terminal),
-        );
-        continue;
+        return {
+          ...group,
+          provider: 'jaeger',
+          hint: commandLine('trace', [traceId], globalFlags),
+          ...partialFields(coverages, group),
+          ...deployFields(group),
+        };
       }
       const target = environments.get(group.service);
       if (target === undefined) {
@@ -440,17 +454,19 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
           ['grep', firstLine(group.sample).slice(0, 120) || undefined],
         ],
       );
-      yield* emitRecord(
-        mode,
-        {
-          ...group,
-          provider: target.provider,
-          environment: target.environment,
-          hint,
-          ...partialFields(coverages, group),
-          ...deployFields(group),
-        } satisfies ErrorGroupRecord,
-        (group) => formatGroup(group, terminal),
+      return {
+        ...group,
+        provider: target.provider,
+        environment: target.environment,
+        hint,
+        ...partialFields(coverages, group),
+        ...deployFields(group),
+      };
+    });
+    const countWidth = countColumnWidth(groupRecords);
+    for (const record of groupRecords) {
+      yield* emitRecord(mode, record, (group) =>
+        formatGroup(group, terminal, countWidth),
       );
     }
     if (groups.length === 0 && fetched.length + scanned.length > 0) {

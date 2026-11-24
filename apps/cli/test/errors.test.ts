@@ -4,7 +4,11 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type ErrorGroupRecord, formatGroup } from '#/commands/errors.ts';
+import {
+  countColumnWidth,
+  type ErrorGroupRecord,
+  formatGroup,
+} from '#/commands/errors.ts';
 import { legacyTraceOf, matchesLegacyTags } from './legacy-jaeger.ts';
 
 const BASE_NANO = 1_791_800_000_000_000_000n;
@@ -334,7 +338,7 @@ describe('traces errors text output when piped', () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toBe(
       [
-        `    3x web [traces] 2026-10-12T10:13:21.000000000Z -> 2026-10-12T10:13:23.000000000Z trace=${traceIdOf(3)}`,
+        `3x web [traces] 2026-10-12T10:13:21.000Z -> 2026-10-12T10:13:23.000Z trace=${traceIdOf(3)}`,
         '       TypeError: no user 341',
         `       $ traces trace ${traceIdOf(3)} --project app --config ${config}`,
         '',
@@ -352,7 +356,7 @@ describe('formatGroup', () => {
     count: 2,
     firstSeen: '2026-10-15T12:10:00.000Z',
     lastSeen: '2026-10-15T12:20:00.000Z',
-    sample: 'boom\nsecond line',
+    sample: 'boom\nsecond line\n\n  third line\n',
     deploymentIds: ['0123456789abcdef', 'fedcba9876543210'],
     traceId: 'a'.repeat(32),
     provider: 'railway',
@@ -361,22 +365,76 @@ describe('formatGroup', () => {
   } as ErrorGroupRecord;
 
   test('shortens deployment and trace ids on a terminal', () => {
-    expect(formatGroup(group, true)).toBe(
+    expect(formatGroup(group, true, 2)).toBe(
       [
-        '    2x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z deploys 01234567,fedcba98 trace=aaaaaaaa',
-        '       boom',
+        '2x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z deploys 01234567,fedcba98 trace=aaaaaaaa',
+        '       boom (+2 lines)',
         '       $ traces logs api',
       ].join('\n'),
     );
   });
 
   test('keeps them whole when not on a terminal', () => {
-    expect(formatGroup(group, false)).toBe(
+    expect(formatGroup(group, false, 2)).toBe(
       [
-        `    2x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z deploys 0123456789abcdef,fedcba9876543210 trace=${'a'.repeat(32)}`,
+        `2x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z deploys 0123456789abcdef,fedcba9876543210 trace=${'a'.repeat(32)}`,
+        '       boom (+2 lines)',
+        '       $ traces logs api',
+      ].join('\n'),
+    );
+  });
+
+  test('a single-line sample has no line count', () => {
+    expect(
+      formatGroup(
+        { ...group, sample: 'boom\n', deploymentIds: [], traceId: undefined },
+        false,
+        2,
+      ),
+    ).toBe(
+      [
+        '2x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z',
         '       boom',
         '       $ traces logs api',
       ].join('\n'),
     );
+  });
+
+  test('trims timestamps to milliseconds', () => {
+    const line = formatGroup(
+      {
+        ...group,
+        firstSeen: '2026-10-15T12:10:00.123456789Z',
+        lastSeen: '2026-10-15T12:20:00Z',
+        deploymentIds: [],
+        traceId: undefined,
+      },
+      false,
+      2,
+    ).split('\n')[0];
+    expect(line).toBe(
+      '2x api 2026-10-15T12:10:00.123Z -> 2026-10-15T12:20:00Z',
+    );
+  });
+
+  test('right-aligns the count column across the listing', () => {
+    const groups = [
+      { ...group, count: 64, deploymentIds: [], traceId: undefined },
+      {
+        ...group,
+        count: 33,
+        lines: 1770,
+        deploymentIds: [],
+        traceId: undefined,
+      },
+    ] as ReadonlyArray<ErrorGroupRecord>;
+    const width = countColumnWidth(groups);
+    expect(width).toBe('33x (1770 lines)'.length);
+    expect(
+      groups.map((record) => formatGroup(record, false, width).split('\n')[0]),
+    ).toEqual([
+      '             64x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z',
+      '33x (1770 lines) api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z',
+    ]);
   });
 });
