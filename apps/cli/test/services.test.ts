@@ -5,12 +5,16 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  groupProviders,
+  type ProviderEntry,
   renderServices,
-  type ServiceRecord,
+  type ServiceEntry,
   type ServicesView,
+  servicesDocument,
   type TracingCheck,
   type TracingStatus,
 } from '#/commands/services-view.ts';
+import { hasLogProvider } from '#/config.ts';
 import { makeStyle } from '#/style.ts';
 
 type Answer = (response: import('node:http').ServerResponse) => void;
@@ -93,12 +97,14 @@ const run = async (
     child.stderr.text(),
     child.exited,
   ]);
-  const records = stdout
-    .split('\n')
-    .filter((line) => line.startsWith('{'))
-    .map((line) => JSON.parse(line) as Record<string, unknown>);
-  return { stdout, stderr, code, records };
+  return { stdout, stderr, code };
 };
+
+const document = (stdout: string) =>
+  JSON.parse(stdout) as {
+    readonly services: ReadonlyArray<Record<string, unknown>>;
+    readonly providers: ReadonlyArray<unknown>;
+  } & Record<string, unknown>;
 
 const tracing = (headers?: unknown) => ({
   provider: 'jaeger',
@@ -107,19 +113,51 @@ const tracing = (headers?: unknown) => ({
 });
 
 describe('traces services tracing check', () => {
+  test('--json is one document on one line', async () => {
+    const result = await run(configFor(tracing()), ['--json']);
+    expect(result.code).toBe(0);
+    expect(result.stdout.endsWith('\n')).toBe(true);
+    expect(result.stdout.trimEnd()).not.toContain('\n');
+    const doc = document(result.stdout);
+    expect(Object.keys(doc)).toEqual([
+      'configPath',
+      'configSource',
+      'project',
+      'matchedBy',
+      'services',
+      'providers',
+      'tracing',
+    ]);
+    expect(doc).toMatchObject({
+      configSource: 'flag',
+      project: 'app',
+      matchedBy: 'flag',
+    });
+    expect(doc.services.map((entry) => entry.service)).toEqual([
+      'web',
+      'worker',
+    ]);
+    expect(doc.providers).toEqual([]);
+    for (const entry of doc.services) {
+      expect(entry).not.toHaveProperty('configPath');
+      expect(entry).not.toHaveProperty('tracing');
+    }
+  });
+
   test('reachable lists the Jaeger services and flags an otelService it does not report', async () => {
     const result = await run(configFor(tracing()), ['--json']);
     expect(result.code).toBe(0);
     expect(requests).toBe(1);
-    const [web, worker] = result.records;
-    expect(web?.tracing).toMatchObject({
+    const doc = document(result.stdout);
+    const [web, worker] = doc.services;
+    expect(doc.tracing).toMatchObject({
       check: { status: 'reachable', services: ['mockingbird-web', 'jaeger'] },
     });
     expect(web?.otelInJaeger).toBe(true);
     expect(worker?.otelInJaeger).toBe(false);
   });
 
-  test('a rejected credential reports unauthorized and still exits 0', async () => {
+  test('a rejected credential reports unauthorized, exits 0 and omits otelInJaeger', async () => {
     answer = (response) => response.writeHead(401).end('no');
     const result = await run(configFor(tracing()), ['--json']);
     answer = (response) =>
@@ -127,10 +165,13 @@ describe('traces services tracing check', () => {
         .writeHead(200, { 'content-type': 'application/json' })
         .end(JSON.stringify({ services: ['mockingbird-web', 'jaeger'] }));
     expect(result.code).toBe(0);
-    expect(result.records[0]?.tracing).toMatchObject({
+    const doc = document(result.stdout);
+    expect(doc.tracing).toMatchObject({
       check: { status: 'unauthorized' },
     });
-    expect(result.records[0]).not.toHaveProperty('otelInJaeger');
+    for (const entry of doc.services) {
+      expect(entry).not.toHaveProperty('otelInJaeger');
+    }
   });
 
   test('a web page instead of the API reports the response in the error', async () => {
@@ -143,8 +184,9 @@ describe('traces services tracing check', () => {
       response
         .writeHead(200, { 'content-type': 'application/json' })
         .end(JSON.stringify({ services: ['mockingbird-web', 'jaeger'] }));
-    const check = (result.records[0]?.tracing as { check: { detail: string } })
-      .check;
+    const check = (
+      document(result.stdout).tracing as { check: { detail: string } }
+    ).check;
     expect(check).toMatchObject({ status: 'error' });
     expect(check.detail).toContain('HTTP 200, text/html');
     expect(check.detail).toContain('<!doctype html>');
@@ -157,7 +199,7 @@ describe('traces services tracing check', () => {
       { TRACES_TEST_NO_SUCH_VAR: '' },
     );
     expect(requests).toBe(0);
-    expect(result.records[0]?.tracing).toMatchObject({
+    expect(document(result.stdout).tracing).toMatchObject({
       check: {
         status: 'error',
         detail: expect.stringContaining('TRACES_TEST_NO_SUCH_VAR'),
@@ -165,11 +207,25 @@ describe('traces services tracing check', () => {
     });
   });
 
-  test('a project without tracing makes no request and has no check', async () => {
+  test('a project without tracing makes no request and has no tracing key', async () => {
     const result = await run(configFor(undefined), ['--json']);
     expect(requests).toBe(0);
     expect(result.code).toBe(0);
-    expect(result.records[0]).not.toHaveProperty('tracing');
+    const doc = document(result.stdout);
+    expect(doc).not.toHaveProperty('tracing');
+    expect(doc.services).toEqual([
+      expect.objectContaining({
+        service: 'web',
+        otelService: 'mockingbird-web',
+      }),
+      expect.objectContaining({
+        service: 'worker',
+        otelService: 'mockingbird-worker',
+      }),
+    ]);
+    for (const entry of doc.services) {
+      expect(entry).not.toHaveProperty('otelInJaeger');
+    }
   });
 });
 
@@ -179,11 +235,7 @@ const plain = makeStyle(false);
 const railwayRecord = (
   service: string,
   otelService?: string,
-): ServiceRecord => ({
-  configPath: '/home/me/.config/traces/config.json',
-  configSource: 'global',
-  project: 'mockingbird',
-  matchedBy: 'flag',
+): ServiceEntry => ({
   service,
   provider: 'railway',
   ref: {
@@ -192,15 +244,23 @@ const railwayRecord = (
     service: `${service}-id`,
     ...(otelService === undefined ? {} : { otelService }),
   },
-  auth: { status: 'ok', detail: 'token from keychain mockingbird.railway' },
 });
 
-const traceOnlyRecord = (service: string): ServiceRecord => ({
-  ...railwayRecord(service),
-  provider: undefined,
-  auth: undefined,
+const traceOnlyRecord = (service: string): ServiceEntry => ({
+  service,
   ref: { otelService: service },
 });
+
+const railwayProvider = (auth: ProviderEntry['auth']): ProviderEntry => ({
+  provider: 'railway',
+  scope: `project ${PROJECT_ID}`,
+  auth,
+});
+
+const keychainAuth = {
+  status: 'ok',
+  detail: 'token from keychain mockingbird.railway',
+} as const;
 
 const jaeger = (
   check: TracingCheck,
@@ -220,8 +280,9 @@ const apiKey = {
 } as const;
 
 const viewOf = (
-  records: ReadonlyArray<ServiceRecord>,
+  services: ReadonlyArray<ServiceEntry>,
   tracing?: TracingStatus,
+  providers: ReadonlyArray<ProviderEntry> = [railwayProvider(keychainAuth)],
 ): ServicesView => ({
   project: 'mockingbird',
   configPath: '/home/me/.config/traces/config.json',
@@ -229,10 +290,83 @@ const viewOf = (
   matchedBy: 'flag',
   home: '/home/me',
   ...(tracing === undefined ? {} : { tracing }),
-  records,
+  services,
+  providers,
+});
+
+const vercelRecord = (project: string, team?: string): ServiceEntry => ({
+  service: project,
+  provider: 'vercel',
+  ref: {
+    provider: 'vercel',
+    project,
+    ...(team === undefined ? {} : { team }),
+  },
+});
+
+const mixedServices = [
+  railwayRecord('engine'),
+  railwayRecord('worker'),
+  vercelRecord('site-a', 'acme'),
+  vercelRecord('site-b', 'acme'),
+  vercelRecord('solo'),
+  traceOnlyRecord('api'),
+];
+
+const authChecksOf = (services: ReadonlyArray<ServiceEntry>) =>
+  services.flatMap((entry) =>
+    hasLogProvider(entry.ref) ? [{ ref: entry.ref, auth: keychainAuth }] : [],
+  );
+
+describe('groupProviders', () => {
+  test('groups by Railway project and Vercel team or project, in first-seen order', () => {
+    expect(groupProviders(authChecksOf(mixedServices))).toEqual([
+      {
+        provider: 'railway',
+        scope: `project ${PROJECT_ID}`,
+        auth: keychainAuth,
+      },
+      { provider: 'vercel', scope: 'team acme', auth: keychainAuth },
+      { provider: 'vercel', scope: 'project solo', auth: keychainAuth },
+    ]);
+  });
+
+  test('trace-only services contribute nothing', () => {
+    expect(groupProviders(authChecksOf([traceOnlyRecord('api')]))).toEqual([]);
+  });
+});
+
+describe('servicesDocument', () => {
+  test('is the config identity, services, providers and tracing in that order', () => {
+    const tracingStatus = jaeger({ status: 'reachable', services: ['engine'] });
+    const doc = servicesDocument(
+      viewOf([railwayRecord('engine')], tracingStatus),
+    );
+    expect(Object.keys(doc)).toEqual([
+      'configPath',
+      'configSource',
+      'project',
+      'matchedBy',
+      'services',
+      'providers',
+      'tracing',
+    ]);
+    expect(doc.providers).toEqual([railwayProvider(keychainAuth)]);
+    expect(doc.tracing).toBe(tracingStatus);
+    expect(doc).not.toHaveProperty('home');
+  });
+
+  test('has no tracing key without tracing', () => {
+    expect(
+      servicesDocument(viewOf([railwayRecord('engine')])),
+    ).not.toHaveProperty('tracing');
+  });
 });
 
 describe('renderServices', () => {
+  const servicesTable = (output: string): string =>
+    output.split('\n\n')[1] ?? '';
+
   test('lays out the header, a Services table and the Providers', () => {
     const output = renderServices(
       viewOf(
@@ -257,10 +391,11 @@ describe('renderServices', () => {
         'mockingbird  ~/.config/traces/config.json (global, picked by --project)',
         '',
         'Services',
-        '  engine  railway  production  traces ✓',
-        '  web     railway  production  traces ✓ as mockingbird-web',
-        '  worker  railway  production  traces – not reporting',
-        '  api     traces only          traces ✓',
+        '  SERVICE  PROVIDER  ENV         TRACES',
+        '  engine   railway   production  ✓',
+        '  web      railway   production  ✓ mockingbird-web',
+        '  worker   railway   production  – no spans',
+        '  api      traces only           ✓',
         '',
         'Providers',
         `  railway  project ${PROJECT_ID}  ✓ token from keychain mockingbird.railway`,
@@ -293,7 +428,7 @@ describe('renderServices', () => {
     );
   });
 
-  test('shows `as <otel>` only when the otel name differs from the key', () => {
+  test('shows the otel name only when it differs from the key', () => {
     const output = renderServices(
       viewOf(
         [railwayRecord('engine'), railwayRecord('web', 'mockingbird-web')],
@@ -304,11 +439,13 @@ describe('renderServices', () => {
       ),
       plain,
     );
-    expect(output).toContain('engine  railway  production  traces ✓\n');
-    expect(output).toContain('traces ✓ as mockingbird-web');
+    expect(output).toContain('  engine   railway   production  ✓\n');
+    expect(output).toContain(
+      '  web      railway   production  ✓ mockingbird-web',
+    );
   });
 
-  test('a service Jaeger does not report is marked not reporting', () => {
+  test('a service Jaeger does not report is marked no spans', () => {
     const output = renderServices(
       viewOf(
         [railwayRecord('worker', 'mockingbird-worker')],
@@ -316,7 +453,8 @@ describe('renderServices', () => {
       ),
       plain,
     );
-    expect(output).toContain('traces – not reporting');
+    expect(output).toContain('  worker   railway   production  – no spans');
+    expect(output).not.toContain('not reporting');
   });
 
   test('a trace-only service spans the provider and env columns', () => {
@@ -327,13 +465,14 @@ describe('renderServices', () => {
       ),
       plain,
     );
-    expect(output).toContain('  api     traces only          traces ✓');
+    expect(output).toContain('  api      traces only           ✓');
   });
 
   test('without a tracing block there is no traces column and no jaeger line', () => {
     const output = renderServices(viewOf([railwayRecord('engine')]), plain);
-    expect(output).toContain('  engine  railway  production\n');
-    expect(output).not.toContain('traces ');
+    expect(output).toContain('  SERVICE  PROVIDER  ENV\n');
+    expect(output).toContain('  engine   railway   production\n');
+    expect(output).not.toContain('TRACES');
     expect(output).not.toContain('jaeger');
   });
 
@@ -345,8 +484,10 @@ describe('renderServices', () => {
       ),
       plain,
     );
-    expect(output).toContain('  engine  railway  production\n');
-    expect(output).not.toContain('traces ✓');
+    expect(output).toContain('  SERVICE  PROVIDER  ENV\n');
+    expect(output).toContain('  engine   railway   production\n');
+    expect(output).not.toContain('TRACES');
+    expect(servicesTable(output)).not.toContain('✓');
     expect(output).toContain('✗ error');
     expect(output).toContain('\n           no answer within 5s');
     expect(
@@ -358,44 +499,33 @@ describe('renderServices', () => {
   });
 
   test('a provider without auth shows the status and the fix on the next line', () => {
-    const record: ServiceRecord = {
-      ...railwayRecord('engine'),
-      auth: {
-        status: 'missing',
-        detail: 'traces secret set mockingbird.railway',
-      },
-    };
-    const output = renderServices(viewOf([record]), plain);
+    const output = renderServices(
+      viewOf([railwayRecord('engine')], undefined, [
+        railwayProvider({
+          status: 'missing',
+          detail: 'traces secret set mockingbird.railway',
+        }),
+      ]),
+      plain,
+    );
     expect(output).toContain(
       `  railway  project ${PROJECT_ID}  ✗ missing\n           traces secret set mockingbird.railway`,
     );
   });
 
   test('one provider line per Railway project and per Vercel team or project', () => {
-    const vercel = (project: string, team?: string): ServiceRecord => ({
-      ...railwayRecord(project),
-      provider: 'vercel',
-      ref: {
-        provider: 'vercel',
-        project,
-        ...(team === undefined ? {} : { team }),
-      },
-      auth: { status: 'ok', detail: 'token from VERCEL_TOKEN' },
-    });
     const output = renderServices(
-      viewOf([
-        railwayRecord('engine'),
-        railwayRecord('worker'),
-        vercel('site-a', 'acme'),
-        vercel('site-b', 'acme'),
-        vercel('solo'),
-      ]),
+      viewOf(
+        mixedServices,
+        undefined,
+        groupProviders(authChecksOf(mixedServices)),
+      ),
       plain,
     );
     expect(output.split(`project ${PROJECT_ID}`).length).toBe(2);
     expect(output.match(/ team acme /g)?.length).toBe(1);
     expect(output).toContain('vercel   project solo');
-    expect(output).toContain('  site-a  vercel\n');
+    expect(output).toContain('  site-a   vercel\n');
   });
 
   test('a missing keychain header is red-flagged with a hint line', () => {
@@ -472,9 +602,99 @@ describe('renderServices', () => {
       plain,
     );
     expect(output).toContain('no services reporting yet');
-    expect(output).toContain(
-      'engine  railway  production  traces – not reporting',
-    );
+    expect(output).toContain('  engine   railway   production  – no spans');
+  });
+
+  describe('the Services table', () => {
+    const OTHER_PROJECT_ID = '9c1b7e20-5a44-4f0e-8a31-0d2f6b7c1e55';
+    const inOtherProject = (service: string): ServiceEntry => ({
+      service,
+      provider: 'railway',
+      ref: {
+        provider: 'railway',
+        project: OTHER_PROJECT_ID,
+        service: `${service}-id`,
+      },
+    });
+    test('one project: no PROJECT column, with tracing', () => {
+      const output = renderServices(
+        viewOf(
+          [railwayRecord('engine'), railwayRecord('web', 'mockingbird-web')],
+          jaeger({
+            status: 'reachable',
+            services: ['engine', 'mockingbird-web'],
+          }),
+        ),
+        plain,
+      );
+      expect(servicesTable(output)).toBe(
+        [
+          'Services',
+          '  SERVICE  PROVIDER  ENV         TRACES',
+          '  engine   railway   production  ✓',
+          '  web      railway   production  ✓ mockingbird-web',
+        ].join('\n'),
+      );
+    });
+
+    test('one project: no PROJECT column, without tracing', () => {
+      const output = renderServices(
+        viewOf([railwayRecord('engine'), railwayRecord('web')]),
+        plain,
+      );
+      expect(servicesTable(output)).toBe(
+        [
+          'Services',
+          '  SERVICE  PROVIDER  ENV',
+          '  engine   railway   production',
+          '  web      railway   production',
+        ].join('\n'),
+      );
+    });
+
+    test('several Railway projects add a PROJECT column of 8-character prefixes after PROVIDER', () => {
+      const services = [
+        railwayRecord('engine'),
+        inOtherProject('worker'),
+        vercelRecord('site'),
+        traceOnlyRecord('api'),
+      ];
+      const withTracing = renderServices(
+        viewOf(
+          services,
+          jaeger({
+            status: 'reachable',
+            services: ['engine', 'site', 'api'],
+          }),
+        ),
+        plain,
+      );
+      expect(servicesTable(withTracing)).toBe(
+        [
+          'Services',
+          '  SERVICE  PROVIDER  PROJECT   ENV         TRACES',
+          '  engine   railway   df361d61  production  ✓',
+          '  worker   railway   9c1b7e20  production  – no spans',
+          '  site     vercel                          ✓',
+          '  api      traces only                     ✓',
+        ].join('\n'),
+      );
+      expect(withTracing).toContain(`project ${PROJECT_ID}`);
+      expect(servicesTable(renderServices(viewOf(services), plain))).toContain(
+        '  SERVICE  PROVIDER  PROJECT   ENV\n',
+      );
+    });
+
+    test('piped output (style off) has no ANSI codes', () => {
+      const output = renderServices(
+        viewOf(
+          [railwayRecord('engine'), inOtherProject('worker')],
+          jaeger({ status: 'reachable', services: ['engine'] }),
+        ),
+        plain,
+      );
+      expect(output).not.toContain('\u001b');
+    });
   });
 
   test('an enabled style wraps the marks in ANSI codes', () => {
@@ -487,7 +707,8 @@ describe('renderServices', () => {
     );
     expect(output).toContain('\u001b[1mmockingbird\u001b[22m');
     expect(output).toContain('\u001b[32m✓\u001b[39m');
-    expect(output).toContain('\u001b[2mtraces – not reporting\u001b[22m');
+    expect(output).toContain('\u001b[2m– no spans\u001b[22m');
+    expect(output).toContain('\u001b[2mSERVICE');
     expect(output.replace(/\u001b\[[0-9;]*m/g, '')).toBe(
       renderServices(
         viewOf(

@@ -194,31 +194,28 @@ describe('config lookup precedence', () => {
       child.stderr.text(),
       child.exited,
     ]);
-    const record = stdout
-      .split('\n')
-      .filter((line) => line.startsWith('{'))
-      .map((line) => JSON.parse(line) as Record<string, unknown>)[0];
-    return { record, stderr, code };
+    const document = code === 0 ? (JSON.parse(stdout) as unknown) : undefined;
+    return { document, stderr, code };
   };
 
   test('the repo file is used from a subdirectory and reported as repo', async () => {
     const result = await runServices(join(repo, 'apps'));
     expect(result.code).toBe(0);
-    expect(result.record).toMatchObject({
+    expect(result.document).toMatchObject({
       configSource: 'repo',
       matchedBy: 'repo',
       project: 'mockingbird',
       configPath: join(repo, 'traces.json'),
-      otelService: 'repo-web',
+      services: [{ service: 'web', otelService: 'repo-web' }],
     });
   });
 
   test('--project skips the repo file for the global config', async () => {
     const result = await runServices(repo, ['--project', 'mockingbird']);
-    expect(result.record).toMatchObject({
+    expect(result.document).toMatchObject({
       configSource: 'global',
       matchedBy: 'flag',
-      otelService: 'global-web',
+      services: [{ service: 'web', otelService: 'global-web' }],
     });
   });
 
@@ -229,9 +226,9 @@ describe('config lookup precedence', () => {
       '--project',
       'mockingbird',
     ]);
-    expect(result.record).toMatchObject({
+    expect(result.document).toMatchObject({
       configSource: 'flag',
-      otelService: 'global-web',
+      services: [{ service: 'web', otelService: 'global-web' }],
     });
   });
 

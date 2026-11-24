@@ -1,6 +1,7 @@
 import type { AuthStatus } from '#/auth-status.ts';
 import {
   hasLogProvider,
+  type LogServiceConfig,
   otelServiceName,
   type ServiceConfig,
 } from '#/config.ts';
@@ -31,23 +32,22 @@ export interface TracingStatus {
   readonly check: TracingCheck;
 }
 
-/** The NDJSON record: its shape is the documented `--json` contract. */
-export interface ServiceRecord {
-  readonly configPath: string;
-  readonly configSource: ConfigSource;
-  readonly project: string;
-  readonly matchedBy: ResolvedProject['matchedBy'];
+export interface ServiceEntry {
   readonly service: string;
   /** Absent for trace-only services. */
   readonly provider?: 'vercel' | 'railway';
   readonly ref: ServiceConfig;
-  /** Absent for trace-only services. */
-  readonly auth?: AuthStatus;
   /** The Jaeger service name; set only when the project has tracing or the entry names one. */
   readonly otelService?: string;
   /** Set only when the tracing check reached Jaeger: whether it reports `otelService`. */
   readonly otelInJaeger?: boolean;
-  readonly tracing?: TracingStatus;
+}
+
+/** One credential check: a Railway project, or a Vercel team or project. */
+export interface ProviderEntry {
+  readonly provider: 'railway' | 'vercel';
+  readonly scope: string;
+  readonly auth: AuthStatus;
 }
 
 export type ServicesView = {
@@ -55,11 +55,50 @@ export type ServicesView = {
   readonly configPath: string;
   readonly configSource: ConfigSource;
   readonly matchedBy: ResolvedProject['matchedBy'];
-  /** Home directory, so the config path can be shown as `~/...`. */
+  /** Home directory, so the config path can be shown as `~/...`. Text view only. */
   readonly home: string;
+  readonly services: ReadonlyArray<ServiceEntry>;
+  readonly providers: ReadonlyArray<ProviderEntry>;
   readonly tracing?: TracingStatus;
-  readonly records: ReadonlyArray<ServiceRecord>;
 };
+
+const providerScope = (ref: LogServiceConfig): string =>
+  ref.provider === 'vercel' && ref.team !== undefined
+    ? `team ${ref.team}`
+    : `project ${ref.project}`;
+
+/** One entry per distinct provider scope, in first-seen order. */
+export const groupProviders = (
+  checks: ReadonlyArray<{
+    readonly ref: LogServiceConfig;
+    readonly auth: AuthStatus;
+  }>,
+): ReadonlyArray<ProviderEntry> => {
+  const grouped = new Map<string, ProviderEntry>();
+  for (const check of checks) {
+    const scope = providerScope(check.ref);
+    const key = `${check.ref.provider}:${scope}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        provider: check.ref.provider,
+        scope,
+        auth: check.auth,
+      });
+    }
+  }
+  return [...grouped.values()];
+};
+
+/** The `--json` document: its shape is the documented contract. */
+export const servicesDocument = (view: ServicesView) => ({
+  configPath: view.configPath,
+  configSource: view.configSource,
+  project: view.project,
+  matchedBy: view.matchedBy,
+  services: view.services,
+  providers: view.providers,
+  ...(view.tracing === undefined ? {} : { tracing: view.tracing }),
+});
 
 type Cell = { readonly plain: string; readonly render: string };
 
@@ -118,54 +157,92 @@ const describeMatch = (view: ServicesView): string => {
   }
 };
 
-const environmentOf = (record: ServiceRecord): string =>
+const environmentOf = (record: ServiceEntry): string =>
   hasLogProvider(record.ref) && record.ref.provider === 'railway'
     ? (record.ref.environment ?? 'production')
     : '';
+
+const PROJECT_ID_PREFIX = 8;
+
+const railwayProjectOf = (record: ServiceEntry): string | undefined =>
+  hasLogProvider(record.ref) && record.ref.provider === 'railway'
+    ? record.ref.project
+    : undefined;
 
 const servicesSection = (view: ServicesView, style: Style): string => {
   const reported =
     view.tracing?.check.status === 'reachable'
       ? view.tracing.check.services
       : undefined;
-  const logRows = view.records.filter((record) => hasLogProvider(record.ref));
-  const providerWidth = Math.max(
-    0,
-    ...logRows.map((record) => record.provider?.length ?? 0),
+  const logRows = view.services.filter((record) => hasLogProvider(record.ref));
+  const railwayProjects = new Set(
+    view.services.flatMap((record) => railwayProjectOf(record) ?? []),
   );
+  const showProject = railwayProjects.size > 1;
   const envWidth = Math.max(0, ...logRows.map((r) => environmentOf(r).length));
+  const widths = {
+    provider: Math.max(
+      'PROVIDER'.length,
+      ...logRows.map((record) => record.provider?.length ?? 0),
+    ),
+    project: PROJECT_ID_PREFIX,
+  };
 
-  const target = (record: ServiceRecord): Cell => {
+  /** PROVIDER, PROJECT and ENV share one cell so a trace-only row can span them. */
+  const targetOf = (
+    provider: string,
+    project: string,
+    environment: string,
+  ): string =>
+    [
+      provider.padEnd(widths.provider),
+      ...(showProject ? [project.padEnd(widths.project)] : []),
+      ...(envWidth === 0 ? [] : [environment]),
+    ]
+      .join(COLUMN_GAP)
+      .trimEnd();
+
+  const target = (record: ServiceEntry): Cell => {
     if (!hasLogProvider(record.ref) || record.provider === undefined) {
       return cell('traces only');
     }
-    const provider = record.provider.padEnd(providerWidth);
     return cell(
-      envWidth === 0
-        ? provider.trimEnd()
-        : `${provider}${COLUMN_GAP}${environmentOf(record)}`.trimEnd(),
+      targetOf(
+        record.provider,
+        (railwayProjectOf(record) ?? '').slice(0, PROJECT_ID_PREFIX),
+        environmentOf(record),
+      ),
     );
   };
 
-  const traces = (record: ServiceRecord): Cell | undefined => {
+  const traces = (record: ServiceEntry): Cell | undefined => {
     if (reported === undefined) return undefined;
     const otel = otelServiceName(record.service, record.ref);
     if (!reported.includes(otel)) {
-      const text = 'traces – not reporting';
+      const text = '– no spans';
       return cell(text, style.dim(text));
     }
-    const alias = otel === record.service ? '' : ` as ${otel}`;
-    return cell(`traces ✓${alias}`, `traces ${style.green('✓')}${alias}`);
+    const alias = otel === record.service ? '' : ` ${otel}`;
+    return cell(`✓${alias}`, `${style.green('✓')}${alias}`);
   };
 
-  const rows = view.records.map((record) => {
+  const headerCell = (text: string): Cell => cell(text, style.dim(text));
+  const headerRow = [
+    headerCell('SERVICE'),
+    headerCell(targetOf('PROVIDER', 'PROJECT', 'ENV')),
+    ...(reported === undefined ? [] : [headerCell('TRACES')]),
+  ];
+
+  const rows = view.services.map((record) => {
     const row = [cell(record.service), target(record)];
     const tracesCell = traces(record);
     return tracesCell === undefined ? row : [...row, tracesCell];
   });
   return [
     style.bold('Services'),
-    ...align(rows).lines.map((line) => `${SECTION_INDENT}${line}`),
+    ...align([headerRow, ...rows]).lines.map(
+      (line) => `${SECTION_INDENT}${line}`,
+    ),
   ].join('\n');
 };
 
@@ -197,31 +274,10 @@ const authLine = (
   };
 };
 
-const accountLines = (view: ServicesView, style: Style) => {
-  const seen = new Set<string>();
-  const lines: Array<ProviderLine> = [];
-  for (const record of view.records) {
-    if (
-      !hasLogProvider(record.ref) ||
-      record.provider === undefined ||
-      record.auth === undefined
-    ) {
-      continue;
-    }
-    const ref = record.ref;
-    const scope =
-      ref.provider === 'railway'
-        ? `project ${ref.project}`
-        : ref.team === undefined
-          ? `project ${ref.project}`
-          : `team ${ref.team}`;
-    const key = `${ref.provider}:${scope}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    lines.push(authLine(record.provider, scope, record.auth, style));
-  }
-  return lines;
-};
+const accountLines = (view: ServicesView, style: Style) =>
+  view.providers.map((entry) =>
+    authLine(entry.provider, entry.scope, entry.auth, style),
+  );
 
 const describeHeader = (header: HeaderStatus, style: Style) => {
   if (header.source === 'literal') {
@@ -282,7 +338,9 @@ const jaegerLine = (
   ];
   if (tracing.check.status === 'reachable') {
     const mapped = new Set(
-      view.records.map((record) => otelServiceName(record.service, record.ref)),
+      view.services.map((record) =>
+        otelServiceName(record.service, record.ref),
+      ),
     );
     const unmapped = tracing.check.services.filter(
       (service) => !mapped.has(service),

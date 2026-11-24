@@ -8,16 +8,20 @@ import {
   vercelAuthStatus,
 } from '#/auth-status.ts';
 import {
+  groupProviders,
   type HeaderStatus,
   renderServices,
   type SecretStatus,
-  type ServiceRecord,
+  type ServiceEntry,
+  type ServicesView,
+  servicesDocument,
   type TracingCheck,
   type TracingStatus,
 } from '#/commands/services-view.ts';
 import {
   type HeaderValue,
   hasLogProvider,
+  type LogServiceConfig,
   otelServiceName,
   type TracingConfig,
 } from '#/config.ts';
@@ -149,33 +153,25 @@ export const servicesCommand = Command.make(
         jaegerServices === undefined
           ? undefined
           : jaegerServices.includes(otelService);
-      const records: Array<ServiceRecord> = [];
-      const report = (record: ServiceRecord) =>
-        mode === 'ndjson'
-          ? Console.log(JSON.stringify(record))
-          : Effect.sync(() => {
-              records.push(record);
-            });
       const authCache = new Map<string, AuthStatus>();
+      const services: Array<ServiceEntry> = [];
+      const authChecks: Array<{
+        readonly ref: LogServiceConfig;
+        readonly auth: AuthStatus;
+      }> = [];
       for (const [service, ref] of Object.entries(resolved.project.services)) {
         const found = inJaeger(otelServiceName(service, ref));
-        const common = {
-          configPath: resolved.configPath,
-          configSource: resolved.configSource,
-          project: resolved.projectName,
-          matchedBy: resolved.matchedBy,
+        const entry: ServiceEntry = {
           service,
+          ...(hasLogProvider(ref) ? { provider: ref.provider } : {}),
           ref,
-          ...(tracing === undefined ? {} : { tracing }),
           ...(tracing === undefined && ref.otelService === undefined
             ? {}
             : { otelService: otelServiceName(service, ref) }),
           ...(found === undefined ? {} : { otelInJaeger: found }),
         };
-        if (!hasLogProvider(ref)) {
-          yield* report(common satisfies ServiceRecord);
-          continue;
-        }
+        services.push(entry);
+        if (!hasLogProvider(ref)) continue;
         const authKey =
           ref.provider === 'railway' ? `railway:${ref.project}` : 'vercel';
         let auth = authCache.get(authKey);
@@ -185,28 +181,23 @@ export const servicesCommand = Command.make(
             : vercelAuthStatus;
           authCache.set(authKey, auth);
         }
-        yield* report({
-          ...common,
-          provider: ref.provider,
-          auth,
-        } satisfies ServiceRecord);
+        authChecks.push({ ref, auth });
       }
-      if (mode === 'human') {
-        yield* Console.log(
-          renderServices(
-            {
-              project: resolved.projectName,
-              configPath: resolved.configPath,
-              configSource: resolved.configSource,
-              matchedBy: resolved.matchedBy,
-              home: homedir(),
-              ...(tracing === undefined ? {} : { tracing }),
-              records,
-            },
-            stdoutStyle(),
-          ),
-        );
-      }
+      const view: ServicesView = {
+        project: resolved.projectName,
+        configPath: resolved.configPath,
+        configSource: resolved.configSource,
+        matchedBy: resolved.matchedBy,
+        home: homedir(),
+        services,
+        providers: groupProviders(authChecks),
+        ...(tracing === undefined ? {} : { tracing }),
+      };
+      yield* Console.log(
+        mode === 'json'
+          ? JSON.stringify(servicesDocument(view))
+          : renderServices(view, stdoutStyle()),
+      );
     }),
 ).pipe(
   Command.withShortDescription(
