@@ -95,7 +95,7 @@ export const errorsOptions = {
   ...globalOptions,
   service: Argument.String('service').pipe(
     Argument.withDescription(
-      "service name from the config; omit to cover all services of the project. A name the config doesn't list is tried as a Railway service when all the config's Railway services share one Railway project and environment (stderr says so); otherwise exit 2",
+      "service name from the config; omit to cover all services of the project. A name the config doesn't list is looked up by Railway service id or name in every Railway project the config uses; exactly one match is used (stderr names the project), none or several exit 2 with the available services",
     ),
     Argument.optional,
   ),

@@ -197,7 +197,7 @@ describe('command documentation', () => {
     expect(config).toContain('traces.json');
     expect(config).toContain('configSource');
     expect(await help('logs')).toContain(
-      "A name the config doesn't list is tried as a Railway service",
+      "A name the config doesn't list is looked up by Railway service id or name",
     );
   });
 });
