@@ -302,8 +302,8 @@ describe('traces init', () => {
     expect(first.stderr).not.toContain('add "railway"');
     expect(first.stdout).toBe(
       [
-        'engine           railway  project proj-1',
-        'web              railway  project proj-1',
+        'engine           railway  engine production project proj-1',
+        'web              railway  web production project proj-1',
         '',
       ].join('\n'),
     );
@@ -374,6 +374,24 @@ describe('traces init', () => {
     const config = await decode(run.stdout);
     expect(Object.keys(config.services)).toEqual(['site']);
     expect(config.railway).toBeUndefined();
+  });
+
+  test('a written Vercel entry prints its team and project id', () => {
+    const repo = newRepo('vercel-rows');
+    link(join(repo, 'apps', 'web'), { projectName: 'web' });
+    link(join(repo, 'apps', 'personal'), {
+      projectName: 'personal',
+      orgId: 'user_9',
+    });
+    const run = traces(repo, [], 'unlinked');
+    expect(run.code).toBe(0);
+    expect(run.stdout).toBe(
+      [
+        `personal         vercel   project prj_${join(repo, 'apps', 'personal').length}`,
+        `web              vercel   team team_1 project prj_${join(repo, 'apps', 'web').length}`,
+        '',
+      ].join('\n'),
+    );
   });
 
   test('nothing discovered exits 1 with the link hint', () => {

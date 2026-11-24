@@ -20,7 +20,7 @@ traces init --jaeger-url https://jaeger.example.com --jaeger-header X-API-Key=ke
 
 ### Output
 
-with --dry-run, the traces.json content (pretty-printed JSON, not NDJSON). Otherwise one text line per service with a log provider (`<service> <provider> project <id>`; init has no --json flag); stderr has `wrote <path>` and the next steps.
+with --dry-run, the traces.json content (pretty-printed JSON, not NDJSON). Otherwise one text line per service with a log provider (Railway: `<key> railway <service> <environment|-> project <id>`; Vercel: `<key> vercel [team <team>] project <id>`; init has no --json flag); stderr has `wrote <path>` and the next steps.
 
 ### Notes
 

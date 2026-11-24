@@ -9,7 +9,7 @@ import {
 import { Console, Effect, Option } from 'effect';
 import { Command, Flag } from 'effect/cli';
 import { FileSystem } from 'effect/FileSystem';
-import type { LogServiceConfig } from '#/config.ts';
+import { hasLogProvider, type LogServiceConfig } from '#/config.ts';
 import { NothingDiscovered, UsageError } from '#/errors.ts';
 import {
   assignServiceKeys,
@@ -20,7 +20,7 @@ import {
   validateRepoConfig,
   vercelTeamOf,
 } from '#/init.ts';
-import { causeMessage, emitRecord, outputMode, renderError } from '#/output.ts';
+import { renderError } from '#/output.ts';
 import { readGitToplevel } from '#/project-match.ts';
 import { REPO_CONFIG_FILE } from '#/repo-config.ts';
 import { findVercelToken } from '#/vercel-token.ts';
@@ -137,11 +137,15 @@ const vercelCandidates = (toplevel: string) =>
     return candidates;
   });
 
-const formatService = (record: {
-  readonly service: string;
-  readonly ref: LogServiceConfig;
-}) =>
-  `${record.service.padEnd(16)} ${record.ref.provider.padEnd(8)} project ${record.ref.project}`;
+const formatService = (key: string, ref: LogServiceConfig) => {
+  const target =
+    ref.provider === 'railway'
+      ? `${ref.service} ${ref.environment ?? '-'} `
+      : ref.team === undefined
+        ? ''
+        : `team ${ref.team} `;
+  return `${key.padEnd(16)} ${ref.provider.padEnd(8)} ${target}project ${ref.project}`;
+};
 
 export const initCommand = Command.make('init', initOptions, (args) =>
   Effect.gen(function* () {
@@ -195,10 +199,9 @@ export const initCommand = Command.make('init', initOptions, (args) =>
     }
     yield* fileSystem.writeFileString(path, content);
     yield* Console.error(`wrote ${path}`);
-    const mode = outputMode(false);
-    for (const [service, ref] of Object.entries(config.services)) {
-      if (!('provider' in ref)) continue;
-      yield* emitRecord(mode, { path, service, ref }, formatService);
+    for (const [key, ref] of Object.entries(config.services)) {
+      if (!hasLogProvider(ref)) continue;
+      yield* Console.log(formatService(key, ref));
     }
     const secrets = keychainSecrets(config.tracing);
     yield* Console.error(
