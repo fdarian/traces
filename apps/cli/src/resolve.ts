@@ -56,9 +56,7 @@ export const globalOptions = {
     Flag.optional,
   ),
   json: Flag.Boolean('json').pipe(
-    Flag.withDescription(
-      'NDJSON output even on a TTY (it is the default when piped)',
-    ),
+    Flag.withDescription('JSON output, one object per line, instead of text'),
     Flag.withDefault(false),
   ),
 };

@@ -35,10 +35,16 @@ import {
 import { SHORTEST_RETENTION_MS } from '#/limits.ts';
 import { SecretMissing, SecretStoreError } from '#/secrets.ts';
 
-export type OutputMode = 'human' | 'ndjson';
+export type OutputMode = 'text' | 'json';
 
 export const outputMode = (jsonFlag: boolean): OutputMode =>
-  jsonFlag || process.stdout.isTTY !== true ? 'ndjson' : 'human';
+  jsonFlag ? 'json' : 'text';
+
+/**
+ * Read once per command and passed to the text formatters, which shorten
+ * values only for a terminal: piped text must carry full ids.
+ */
+export const stdoutIsTerminal = (): boolean => process.stdout.isTTY === true;
 
 export const EXIT_CODES = {
   ok: 0,
@@ -86,19 +92,36 @@ export const windowSpansDays = (start: Date, end: Date): boolean =>
 
 export const shortId = (id: string): string => id.slice(0, 8);
 
-export const formatLogLine = (record: LogRecord, withDate: boolean): string => {
+/** The 8-char prefix is for a terminal only; a pipe gets the id an agent can paste into the next command. */
+export const displayId = (id: string, terminal: boolean): string =>
+  terminal ? shortId(id) : id;
+
+export const formatLogLine = (
+  record: LogRecord,
+  withDate: boolean,
+  terminal: boolean,
+): string => {
   const deployment =
-    record.deploymentId === undefined ? '' : ` ${shortId(record.deploymentId)}`;
+    record.deploymentId === undefined
+      ? ''
+      : ` ${displayId(record.deploymentId, terminal)}`;
   const trace =
-    record.traceId === undefined ? '' : ` trace=${shortId(record.traceId)}`;
+    record.traceId === undefined
+      ? ''
+      : ` trace=${displayId(record.traceId, terminal)}`;
   const lines = record.message.split('\n');
   const head = `${formatTime(record.ts, withDate)} ${record.level.toUpperCase().padEnd(5)} ${record.service}${deployment}${trace} ${lines.slice(0, 1).join('')}`;
   return [head, ...lines.slice(1).map((line) => `    ${line}`)].join('\n');
 };
 
-export const formatTraceLine = (row: TraceRow, withDate: boolean): string => {
+export const formatTraceLine = (
+  row: TraceRow,
+  withDate: boolean,
+  terminal: boolean,
+): string => {
   const errors = row.errorSpanCount === 0 ? '' : ` ERR×${row.errorSpanCount}`;
-  return `${formatTime(row.startTs, withDate)} ${row.durationMs}ms${errors} ${row.rootService} ${row.rootOperation}  ${shortId(row.traceId)}…`;
+  const id = terminal ? `${shortId(row.traceId)}…` : row.traceId;
+  return `${formatTime(row.startTs, withDate)} ${row.durationMs}ms${errors} ${row.rootService} ${row.rootOperation}  ${id}`;
 };
 
 const STACK_FRAMES_SHOWN = 3;
@@ -152,20 +175,23 @@ export const formatSpanTree = (
   });
 };
 
-export const formatDeploymentLine = (deployment: Deployment): string => {
+export const formatDeploymentLine = (
+  deployment: Deployment,
+  terminal: boolean,
+): string => {
   const commit = deployment.commit;
   const sha = commit === undefined ? '-' : commit.sha.slice(0, 7);
   const branch = commit?.branch ?? '-';
   const message = commit?.message?.split('\n')[0] ?? '';
   const url = deployment.url === undefined ? '' : ` ${deployment.url}`;
-  return `${deployment.status.padEnd(9)} ${shortId(deployment.id)} ${sha} ${branch} ${formatTime(deployment.createdAt, true)} ${message}${url}`.trimEnd();
+  return `${deployment.status.padEnd(9)} ${displayId(deployment.id, terminal)} ${sha} ${branch} ${formatTime(deployment.createdAt, true)} ${message}${url}`.trimEnd();
 };
 
 export const emitRecord = <A>(
   mode: OutputMode,
   record: A,
-  human: (record: A) => string,
-) => Console.log(mode === 'ndjson' ? JSON.stringify(record) : human(record));
+  text: (record: A) => string,
+) => Console.log(mode === 'json' ? JSON.stringify(record) : text(record));
 
 export const hint = (message: string) => Console.error(message);
 

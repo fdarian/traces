@@ -81,6 +81,7 @@ const run = async (
       'app',
       '--config',
       config,
+      '--json',
       ...(command === 'errors' ? ['--source', 'logs'] : []),
     ],
     {

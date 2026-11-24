@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  type Deployment,
   JaegerBadResponse,
   type LogRecord,
   ProviderAuthError,
@@ -13,6 +14,7 @@ import { parseLevels } from '#/levels.ts';
 import {
   commandLine,
   EXIT_CODES,
+  formatDeploymentLine,
   formatLogLine,
   parseErrorPresenter,
   renderError,
@@ -269,24 +271,41 @@ describe('formatLogLine', () => {
     const lines = formatLogLine(
       record('2026-10-14T02:55:09.123Z'),
       false,
+      true,
     ).split('\n');
     expect(lines[0]).toBe('02:55:09.123Z ERROR api abcdef12 first');
     expect(lines[1]).toBe('    second');
   });
 
-  test('shows a short trace id when the record has one', () => {
+  test('shows a short trace id when the record has one on a terminal', () => {
     const line = formatLogLine(
       { ...record('2026-10-14T02:55:09.123Z'), traceId: 'a'.repeat(32) },
       false,
+      true,
     );
     expect(line.split('\n')[0]).toBe(
       '02:55:09.123Z ERROR api abcdef12 trace=aaaaaaaa first',
     );
   });
 
+  test('prints full deployment and trace ids when not on a terminal', () => {
+    const line = formatLogLine(
+      {
+        ...record('2026-10-14T02:55:09.123Z'),
+        traceId: 'a'.repeat(32),
+        deploymentId: 'abcdef1234567890',
+      },
+      false,
+      false,
+    );
+    expect(line.split('\n')[0]).toBe(
+      `02:55:09.123Z ERROR api abcdef1234567890 trace=${'a'.repeat(32)} first`,
+    );
+  });
+
   test('prints UTC regardless of the local zone and prefixes the date on request', () => {
     expect(
-      formatLogLine(record('2026-10-14T23:59:59.001+07:00'), true).split(
+      formatLogLine(record('2026-10-14T23:59:59.001+07:00'), true, true).split(
         '\n',
       )[0],
     ).toBe('10-14 16:59:59.001Z ERROR api abcdef12 first');
@@ -393,5 +412,27 @@ describe('parseErrorPresenter', () => {
         helpDoc,
       }).join('\n'),
     ).toContain('USAGE');
+  });
+});
+
+describe('formatDeploymentLine', () => {
+  const deployment = {
+    id: '0123456789abcdef',
+    status: 'ready',
+    createdAt: '2026-10-15T12:00:00.000Z',
+    commit: { sha: 'abcdef0123456', branch: 'main', message: 'fix\nbody' },
+    url: 'https://x.example.com',
+  } as Deployment;
+
+  test('shortens the id on a terminal', () => {
+    expect(formatDeploymentLine(deployment, true)).toBe(
+      'ready     01234567 abcdef0 main 10-15 12:00:00.000Z fix https://x.example.com',
+    );
+  });
+
+  test('keeps the full id when not on a terminal; the commit sha stays 7 characters', () => {
+    expect(formatDeploymentLine(deployment, false)).toBe(
+      'ready     0123456789abcdef abcdef0 main 10-15 12:00:00.000Z fix https://x.example.com',
+    );
   });
 });

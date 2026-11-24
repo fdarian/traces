@@ -25,14 +25,14 @@ export const traceCommand = Command.make('trace', traceOptions, (args) =>
     if (!TRACE_ID.test(args.traceId)) {
       return yield* new UsageError({
         message: `"${args.traceId}" is not a trace id`,
-        hint: 'pass the full 32-hex traceId (16-hex for legacy ids); `traces logs <service> --json` shows it as the top-level traceId, and the 8-char `trace=` prefix on a TTY is too short',
+        hint: 'pass the full 32-hex traceId (16-hex for legacy ids); `traces logs <service> --json` shows it as the top-level traceId, and `trace=` shows only 8 characters on a terminal, which is too short; piped output prints the full id',
       });
     }
     const resolved = yield* resolveProject(args);
     const backend = yield* resolveTraceBackend(resolved);
     const rows = toSpanRows(yield* backend.getTrace(args.traceId));
 
-    if (outputMode(args.json) === 'ndjson') {
+    if (outputMode(args.json) === 'json') {
       for (const row of rows) {
         yield* Console.log(JSON.stringify(row));
       }

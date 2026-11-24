@@ -26,6 +26,7 @@ import {
   type OutputMode,
   outputMode,
   retentionNoteFor,
+  stdoutIsTerminal,
   windowSpansDays,
 } from '#/output.ts';
 import { globalOptions, resolveService } from '#/resolve.ts';
@@ -55,6 +56,7 @@ const follow = (input: {
   readonly kind: 'http' | 'runtime';
   readonly query: LogQuery;
   readonly mode: OutputMode;
+  readonly terminal: boolean;
   readonly withDate: boolean;
   readonly initial: ReadonlyArray<LogRecord>;
 }) => {
@@ -79,7 +81,7 @@ const follow = (input: {
     );
     for (const record of fresh) {
       yield* emitRecord(input.mode, record, (r) =>
-        formatLogLine(r, input.withDate),
+        formatLogLine(r, input.withDate, input.terminal),
       );
     }
     const newest = fresh[fresh.length - 1];
@@ -229,6 +231,7 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
       cursor,
     };
     const mode = outputMode(args.json);
+    const terminal = stdoutIsTerminal();
     const page = yield* fetchPage(resolved.source, kind, query);
     const windowStart =
       since ??
@@ -238,7 +241,9 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
     const withDate =
       windowStart !== undefined && windowSpansDays(windowStart, until ?? now);
     for (const record of page.records) {
-      yield* emitRecord(mode, record, (r) => formatLogLine(r, withDate));
+      yield* emitRecord(mode, record, (r) =>
+        formatLogLine(r, withDate, terminal),
+      );
     }
     if (page.records.length === 0) {
       yield* emptyNotice(
@@ -285,6 +290,7 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
         kind,
         query,
         mode,
+        terminal,
         withDate,
         initial: page.records,
       });

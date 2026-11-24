@@ -29,6 +29,7 @@ import {
 } from '#/limits.ts';
 import {
   commandLine,
+  displayId,
   EXIT_CODES,
   ExitWith,
   emitRecord,
@@ -36,7 +37,7 @@ import {
   outputMode,
   renderError,
   retentionNoteFor,
-  shortId,
+  stdoutIsTerminal,
 } from '#/output.ts';
 import {
   collectCoverage,
@@ -46,13 +47,18 @@ import {
 import { globalOptions, resolveErrorScope } from '#/resolve.ts';
 import { parseInstant, parseWhen } from '#/time.ts';
 
-const formatGroup = (record: ErrorGroupRecord): string => {
+export const formatGroup = (
+  record: ErrorGroupRecord,
+  terminal: boolean,
+): string => {
   const deploys =
     record.deploymentIds.length === 0
       ? ''
-      : ` deploys ${record.deploymentIds.map(shortId).join(',')}`;
+      : ` deploys ${record.deploymentIds.map((id) => displayId(id, terminal)).join(',')}`;
   const trace =
-    record.traceId === undefined ? '' : ` trace=${shortId(record.traceId)}`;
+    record.traceId === undefined
+      ? ''
+      : ` trace=${displayId(record.traceId, terminal)}`;
   const origin = record.source === 'traces' ? ' [traces]' : '';
   const fresh = record.new === true ? ' NEW' : '';
   const count = `${record.count}x`;
@@ -64,7 +70,7 @@ const formatGroup = (record: ErrorGroupRecord): string => {
   return `${counted.padStart(6)} ${record.service}${origin}${fresh} ${record.firstSeen} -> ${record.lastSeen}${deploys}${trace}\n       ${sample}\n       $ ${record.hint}`;
 };
 
-interface ErrorGroupRecord extends ErrorGroup {
+export interface ErrorGroupRecord extends ErrorGroup {
   readonly provider: string;
   /** Absent for trace groups: Jaeger has no environment. */
   readonly environment?: string;
@@ -384,6 +390,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
       };
     };
     const mode = outputMode(args.json);
+    const terminal = stdoutIsTerminal();
     const groups = [
       ...groupErrors(coalesceMultiline(records)),
       ...scanned.flatMap((o) => o.scan.groups),
@@ -409,7 +416,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
             ...partialFields(coverages, group),
             ...deployFields(group),
           } satisfies ErrorGroupRecord,
-          formatGroup,
+          (group) => formatGroup(group, terminal),
         );
         continue;
       }
@@ -440,7 +447,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
           ...partialFields(coverages, group),
           ...deployFields(group),
         } satisfies ErrorGroupRecord,
-        formatGroup,
+        (group) => formatGroup(group, terminal),
       );
     }
     if (groups.length === 0 && fetched.length + scanned.length > 0) {

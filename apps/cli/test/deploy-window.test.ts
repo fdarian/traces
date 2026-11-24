@@ -231,8 +231,8 @@ afterAll(() => {
   jaeger.close();
 });
 
-const run = async (
-  command: 'errors' | 'logs',
+const spawnCli = async (
+  command: 'errors' | 'logs' | 'deploys',
   args: ReadonlyArray<string>,
   config: string,
   state: string,
@@ -264,11 +264,21 @@ const run = async (
     child.stderr.text(),
     child.exited,
   ]);
-  const rows = stdout
+  return { stdout, stderr, code };
+};
+
+const run = async (
+  command: 'errors' | 'logs',
+  args: ReadonlyArray<string>,
+  config: string,
+  state: string,
+) => {
+  const result = await spawnCli(command, [...args, '--json'], config, state);
+  const rows = result.stdout
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => JSON.parse(line) as Record<string, unknown>);
-  return { rows, stderr, code };
+  return { rows, stderr: result.stderr, code: result.code };
 };
 
 describe('traces errors --since deploy', () => {
@@ -456,5 +466,74 @@ describe('traces errors partial coverage', () => {
     expect(result.rows.every((row) => row.partial === false)).toBe(true);
     expect(result.rows.some((row) => 'countedSince' in row)).toBe(false);
     expect(result.stderr).not.toContain('counts cover');
+  });
+});
+
+describe('text output when piped', () => {
+  const LONG_DEPLOY = '0123456789abcdef0123456789abcdef';
+  const LONG_TRACE = 'd4'.repeat(16);
+  const stateWithLongIds = () =>
+    writeState(
+      'long-ids',
+      [deployment(LONG_DEPLOY, 'SUCCESS', DEPLOY_AT)],
+      [
+        {
+          ...logRow('2026-10-15T12:10:00.000Z', 'ECONNRESET talking to db'),
+          tags: { deploymentId: LONG_DEPLOY },
+          attributes: [{ key: 'traceId', value: LONG_TRACE }],
+        },
+      ],
+    );
+
+  test('logs prints the full deployment and trace ids, with no ANSI codes', async () => {
+    const result = await spawnCli(
+      'logs',
+      ['api', '--since', '2026-10-15T12:00:00Z', '--until', UNTIL],
+      configFor(false),
+      stateWithLongIds(),
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(
+      `12:10:00.000Z ERROR api ${LONG_DEPLOY} trace=${LONG_TRACE} ECONNRESET talking to db\n`,
+    );
+    expect(result.stdout).not.toContain('\u001b');
+    expect(result.stdout).not.toContain('…');
+  });
+
+  test('deploys prints the full deployment id', async () => {
+    const result = await spawnCli(
+      'deploys',
+      ['api'],
+      configFor(false),
+      stateWithLongIds(),
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(
+      `ready     ${LONG_DEPLOY} - - 10-15 12:00:00.000Z\n`,
+    );
+  });
+
+  test('errors prints the full deployment and trace ids of its groups', async () => {
+    const result = await spawnCli(
+      'errors',
+      [
+        'api',
+        '--since',
+        '2026-10-15T12:00:00Z',
+        '--until',
+        UNTIL,
+        '--source',
+        'logs',
+      ],
+      configFor(false),
+      stateWithLongIds(),
+    );
+    expect(result.code).toBe(0);
+    const lines = result.stdout.split('\n');
+    expect(lines[0]).toBe(
+      `    1x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:10:00.000Z deploys ${LONG_DEPLOY} trace=${LONG_TRACE}`,
+    );
+    expect(lines[1]).toBe('       ECONNRESET talking to db');
+    expect(result.stdout).not.toContain('\u001b');
   });
 });

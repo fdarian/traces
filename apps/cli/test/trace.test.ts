@@ -168,7 +168,11 @@ const tracingBlock = () => ({
   headers: { 'X-API-Key': 'secret-token' },
 });
 
-const run = async (traceId: string, config?: string) => {
+const spawnTrace = async (
+  traceId: string,
+  config?: string,
+  flags: ReadonlyArray<string> = [],
+) => {
   seen = [];
   const child = Bun.spawn(
     [
@@ -180,6 +184,7 @@ const run = async (traceId: string, config?: string) => {
       'app',
       '--config',
       config ?? configFor(tracingBlock()),
+      ...flags,
     ],
     { cwd: join(import.meta.dir, '..'), stdout: 'pipe', stderr: 'pipe' },
   );
@@ -187,6 +192,13 @@ const run = async (traceId: string, config?: string) => {
     child.stdout.text(),
     child.stderr.text(),
     child.exited,
+  ]);
+  return { stdout, stderr, code };
+};
+
+const run = async (traceId: string, config?: string) => {
+  const { stdout, stderr, code } = await spawnTrace(traceId, config, [
+    '--json',
   ]);
   const rows = stdout
     .split('\n')
@@ -267,6 +279,17 @@ describe('traces trace against a fake Jaeger', () => {
     rejectAuth = false;
     expect(result.code).toBe(3);
     expect(result.stderr).toContain('HTTP 401');
+  });
+});
+
+describe('traces trace text output when piped', () => {
+  test('prints the span tree with no ANSI codes', async () => {
+    const result = await spawnTrace(TRACE_ID);
+    expect(result.code).toBe(0);
+    expect(result.stdout).not.toContain('\u001b');
+    expect(result.stdout.split('\n')[0]).toBe(
+      '  +0ms 412ms mockingbird-web op-root',
+    );
   });
 });
 

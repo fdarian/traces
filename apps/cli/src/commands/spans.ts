@@ -27,6 +27,7 @@ import {
   emptyNotice,
   formatTraceLine,
   outputMode,
+  stdoutIsTerminal,
   windowSpansDays,
 } from '#/output.ts';
 import { globalOptions, resolveTraceService } from '#/resolve.ts';
@@ -244,10 +245,11 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
           );
 
     const mode = outputMode(args.json);
+    const terminal = stdoutIsTerminal();
     const withDate = windowSpansDays(since, until ?? now);
     for (const summary of result.traces) {
       yield* emitRecord(mode, toTraceRow(summary), (row) =>
-        formatTraceLine(row, withDate),
+        formatTraceLine(row, withDate, terminal),
       );
     }
     const searched = `${args.errors ? 'error traces' : 'traces'}${matchesAttributes ? ' matching --attr' : ''}`;

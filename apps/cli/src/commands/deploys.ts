@@ -9,6 +9,7 @@ import {
   emptyNotice,
   formatDeploymentLine,
   outputMode,
+  stdoutIsTerminal,
 } from '#/output.ts';
 import { globalOptions, resolveService } from '#/resolve.ts';
 
@@ -49,8 +50,11 @@ export const deploysCommand = Command.make('deploys', deploysOptions, (args) =>
       cursor,
     });
     const mode = outputMode(args.json);
+    const terminal = stdoutIsTerminal();
     for (const deployment of page.deployments) {
-      yield* emitRecord(mode, deployment, formatDeploymentLine);
+      yield* emitRecord(mode, deployment, (d) =>
+        formatDeploymentLine(d, terminal),
+      );
     }
     if (page.deployments.length === 0) {
       yield* emptyNotice(

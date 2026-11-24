@@ -4,6 +4,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { type ErrorGroupRecord, formatGroup } from '#/commands/errors.ts';
 import { legacyTraceOf, matchesLegacyTags } from './legacy-jaeger.ts';
 
 const BASE_NANO = 1_791_800_000_000_000_000n;
@@ -190,7 +191,7 @@ afterAll(() => {
   server.close();
 });
 
-const run = async (args: ReadonlyArray<string>, config: string) => {
+const spawnErrors = async (args: ReadonlyArray<string>, config: string) => {
   seen = [];
   const child = Bun.spawn(
     [
@@ -214,11 +215,16 @@ const run = async (args: ReadonlyArray<string>, config: string) => {
     child.stderr.text(),
     child.exited,
   ]);
-  const rows = stdout
+  return { stdout, stderr, code };
+};
+
+const run = async (args: ReadonlyArray<string>, config: string) => {
+  const result = await spawnErrors([...args, '--json'], config);
+  const rows = result.stdout
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => JSON.parse(line) as Record<string, unknown>);
-  return { rows, stderr, code };
+  return { rows, stderr: result.stderr, code: result.code };
 };
 
 const summarize = (rows: ReadonlyArray<Record<string, unknown>>) =>
@@ -305,6 +311,7 @@ describe('traces errors, trace side, against a fake Jaeger', () => {
         '2020-01-01T00:00:00Z',
         '--until',
         '2020-01-02T00:00:00Z',
+        '--json',
       ],
       { cwd: join(import.meta.dir, '..'), stdout: 'pipe', stderr: 'pipe' },
     );
@@ -316,5 +323,60 @@ describe('traces errors, trace side, against a fake Jaeger', () => {
     expect(code).toBe(0);
     expect(stdout).toBe('');
     expect(stderr).toContain('no error spans for web, x');
+  });
+});
+
+describe('traces errors text output when piped', () => {
+  test('trace groups print the full trace id and no ANSI codes', async () => {
+    failingService = undefined;
+    const config = configFor(true);
+    const result = await spawnErrors(['web'], config);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(
+      [
+        `    3x web [traces] 2026-10-12T10:13:21.000000000Z -> 2026-10-12T10:13:23.000000000Z trace=${traceIdOf(3)}`,
+        '       TypeError: no user 341',
+        `       $ traces trace ${traceIdOf(3)} --project app --config ${config}`,
+        '',
+      ].join('\n'),
+    );
+    expect(result.stdout).not.toContain('\u001b');
+  });
+});
+
+describe('formatGroup', () => {
+  const group = {
+    fingerprint: 'f',
+    service: 'api',
+    source: 'logs',
+    count: 2,
+    firstSeen: '2026-10-15T12:10:00.000Z',
+    lastSeen: '2026-10-15T12:20:00.000Z',
+    sample: 'boom\nsecond line',
+    deploymentIds: ['0123456789abcdef', 'fedcba9876543210'],
+    traceId: 'a'.repeat(32),
+    provider: 'railway',
+    hint: 'traces logs api',
+    partial: false,
+  } as ErrorGroupRecord;
+
+  test('shortens deployment and trace ids on a terminal', () => {
+    expect(formatGroup(group, true)).toBe(
+      [
+        '    2x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z deploys 01234567,fedcba98 trace=aaaaaaaa',
+        '       boom',
+        '       $ traces logs api',
+      ].join('\n'),
+    );
+  });
+
+  test('keeps them whole when not on a terminal', () => {
+    expect(formatGroup(group, false)).toBe(
+      [
+        `    2x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z deploys 0123456789abcdef,fedcba9876543210 trace=${'a'.repeat(32)}`,
+        '       boom',
+        '       $ traces logs api',
+      ].join('\n'),
+    );
   });
 });

@@ -187,7 +187,7 @@ const WINDOW = [
   '2026-10-30T00:00:00Z',
 ];
 
-const run = async (args: ReadonlyArray<string>, config?: string) => {
+const spawnSpans = async (args: ReadonlyArray<string>, config?: string) => {
   seen = [];
   const child = Bun.spawn(
     [
@@ -208,6 +208,14 @@ const run = async (args: ReadonlyArray<string>, config?: string) => {
     child.stderr.text(),
     child.exited,
   ]);
+  return { stdout, stderr, code };
+};
+
+const run = async (args: ReadonlyArray<string>, config?: string) => {
+  const { stdout, stderr, code } = await spawnSpans(
+    [...args, '--json'],
+    config,
+  );
   const rows = stdout
     .split('\n')
     .filter((line) => line !== '')
@@ -491,6 +499,20 @@ describe('parseDuration', () => {
   });
 });
 
+describe('traces spans text output when piped', () => {
+  test('prints the full trace id with no ellipsis and no ANSI codes', async () => {
+    const result = await spawnSpans(WINDOW);
+    expect(result.code).toBe(0);
+    const lines = result.stdout.split('\n').filter((line) => line !== '');
+    expect(lines).toHaveLength(12);
+    expect(lines[0]).toBe(
+      `10-12 10:13:20.000Z 412ms mockingbird-web GET /api/x  ${'00'.repeat(16)}`,
+    );
+    expect(result.stdout).not.toContain('\u001b');
+    expect(result.stdout).not.toContain('…');
+  });
+});
+
 describe('formatTraceLine', () => {
   const row = {
     traceId: 'a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e',
@@ -503,14 +525,20 @@ describe('formatTraceLine', () => {
     services: ['mockingbird-web'],
   };
 
+  test('prints the full id without an ellipsis when not on a terminal', () => {
+    expect(formatTraceLine(row, false, false)).toBe(
+      '02:55:09.123Z 412ms mockingbird-web GET /api/x  a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e',
+    );
+  });
+
   test('matches the documented line, with ERR only when there are error spans', () => {
-    expect(formatTraceLine({ ...row, errorSpanCount: 2 }, false)).toBe(
+    expect(formatTraceLine({ ...row, errorSpanCount: 2 }, false, true)).toBe(
       '02:55:09.123Z 412ms ERR×2 mockingbird-web GET /api/x  a042d0ba…',
     );
-    expect(formatTraceLine({ ...row, errorSpanCount: 0 }, false)).toBe(
+    expect(formatTraceLine({ ...row, errorSpanCount: 0 }, false, true)).toBe(
       '02:55:09.123Z 412ms mockingbird-web GET /api/x  a042d0ba…',
     );
-    expect(formatTraceLine(row, true)).toBe(
+    expect(formatTraceLine(row, true, true)).toBe(
       '10-12 02:55:09.123Z 412ms mockingbird-web GET /api/x  a042d0ba…',
     );
   });

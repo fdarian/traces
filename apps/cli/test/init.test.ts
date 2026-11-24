@@ -300,7 +300,14 @@ describe('traces init', () => {
     expect(first.stderr).toContain('commit traces.json');
     expect(first.stderr).toContain('railway.auth is "cli"');
     expect(first.stderr).not.toContain('add "railway"');
-    expect(first.stdout).toContain('engine');
+    expect(first.stdout).toBe(
+      [
+        'engine           railway  project proj-1',
+        'web              railway  project proj-1',
+        '',
+      ].join('\n'),
+    );
+    expect(first.stdout).not.toContain('\u001b');
     const written = readFileSync(path, 'utf8');
     expect((await decode(written)).railway).toEqual({ auth: 'cli' });
     expect(Object.keys((await decode(written)).services)).toEqual([
