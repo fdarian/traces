@@ -21,8 +21,16 @@ const run = async (...args: ReadonlyArray<string>) => {
 const REFERENCES = ['commands', 'config', 'output', 'tracing'];
 
 describe('traces skills list', () => {
-  test('prints NDJSON name and description when piped', async () => {
+  test('prints a text line per skill when piped', async () => {
     const result = await run();
+    expect(result.code).toBe(0);
+    expect(result.stdout.startsWith('core  ')).toBe(true);
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+    expect(() => JSON.parse(result.stdout)).toThrow();
+  });
+
+  test('--json prints NDJSON name and description', async () => {
+    const result = await run('list', '--json');
     expect(result.code).toBe(0);
     const records = result.stdout
       .trim()
@@ -37,15 +45,16 @@ describe('traces skills list', () => {
     ]);
   });
 
-  test('`list` and --json in either position match the bare command', async () => {
+  test('`list` in either position matches the bare command, and --json is unchanged', async () => {
     const bare = await run();
+    expect((await run('list')).stdout).toBe(bare.stdout);
+    const json = await run('--json');
+    expect(json.stdout).not.toBe(bare.stdout);
     for (const args of [
-      ['list'],
       ['list', '--json'],
       ['--json', 'list'],
-      ['--json'],
     ]) {
-      expect((await run(...args)).stdout).toBe(bare.stdout);
+      expect((await run(...args)).stdout).toBe(json.stdout);
     }
   });
 

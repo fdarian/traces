@@ -15,7 +15,7 @@
     "@effect/platform-bun": "catalog:",
     "@traces/core": "workspace:*",
     "effect": "catalog:",
-    "effect-cli-skills": "github:fdarian/effect-cli-skills#v0.1.0"
+    "effect-cli-skills": "github:fdarian/effect-cli-skills#3bbc96325813adb4526aadd03de172127866da38"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
