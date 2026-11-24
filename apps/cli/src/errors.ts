@@ -26,3 +26,12 @@ export class NothingDiscovered extends Schema.TaggedError<NothingDiscovered>()(
   'NothingDiscovered',
   {},
 ) {}
+
+/** A Railway project's service listing failed while resolving a name; `cause` keeps the typed error so its exit code survives. */
+export class RailwayProjectLookupFailed extends Schema.TaggedError<RailwayProjectLookupFailed>()(
+  'RailwayProjectLookupFailed',
+  {
+    project: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}

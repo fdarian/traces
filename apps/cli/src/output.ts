@@ -30,6 +30,7 @@ import {
   ConfigError,
   EnvVarMissing,
   NothingDiscovered,
+  RailwayProjectLookupFailed,
   UsageError,
 } from '#/errors.ts';
 import { SHORTEST_RETENTION_MS } from '#/limits.ts';
@@ -291,6 +292,14 @@ export const renderError = (error: unknown): RenderedError => {
       message: `${error.path}: ${error.message}`,
       hint: error.hint,
       code: EXIT_CODES.usage,
+    };
+  }
+  if (error instanceof RailwayProjectLookupFailed) {
+    const inner = renderError(error.cause);
+    return {
+      message: `Railway project ${error.project}: ${inner.message}`,
+      ...(inner.hint === undefined ? {} : { hint: inner.hint }),
+      code: inner.code,
     };
   }
   if (error instanceof ProviderAuthError) {

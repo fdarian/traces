@@ -22,7 +22,11 @@ import {
   type SecretRef,
   type ServiceConfig,
 } from '#/config.ts';
-import { EnvVarMissing, UsageError } from '#/errors.ts';
+import {
+  EnvVarMissing,
+  RailwayProjectLookupFailed,
+  UsageError,
+} from '#/errors.ts';
 import {
   captureInvocation,
   resolveMatcherPaths,
@@ -188,21 +192,25 @@ const distinctRailwayTargets = (configs: RailwayServiceConfig[]) => {
   });
 };
 
-/** One listing per project, however many services or environments of it the config has. A failure (logged out, offline) leaves the whole lookup unanswered rather than guessing from the projects that did answer. */
+/** One listing per project, however many services or environments of it the config has. Any project's failure fails the lookup: a name isn't called absent when a project that might hold it couldn't be read. */
 const railwayServiceNames = (resolved: ResolvedProject, projects: string[]) =>
   resolveRailwayClient(resolved).pipe(
     Effect.flatMap((client) =>
-      Effect.forEach(projects, (project) =>
-        railwayProjectLayout(client, project).pipe(
-          Effect.map((layout) => ({
-            project,
-            services: layout.services.map((service) => service.name),
-          })),
-        ),
+      Effect.forEach(
+        projects,
+        (project) =>
+          railwayProjectLayout(client, project).pipe(
+            Effect.map((layout) => ({
+              project,
+              services: layout.services.map((service) => service.name),
+            })),
+            Effect.mapError(
+              (cause) => new RailwayProjectLookupFailed({ project, cause }),
+            ),
+          ),
+        { concurrency: 'unbounded' },
       ),
     ),
-    Effect.option,
-    Effect.map(Option.getOrUndefined),
   );
 
 const describeTarget = (config: RailwayServiceConfig) =>
@@ -240,7 +248,6 @@ export const selectLogService = (
     if (targets.length > 1) {
       const projects = [...new Set(targets.map((entry) => entry.project))];
       const live = yield* railwayServiceNames(resolved, projects);
-      if (live === undefined) return yield* notFound(available);
       const liveHint = `${available}; ${live
         .map(
           (entry) =>

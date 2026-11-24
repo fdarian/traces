@@ -7,7 +7,8 @@ const FAKE_RAILWAY = `#!/usr/bin/env bun
 const args = process.argv.slice(2);
 const document = args[1];
 const reply = (data) => console.log(JSON.stringify({ data }));
-if (process.env.FAKE_RAILWAY_DOWN === '1') {
+const downProject = process.env.FAKE_RAILWAY_DOWN;
+if (downProject === '1' || (downProject && args.includes('id=' + downProject))) {
   console.error('Unauthorized. Please login');
   process.exit(1);
 }
@@ -220,7 +221,7 @@ describe('a service the config does not list', () => {
     );
   });
 
-  test('when Railway cannot be reached the hint just omits its services', async () => {
+  test('when Railway cannot be reached the real error is reported, not "no service named"', async () => {
     const config = configWith({
       api: railway('proj-1', 'api', 'production'),
       staging: railway('proj-1', 'api', 'staging'),
@@ -228,11 +229,23 @@ describe('a service the config does not list', () => {
     const result = await run('logs', 'telegram-cron', config, {
       FAKE_RAILWAY_DOWN: '1',
     });
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain(
-      'available services in "app": api, staging',
-    );
-    expect(result.stderr).not.toContain('Railway project');
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain('Railway project proj-1');
+    expect(result.stderr).not.toContain('no service named');
+  });
+
+  test('one project failing to list fails the lookup even when another has the name', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api'),
+      other: railway('proj-3', 'jobs'),
+    });
+    const result = await run('deploys', 'jobs', config, {
+      FAKE_RAILWAY_DOWN: 'proj-1',
+    });
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain('Railway project proj-1');
+    expect(result.stderr).not.toContain('no service named');
+    expect(result.stderr).not.toContain('is not in the config');
   });
 
   test('a config with no Railway service has nothing to fall back to', async () => {
