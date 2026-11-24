@@ -197,14 +197,12 @@ const spawnTrace = async (
 };
 
 const run = async (traceId: string, config?: string) => {
-  const { stdout, stderr, code } = await spawnTrace(traceId, config, [
-    '--json',
-  ]);
-  const rows = stdout
+  const result = await spawnTrace(traceId, config, ['--json']);
+  const rows = result.stdout
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => JSON.parse(line) as SpanRow);
-  return { rows, stderr, code };
+  return { rows, stderr: result.stderr, code: result.code };
 };
 
 describe('traces trace against a fake Jaeger', () => {

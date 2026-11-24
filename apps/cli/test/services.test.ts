@@ -364,8 +364,11 @@ describe('servicesDocument', () => {
 });
 
 describe('renderServices', () => {
-  const servicesTable = (output: string): string =>
-    output.split('\n\n')[1] ?? '';
+  const servicesTable = (output: string): string => {
+    const section = output.split('\n\n')[1];
+    if (section === undefined) throw new Error('no Services section');
+    return section;
+  };
 
   test('lays out the header, a Services table and the Providers', () => {
     const output = renderServices(

@@ -109,14 +109,27 @@ const cell = (plain: string, render: string = plain): Cell => ({
 
 const COLUMN_GAP = '  ';
 
-/** Pads on the plain text so ANSI codes never skew the columns; the last cell of a row is left unpadded. */
-const align = (rows: ReadonlyArray<ReadonlyArray<Cell>>) => {
+const columnWidths = (rows: ReadonlyArray<ReadonlyArray<Cell>>) => {
   const widths: Array<number> = [];
   for (const row of rows) {
-    row.forEach((entry, index) => {
-      widths[index] = Math.max(widths[index] ?? 0, entry.plain.length);
-    });
+    for (const [index, entry] of row.entries()) {
+      const known = widths[index];
+      widths[index] =
+        known === undefined
+          ? entry.plain.length
+          : Math.max(known, entry.plain.length);
+    }
   }
+  return (index: number): number => {
+    const width = widths[index];
+    if (width === undefined) throw new Error(`no column ${index}`);
+    return width;
+  };
+};
+
+/** Pads on the plain text so ANSI codes never skew the columns; the last cell of a row is left unpadded. */
+const align = (rows: ReadonlyArray<ReadonlyArray<Cell>>) => {
+  const widthOf = columnWidths(rows);
   const lines = rows.map((row) => {
     const lastFilled = row.reduce(
       (last, entry, index) => (entry.plain === '' ? last : index),
@@ -127,12 +140,11 @@ const align = (rows: ReadonlyArray<ReadonlyArray<Cell>>) => {
       .map((entry, index) =>
         index === used.length - 1
           ? entry.render
-          : entry.render +
-            ' '.repeat((widths[index] ?? 0) - entry.plain.length),
+          : entry.render + ' '.repeat(widthOf(index) - entry.plain.length),
       )
       .join(COLUMN_GAP);
   });
-  return { lines, widths };
+  return { lines, widthOf };
 };
 
 const SECTION_INDENT = '  ';
@@ -157,33 +169,34 @@ const describeMatch = (view: ServicesView): string => {
   }
 };
 
-const environmentOf = (record: ServiceEntry): string =>
-  hasLogProvider(record.ref) && record.ref.provider === 'railway'
-    ? (record.ref.environment ?? 'production')
-    : '';
+const environmentOf = (ref: LogServiceConfig): string =>
+  ref.provider === 'railway' ? (ref.environment ?? 'production') : '';
 
 const PROJECT_ID_PREFIX = 8;
 
-const railwayProjectOf = (record: ServiceEntry): string | undefined =>
-  hasLogProvider(record.ref) && record.ref.provider === 'railway'
-    ? record.ref.project
-    : undefined;
+const projectPrefixOf = (ref: LogServiceConfig): string =>
+  ref.provider === 'railway' ? ref.project.slice(0, PROJECT_ID_PREFIX) : '';
 
 const servicesSection = (view: ServicesView, style: Style): string => {
   const reported =
     view.tracing?.check.status === 'reachable'
       ? view.tracing.check.services
       : undefined;
-  const logRows = view.services.filter((record) => hasLogProvider(record.ref));
+  const logRefs = view.services.flatMap((record) =>
+    hasLogProvider(record.ref) ? [record.ref] : [],
+  );
   const railwayProjects = new Set(
-    view.services.flatMap((record) => railwayProjectOf(record) ?? []),
+    logRefs.flatMap((ref) => (ref.provider === 'railway' ? [ref.project] : [])),
   );
   const showProject = railwayProjects.size > 1;
-  const envWidth = Math.max(0, ...logRows.map((r) => environmentOf(r).length));
+  const envWidth = Math.max(
+    0,
+    ...logRefs.map((ref) => environmentOf(ref).length),
+  );
   const widths = {
     provider: Math.max(
       'PROVIDER'.length,
-      ...logRows.map((record) => record.provider?.length ?? 0),
+      ...logRefs.map((ref) => ref.provider.length),
     ),
     project: PROJECT_ID_PREFIX,
   };
@@ -203,14 +216,12 @@ const servicesSection = (view: ServicesView, style: Style): string => {
       .trimEnd();
 
   const target = (record: ServiceEntry): Cell => {
-    if (!hasLogProvider(record.ref) || record.provider === undefined) {
-      return cell('traces only');
-    }
+    if (!hasLogProvider(record.ref)) return cell('traces only');
     return cell(
       targetOf(
-        record.provider,
-        (railwayProjectOf(record) ?? '').slice(0, PROJECT_ID_PREFIX),
-        environmentOf(record),
+        record.ref.provider,
+        projectPrefixOf(record.ref),
+        environmentOf(record.ref),
       ),
     );
   };
@@ -368,7 +379,7 @@ const providersSection = (view: ServicesView, style: Style) => {
   ];
   if (lines.length === 0) return undefined;
   const aligned = align(lines.map((line) => line.cells));
-  const continuation = `${SECTION_INDENT}${' '.repeat((aligned.widths[0] ?? 0) + COLUMN_GAP.length)}`;
+  const continuation = `${SECTION_INDENT}${' '.repeat(aligned.widthOf(0) + COLUMN_GAP.length)}`;
   return [
     style.bold('Providers'),
     ...lines.flatMap((line, index) => [

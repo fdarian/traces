@@ -212,18 +212,23 @@ const spawnSpans = async (args: ReadonlyArray<string>, config?: string) => {
 };
 
 const run = async (args: ReadonlyArray<string>, config?: string) => {
-  const { stdout, stderr, code } = await spawnSpans(
-    [...args, '--json'],
-    config,
-  );
-  const rows = stdout
+  const result = await spawnSpans([...args, '--json'], config);
+  const rows = result.stdout
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => JSON.parse(line) as Record<string, unknown>);
-  const more = stderr.split('\n').find((line) => line.startsWith('more: '));
+  const more = result.stderr
+    .split('\n')
+    .find((line) => line.startsWith('more: '));
   const cursor =
     more === undefined ? undefined : /--cursor (\S+)/.exec(more)?.[1];
-  return { rows, stderr, code, more, cursor };
+  return {
+    rows,
+    stderr: result.stderr,
+    code: result.code,
+    more,
+    cursor,
+  };
 };
 
 const idsOf = (rows: ReadonlyArray<Record<string, unknown>>) =>

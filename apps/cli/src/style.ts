@@ -1,3 +1,5 @@
+import { stdoutIsTerminal } from '#/output.ts';
+
 export type Style = {
   readonly bold: (text: string) => string;
   readonly dim: (text: string) => string;
@@ -35,6 +37,6 @@ export const makeStyle = (enabled: boolean): Style =>
 /** Follows https://no-color.org: any non-empty NO_COLOR turns color off. */
 export const stdoutStyle = (): Style =>
   makeStyle(
-    process.stdout.isTTY === true &&
+    stdoutIsTerminal() &&
       (process.env.NO_COLOR === undefined || process.env.NO_COLOR === ''),
   );
