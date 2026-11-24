@@ -417,24 +417,24 @@ describe('formatGroup', () => {
     );
   });
 
-  test('right-aligns the count column across the listing', () => {
+  test('right-aligns the count across the listing and puts the line count after the service', () => {
     const groups = [
-      { ...group, count: 64, deploymentIds: [], traceId: undefined },
+      { ...group, count: 128, deploymentIds: [], traceId: undefined },
       {
         ...group,
-        count: 33,
-        lines: 1770,
+        count: 51,
+        lines: 373,
         deploymentIds: [],
         traceId: undefined,
       },
     ] as ReadonlyArray<ErrorGroupRecord>;
     const width = countColumnWidth(groups);
-    expect(width).toBe('33x (1770 lines)'.length);
+    expect(width).toBe('128x'.length);
     expect(
       groups.map((record) => formatGroup(record, false, width).split('\n')[0]),
     ).toEqual([
-      '             64x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z',
-      '33x (1770 lines) api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z',
+      '128x api 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z',
+      ' 51x api (373 lines) 2026-10-15T12:10:00.000Z -> 2026-10-15T12:20:00.000Z',
     ]);
   });
 });

@@ -48,14 +48,15 @@ import {
 import { globalOptions, resolveErrorScope } from '#/resolve.ts';
 import { parseInstant, parseWhen } from '#/time.ts';
 
-const countText = (record: ErrorGroupRecord): string => {
-  const count = `${record.count}x`;
-  return record.lines === undefined || record.lines === record.count
-    ? count
-    : `${count} (${record.lines} lines)`;
-};
+const countText = (record: ErrorGroupRecord): string => `${record.count}x`;
 
-/** Every group of one listing pads its count to this width so the columns after it line up. */
+/** A log group whose lines differ from its count says how many lines stand behind it. */
+const linesNote = (record: ErrorGroupRecord): string =>
+  record.lines === undefined || record.lines === record.count
+    ? ''
+    : ` (${record.lines} lines)`;
+
+/** Every group of one listing pads its `Nx` to this width so the service column lines up. */
 export const countColumnWidth = (
   records: ReadonlyArray<ErrorGroupRecord>,
 ): number => Math.max(0, ...records.map((record) => countText(record).length));
@@ -87,7 +88,7 @@ export const formatGroup = (
       : ` trace=${displayId(record.traceId, terminal)}`;
   const origin = record.source === 'traces' ? ' [traces]' : '';
   const fresh = record.new === true ? ' NEW' : '';
-  return `${countText(record).padStart(countWidth)} ${record.service}${origin}${fresh} ${toMilliseconds(record.firstSeen)} -> ${toMilliseconds(record.lastSeen)}${deploys}${trace}\n       ${sampleSummary(record.sample)}\n       $ ${record.hint}`;
+  return `${countText(record).padStart(countWidth)} ${record.service}${linesNote(record)}${origin}${fresh} ${toMilliseconds(record.firstSeen)} -> ${toMilliseconds(record.lastSeen)}${deploys}${trace}\n       ${sampleSummary(record.sample)}\n       $ ${record.hint}`;
 };
 
 export interface ErrorGroupRecord extends ErrorGroup {
