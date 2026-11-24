@@ -19,7 +19,7 @@ const SERVICES = {
 if (document.includes('project(')) {
   const id = args.find((arg) => arg.startsWith('id=')).slice(3);
   if (process.env.FAKE_RAILWAY_LOG) require('node:fs').appendFileSync(process.env.FAKE_RAILWAY_LOG, id + '\\n');
-  const names = SERVICES[id] ?? ['api', 'telegram-cron'];
+  const names = [...(SERVICES[id] ?? ['api', 'telegram-cron']), ...(process.env.FAKE_RAILWAY_EXTRA_NAME_PROJECT === id ? [process.env.FAKE_RAILWAY_EXTRA_NAME] : [])];
   reply({ project: {
     services: { edges: names.map((name) => ({ node: { id: 'svc-' + name, name } })) },
     environments: { edges: [{ node: { id: 'env-prod', name: 'production' } }] },
@@ -160,6 +160,33 @@ describe('a service the config does not list', () => {
     expect(result.code).toBe(0);
     expect(result.stderr).toContain(
       'jobs is not in the config; using Railway service "jobs" in project proj-3.',
+    );
+  });
+
+  test('a Railway service id resolves like its name across projects', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api', 'production'),
+      other: railway('proj-3', 'jobs', 'production'),
+    });
+    const result = await run('deploys', 'svc-jobs', config);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(
+      'svc-jobs is not in the config; using Railway service "svc-jobs" in project proj-3.',
+    );
+  });
+
+  test('an id one project has and a name another has is ambiguous', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api'),
+      other: railway('proj-2', 'worker'),
+    });
+    const result = await run('deploys', 'svc-worker', config, {
+      FAKE_RAILWAY_EXTRA_NAME_PROJECT: 'proj-1',
+      FAKE_RAILWAY_EXTRA_NAME: 'svc-worker',
+    });
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(
+      '"svc-worker" is ambiguous: proj-1 (production), proj-2 (production)',
     );
   });
 

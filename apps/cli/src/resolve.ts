@@ -192,8 +192,11 @@ const distinctRailwayTargets = (configs: RailwayServiceConfig[]) => {
   });
 };
 
-/** One listing per project, however many services or environments of it the config has. Any project's failure fails the lookup: a name isn't called absent when a project that might hold it couldn't be read. */
-const railwayServiceNames = (resolved: ResolvedProject, projects: string[]) =>
+/** One listing per project (names and ids, since a reference may be either), however many services or environments of it the config has. Any project's failure fails the lookup: a name isn't called absent when a project that might hold it couldn't be read. */
+const railwayServiceListings = (
+  resolved: ResolvedProject,
+  projects: string[],
+) =>
   resolveRailwayClient(resolved).pipe(
     Effect.flatMap((client) =>
       Effect.forEach(
@@ -202,7 +205,7 @@ const railwayServiceNames = (resolved: ResolvedProject, projects: string[]) =>
           railwayProjectLayout(client, project).pipe(
             Effect.map((layout) => ({
               project,
-              services: layout.services.map((service) => service.name),
+              services: layout.services,
             })),
             Effect.mapError(
               (cause) => new RailwayProjectLookupFailed({ project, cause }),
@@ -247,25 +250,27 @@ export const selectLogService = (
 
     if (targets.length > 1) {
       const projects = [...new Set(targets.map((entry) => entry.project))];
-      const live = yield* railwayServiceNames(resolved, projects);
+      const live = yield* railwayServiceListings(resolved, projects);
       const liveHint = `${available}; ${live
         .map(
           (entry) =>
-            `Railway project ${entry.project} has: ${entry.services.join(', ')}`,
+            `Railway project ${entry.project} has: ${entry.services.map((service) => service.name).join(', ')}`,
         )
         .join('; ')}`;
       const matches = targets.filter((entry) =>
         live.some(
           (listing) =>
             listing.project === entry.project &&
-            listing.services.includes(name),
+            listing.services.some(
+              (service) => service.id === name || service.name === name,
+            ),
         ),
       );
       const match = matches[0];
       if (match === undefined) return yield* notFound(liveHint);
       if (matches.length > 1) {
         return yield* new UsageError({
-          message: `"${name}" is ambiguous: ${matches.map(describeTarget).join(', ')} all have a Railway service with that name`,
+          message: `"${name}" is ambiguous: ${matches.map(describeTarget).join(', ')} all have a Railway service with that id or name`,
           hint: `${liveHint}; add the one you mean to the config under a name of its own`,
         });
       }
