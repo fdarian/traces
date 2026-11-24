@@ -13,6 +13,7 @@ import { ConfigError, UsageError } from '#/errors.ts';
 import { parseLevels } from '#/levels.ts';
 import {
   commandLine,
+  deploymentHeader,
   EXIT_CODES,
   formatDeploymentLine,
   formatLogLine,
@@ -273,7 +274,7 @@ describe('formatLogLine', () => {
       false,
       true,
     ).split('\n');
-    expect(lines[0]).toBe('02:55:09.123Z ERROR api abcdef12 first');
+    expect(lines[0]).toBe('02:55:09.123Z ERROR api first');
     expect(lines[1]).toBe('    second');
   });
 
@@ -284,11 +285,11 @@ describe('formatLogLine', () => {
       true,
     );
     expect(line.split('\n')[0]).toBe(
-      '02:55:09.123Z ERROR api abcdef12 trace=aaaaaaaa first',
+      '02:55:09.123Z ERROR api trace=aaaaaaaa first',
     );
   });
 
-  test('prints full deployment and trace ids when not on a terminal', () => {
+  test('prints the full trace id when not on a terminal', () => {
     const line = formatLogLine(
       {
         ...record('2026-10-14T02:55:09.123Z'),
@@ -299,7 +300,7 @@ describe('formatLogLine', () => {
       false,
     );
     expect(line.split('\n')[0]).toBe(
-      `02:55:09.123Z ERROR api abcdef1234567890 trace=${'a'.repeat(32)} first`,
+      `02:55:09.123Z ERROR api trace=${'a'.repeat(32)} first`,
     );
   });
 
@@ -308,7 +309,43 @@ describe('formatLogLine', () => {
       formatLogLine(record('2026-10-14T23:59:59.001+07:00'), true, true).split(
         '\n',
       )[0],
-    ).toBe('10-14 16:59:59.001Z ERROR api abcdef12 first');
+    ).toBe('10-14 16:59:59.001Z ERROR api first');
+  });
+});
+
+describe('deploymentHeader', () => {
+  const record = (deploymentId: string | undefined) =>
+    ({
+      ts: '2026-10-14T02:55:09.123Z',
+      service: 'api',
+      provider: 'railway',
+      environment: 'production',
+      deploymentId,
+      source: 'runtime',
+      level: 'info',
+      message: 'hello',
+      attrs: {},
+    }) satisfies LogRecord;
+
+  test('opens a block for a deployment that is not the last one printed', () => {
+    expect(deploymentHeader(record('abcdef1234567890'), undefined, false)).toBe(
+      'deploy abcdef1234567890',
+    );
+    expect(deploymentHeader(record('bbbb'), 'aaaa', false)).toBe('deploy bbbb');
+  });
+
+  test('shortens the id on a terminal', () => {
+    expect(deploymentHeader(record('abcdef1234567890'), undefined, true)).toBe(
+      'deploy abcdef12',
+    );
+  });
+
+  test('prints nothing for the same deployment or a record without one', () => {
+    expect(deploymentHeader(record('aaaa'), 'aaaa', false)).toBeUndefined();
+    expect(
+      deploymentHeader(record(undefined), undefined, false),
+    ).toBeUndefined();
+    expect(deploymentHeader(record(undefined), 'aaaa', false)).toBeUndefined();
   });
 });
 

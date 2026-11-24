@@ -105,18 +105,27 @@ export const formatLogLine = (
   withDate: boolean,
   terminal: boolean,
 ): string => {
-  const deployment =
-    record.deploymentId === undefined
-      ? ''
-      : ` ${displayId(record.deploymentId, terminal)}`;
   const trace =
     record.traceId === undefined
       ? ''
       : ` trace=${displayId(record.traceId, terminal)}`;
   const lines = record.message.split('\n');
-  const head = `${formatTime(record.ts, withDate)} ${record.level.toUpperCase().padEnd(5)} ${record.service}${deployment}${trace} ${lines.slice(0, 1).join('')}`;
+  const head = `${formatTime(record.ts, withDate)} ${record.level.toUpperCase().padEnd(5)} ${record.service}${trace} ${lines.slice(0, 1).join('')}`;
   return [head, ...lines.slice(1).map((line) => `    ${line}`)].join('\n');
 };
+
+/**
+ * The `deploy <id>` line that precedes the first log line of a deployment. A record without a
+ * deployment id never opens a new block: its line stays under the last header printed.
+ */
+export const deploymentHeader = (
+  record: LogRecord,
+  printed: string | undefined,
+  terminal: boolean,
+): string | undefined =>
+  record.deploymentId === undefined || record.deploymentId === printed
+    ? undefined
+    : `deploy ${displayId(record.deploymentId, terminal)}`;
 
 export const formatTraceLine = (
   row: TraceRow,

@@ -20,6 +20,7 @@ import {
 } from '#/limits.ts';
 import {
   commandLine,
+  deploymentHeader,
   emitRecord,
   emptyNotice,
   formatLogLine,
@@ -52,13 +53,33 @@ const fetchPage = (
 const recordKey = (record: LogRecord) =>
   `${record.ts}\0${record.deploymentId ?? ''}\0${record.message}`;
 
+/** Text mode prints a `deploy <id>` line whenever the deployment changes; the last one printed persists across -f polls. */
+const makeLogPrinter = (
+  mode: OutputMode,
+  withDate: boolean,
+  terminal: boolean,
+) => {
+  let printed: string | undefined;
+  return (record: LogRecord) =>
+    Effect.gen(function* () {
+      if (mode === 'text') {
+        const header = deploymentHeader(record, printed, terminal);
+        if (header !== undefined) {
+          printed = record.deploymentId;
+          yield* Console.log(header);
+        }
+      }
+      yield* emitRecord(mode, record, (r) =>
+        formatLogLine(r, withDate, terminal),
+      );
+    });
+};
+
 const follow = (input: {
   readonly source: LogSource;
   readonly kind: 'http' | 'runtime';
   readonly query: LogQuery;
-  readonly mode: OutputMode;
-  readonly terminal: boolean;
-  readonly withDate: boolean;
+  readonly print: (record: LogRecord) => Effect.Effect<void>;
   readonly initial: ReadonlyArray<LogRecord>;
 }) => {
   const lastRecord = input.initial[input.initial.length - 1];
@@ -81,9 +102,7 @@ const follow = (input: {
         (record.ts === lastTs && !seenAtLastTs.has(recordKey(record))),
     );
     for (const record of fresh) {
-      yield* emitRecord(input.mode, record, (r) =>
-        formatLogLine(r, input.withDate, input.terminal),
-      );
+      yield* input.print(record);
     }
     const newest = fresh[fresh.length - 1];
     if (newest === undefined) return;
@@ -243,10 +262,9 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
         : new Date(page.records[0].ts));
     const withDate =
       windowStart !== undefined && windowSpansDays(windowStart, until ?? now);
+    const print = makeLogPrinter(mode, withDate, terminal);
     for (const record of page.records) {
-      yield* emitRecord(mode, record, (r) =>
-        formatLogLine(r, withDate, terminal),
-      );
+      yield* print(record);
     }
     if (page.records.length === 0) {
       yield* emptyNotice(
@@ -292,9 +310,7 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
         source: resolved.source,
         kind,
         query,
-        mode,
-        terminal,
-        withDate,
+        print,
         initial: page.records,
       });
     }

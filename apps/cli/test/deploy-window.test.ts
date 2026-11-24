@@ -495,10 +495,56 @@ describe('text output when piped', () => {
     );
     expect(result.code).toBe(0);
     expect(result.stdout).toBe(
-      `12:10:00.000Z ERROR api ${LONG_DEPLOY} trace=${LONG_TRACE} ECONNRESET talking to db\n`,
+      `deploy ${LONG_DEPLOY}\n12:10:00.000Z ERROR api trace=${LONG_TRACE} ECONNRESET talking to db\n`,
     );
     expect(result.stdout).not.toContain('\u001b');
     expect(result.stdout).not.toContain('…');
+  });
+
+  test('logs prints a deploy line again only when the deployment changes', async () => {
+    const state = writeState(
+      'deploy-headers',
+      [deployment('dep-a', 'SUCCESS', DEPLOY_AT)],
+      [
+        {
+          ...logRow('2026-10-15T12:10:00.000Z', 'one'),
+          tags: { deploymentId: 'dep-a' },
+        },
+        {
+          ...logRow('2026-10-15T12:11:00.000Z', 'two'),
+          tags: { deploymentId: 'dep-a' },
+        },
+        {
+          ...logRow('2026-10-15T12:12:00.000Z', 'three'),
+          tags: { deploymentId: 'dep-b' },
+        },
+        { ...logRow('2026-10-15T12:13:00.000Z', 'four'), tags: {} },
+        {
+          ...logRow('2026-10-15T12:14:00.000Z', 'five'),
+          tags: { deploymentId: 'dep-a' },
+        },
+      ],
+    );
+    const result = await spawnCli(
+      'logs',
+      ['api', '--since', '2026-10-15T12:00:00Z', '--until', UNTIL],
+      configFor(false),
+      state,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(
+      [
+        'deploy dep-a',
+        '12:10:00.000Z ERROR api one',
+        '12:11:00.000Z ERROR api two',
+        'deploy dep-b',
+        '12:12:00.000Z ERROR api three',
+        '12:13:00.000Z ERROR api four',
+        'deploy dep-a',
+        '12:14:00.000Z ERROR api five',
+        '',
+      ].join('\n'),
+    );
   });
 
   test('deploys prints the full deployment id', async () => {

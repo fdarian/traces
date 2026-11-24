@@ -59,7 +59,7 @@ Usage: `traces logs [service] [flags]`
 
 ### Output
 
-LogRecord per line: ts, appTs?, service, provider, environment, deploymentId?, source (runtime | build | http), level (debug | info | warn | error | fatal | unknown), message, request? {method, path, status, durationMs?, requestId?}, traceId?, spanId?, attrs. Text line: `<time> <LEVEL> <service> [<deployment id>] [trace=<id>] <message>`, continuation lines indented.
+LogRecord per line: ts, appTs?, service, provider, environment, deploymentId?, source (runtime | build | http), level (debug | info | warn | error | fatal | unknown), message, request? {method, path, status, durationMs?, requestId?}, traceId?, spanId?, attrs. Text line: `<time> <LEVEL> <service> [trace=<id>] <message>`, continuation lines indented. The deployment is not on each line: a `deploy <id>` line (full id piped, 8 characters on a terminal) comes before the first log line and again whenever the deployment changes between consecutive lines; a record without a deployment id stays under the last `deploy` line printed. `--json` keeps `deploymentId` on every record.
 
 ### Notes
 
