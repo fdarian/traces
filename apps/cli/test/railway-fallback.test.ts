@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,12 +11,16 @@ if (process.env.FAKE_RAILWAY_DOWN === '1') {
   console.error('Unauthorized. Please login');
   process.exit(1);
 }
+const SERVICES = {
+  'proj-2': ['worker'],
+  'proj-3': ['telegram-cron', 'jobs'],
+};
 if (document.includes('project(')) {
+  const id = args.find((arg) => arg.startsWith('id=')).slice(3);
+  if (process.env.FAKE_RAILWAY_LOG) require('node:fs').appendFileSync(process.env.FAKE_RAILWAY_LOG, id + '\\n');
+  const names = SERVICES[id] ?? ['api', 'telegram-cron'];
   reply({ project: {
-    services: { edges: [
-      { node: { id: 'svc-api', name: 'api' } },
-      { node: { id: 'svc-cron', name: 'telegram-cron' } },
-    ] },
+    services: { edges: names.map((name) => ({ node: { id: 'svc-' + name, name } })) },
     environments: { edges: [{ node: { id: 'env-prod', name: 'production' } }] },
   } });
 } else if (document.includes('deployments(')) {
@@ -135,18 +139,73 @@ describe('a service the config does not list', () => {
     expect(result.stderr).toContain('available services: api (svc-api)');
   });
 
-  test('Railway services in two projects exit 2 without guessing one', async () => {
+  test('with Railway services in two projects, the one project that has the name wins, and the note names it', async () => {
     const config = configWith({
       api: railway('proj-1', 'api'),
-      other: railway('proj-2', 'other'),
+      other: railway('proj-2', 'worker'),
     });
     const result = await run('deploys', 'telegram-cron', config);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(NOTE);
+    expect(result.stdout).toContain('"service":"telegram-cron"');
+  });
+
+  test('a name only the second project has resolves there', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api', 'production'),
+      other: railway('proj-3', 'jobs', 'production'),
+    });
+    const result = await run('deploys', 'jobs', config);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(
+      'jobs is not in the config; using Railway service "jobs" in project proj-3.',
+    );
+  });
+
+  test('a name neither project has exits 2 with the config and Railway project services listed', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api'),
+      other: railway('proj-2', 'worker'),
+    });
+    const result = await run('deploys', 'nope', config);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('no service named "nope" in project "app"');
+    expect(result.stderr).toContain('available services in "app": api, other');
+    expect(result.stderr).toContain(
+      'Railway project proj-1 has: api, telegram-cron',
+    );
+    expect(result.stderr).toContain('Railway project proj-2 has: worker');
+  });
+
+  test('a name both projects have exits 2 as ambiguous, naming the projects', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api'),
+      jobs: railway('proj-3', 'jobs', 'staging'),
+    });
+    const result = await run('logs', 'telegram-cron', config);
     expect(result.code).toBe(2);
     expect(result.stderr).toContain(
-      'no service named "telegram-cron" in project "app"',
+      '"telegram-cron" is ambiguous: proj-1 (production), proj-3 (staging)',
     );
-    expect(result.stderr).toContain('available services in "app": api, other');
-    expect(result.stderr).not.toContain('Railway project');
+    expect(result.stderr).toContain('available services in "app": api, jobs');
+    expect(result.stderr).not.toContain('is not in the config');
+  });
+
+  test('each Railway project is listed once however many services use it', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api'),
+      cron: railway('proj-1', 'telegram-cron'),
+      other: railway('proj-2', 'worker'),
+    });
+    const log = join(dir, 'project-lookups.log');
+    const result = await run('deploys', 'nope', config, {
+      FAKE_RAILWAY_LOG: log,
+    });
+    expect(result.code).toBe(2);
+    expect(readFileSync(log, 'utf8').trim().split('\n').sort()).toEqual([
+      'proj-1',
+      'proj-2',
+    ]);
   });
 
   test('one project in two environments exits 2, and the hint lists the Railway project services', async () => {

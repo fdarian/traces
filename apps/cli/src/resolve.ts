@@ -175,20 +175,45 @@ const railwayServices = (resolved: ResolvedProject) =>
       'provider' in config && config.provider === 'railway',
   );
 
-/** The names are a hint only, so a Railway failure (logged out, offline) just leaves them out. */
-const railwayServiceNames = (resolved: ResolvedProject, project: string) =>
+const environmentOf = (config: RailwayServiceConfig) =>
+  config.environment ?? 'production';
+
+const distinctRailwayTargets = (configs: RailwayServiceConfig[]) => {
+  const seen = new Set<string>();
+  return configs.filter((config) => {
+    const key = `${config.project}\u0000${environmentOf(config)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+/** One listing per project, however many services or environments of it the config has. A failure (logged out, offline) leaves the whole lookup unanswered rather than guessing from the projects that did answer. */
+const railwayServiceNames = (resolved: ResolvedProject, projects: string[]) =>
   resolveRailwayClient(resolved).pipe(
-    Effect.flatMap((client) => railwayProjectLayout(client, project)),
-    Effect.map((layout) => layout.services.map((service) => service.name)),
+    Effect.flatMap((client) =>
+      Effect.forEach(projects, (project) =>
+        railwayProjectLayout(client, project).pipe(
+          Effect.map((layout) => ({
+            project,
+            services: layout.services.map((service) => service.name),
+          })),
+        ),
+      ),
+    ),
     Effect.option,
     Effect.map(Option.getOrUndefined),
   );
 
+const describeTarget = (config: RailwayServiceConfig) =>
+  `${config.project} (${environmentOf(config)})`;
+
 /**
- * `logs`, `deploys` and `errors <service>` accept a Railway service the config doesn't list, as
- * long as the config's Railway services all sit in one Railway project and environment, so the
- * name can only mean a service of that project. A name that's not there fails later in the
- * source's own by-id-or-name lookup, which lists the project's services.
+ * `logs`, `deploys` and `errors <service>` accept a Railway service the config doesn't list. A
+ * name that isn't a config key is looked up in each distinct Railway project and environment the
+ * config's Railway services use; it resolves only when exactly one of them has it. With a single
+ * project and environment there's nothing to choose between, so the name goes straight to the
+ * source's own by-id-or-name lookup, which lists the project's services when it isn't there.
  */
 export const selectLogService = (
   resolved: ResolvedProject,
@@ -201,37 +226,55 @@ export const selectLogService = (
     const configured = resolved.project.services[name];
     if (configured !== undefined) return { name, config: configured };
 
-    const railway = railwayServices(resolved);
-    const projects = new Set(railway.map((config) => config.project));
-    const environments = new Set(
-      railway.map((config) => config.environment ?? 'production'),
-    );
-    const first = railway[0];
-    if (first === undefined || projects.size !== 1 || environments.size !== 1) {
-      const available = `available services in "${resolved.projectName}": ${Object.keys(resolved.project.services).join(', ')}`;
-      const live =
-        first !== undefined && projects.size === 1
-          ? yield* railwayServiceNames(resolved, first.project)
-          : undefined;
-      return yield* new UsageError({
+    const targets = distinctRailwayTargets(railwayServices(resolved));
+    const available = `available services in "${resolved.projectName}": ${Object.keys(resolved.project.services).join(', ')}`;
+    const notFound = (hint: string) =>
+      new UsageError({
         message: `no service named "${name}" in project "${resolved.projectName}"`,
-        hint:
-          first === undefined || live === undefined
-            ? available
-            : `${available}; Railway project ${first.project} has: ${live.join(', ')}`,
+        hint,
       });
+
+    let target = targets[0];
+    if (target === undefined) return yield* notFound(available);
+
+    if (targets.length > 1) {
+      const projects = [...new Set(targets.map((entry) => entry.project))];
+      const live = yield* railwayServiceNames(resolved, projects);
+      if (live === undefined) return yield* notFound(available);
+      const liveHint = `${available}; ${live
+        .map(
+          (entry) =>
+            `Railway project ${entry.project} has: ${entry.services.join(', ')}`,
+        )
+        .join('; ')}`;
+      const matches = targets.filter((entry) =>
+        live.some(
+          (listing) =>
+            listing.project === entry.project &&
+            listing.services.includes(name),
+        ),
+      );
+      const match = matches[0];
+      if (match === undefined) return yield* notFound(liveHint);
+      if (matches.length > 1) {
+        return yield* new UsageError({
+          message: `"${name}" is ambiguous: ${matches.map(describeTarget).join(', ')} all have a Railway service with that name`,
+          hint: `${liveHint}; add the one you mean to the config under a name of its own`,
+        });
+      }
+      target = match;
     }
-    const project = first.project;
+
     yield* Console.error(
-      `${name} is not in the config; using Railway service "${name}" in project ${project}. Add it (or run traces init).`,
+      `${name} is not in the config; using Railway service "${name}" in project ${target.project}. Add it (or run traces init).`,
     );
     const config: RailwayServiceConfig = {
       provider: 'railway',
-      project,
+      project: target.project,
       service: name,
-      ...(first.environment === undefined
+      ...(target.environment === undefined
         ? {}
-        : { environment: first.environment }),
+        : { environment: target.environment }),
     };
     return { name, config };
   });
