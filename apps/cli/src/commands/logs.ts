@@ -26,6 +26,7 @@ import {
   type OutputMode,
   outputMode,
   retentionNoteFor,
+  stderrIsTerminal,
   stdoutIsTerminal,
   windowSpansDays,
 } from '#/output.ts';
@@ -215,7 +216,9 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
         scan: DEPLOY_SCAN,
       });
       since = yield* deployInstant(deployment);
-      yield* Console.error(deploySinceText(deployment, since));
+      yield* Console.error(
+        deploySinceText(deployment, since, stderrIsTerminal()),
+      );
     } else {
       since = when?.at;
     }

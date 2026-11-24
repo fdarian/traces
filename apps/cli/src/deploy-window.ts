@@ -10,7 +10,7 @@ import {
 import { Effect } from 'effect';
 import { UsageError } from '#/errors.ts';
 import { DEPLOY_SCAN, ERROR_CAP } from '#/limits.ts';
-import { shortId } from '#/output.ts';
+import { displayId } from '#/output.ts';
 
 const HOUR_MS = 60 * 60 * 1000;
 const BASELINE_MAX_MS = 24 * HOUR_MS;
@@ -26,8 +26,12 @@ export interface DeployWindow {
 export const isoSeconds = (date: Date): string =>
   date.toISOString().replace(/\.000Z$/, 'Z');
 
-export const deploySinceText = (deployment: Deployment, since: Date): string =>
-  `since deploy ${shortId(deployment.id)} at ${isoSeconds(since)}`;
+export const deploySinceText = (
+  deployment: Deployment,
+  since: Date,
+  terminal: boolean,
+): string =>
+  `since deploy ${displayId(deployment.id, terminal)} at ${isoSeconds(since)}`;
 
 const formatSpan = (ms: number): string => {
   const hours = Math.floor(ms / HOUR_MS);
@@ -59,13 +63,14 @@ export const deployWindow = (
   deployment: Deployment,
   until: Date | undefined,
   now: Date,
+  terminal: boolean,
 ) =>
   Effect.gen(function* () {
     const at = yield* deployInstant(deployment);
     const postLength = (until ?? now).getTime() - at.getTime();
     if (postLength <= 0) {
       return yield* new UsageError({
-        message: `--until is not after the latest ready deploy (${deploySinceText(deployment, at)})`,
+        message: `--until is not after the latest ready deploy (${deploySinceText(deployment, at, terminal)})`,
         hint: 'move --until later, or drop it',
       });
     }
@@ -83,9 +88,12 @@ export const resolveDeployWindow = (
   service: string,
   until: Date | undefined,
   now: Date,
+  terminal: boolean,
 ) =>
   latestReadyDeployment(source, { service, scan: DEPLOY_SCAN }).pipe(
-    Effect.flatMap((deployment) => deployWindow(deployment, until, now)),
+    Effect.flatMap((deployment) =>
+      deployWindow(deployment, until, now, terminal),
+    ),
   );
 
 /** Fingerprints of the error logs in the baseline window, grouped the way the window's own logs are. Only fingerprints, never counts. */

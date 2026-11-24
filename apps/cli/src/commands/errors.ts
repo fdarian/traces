@@ -37,6 +37,7 @@ import {
   outputMode,
   renderError,
   retentionNoteFor,
+  stderrIsTerminal,
   stdoutIsTerminal,
 } from '#/output.ts';
 import {
@@ -157,6 +158,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
         });
       }
     }
+    const stderrTerminal = stderrIsTerminal();
     const prepare = (entry: {
       readonly name: string;
       readonly build: (typeof scope.entries)[number]['build'];
@@ -171,6 +173,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
           entry.name,
           until,
           now,
+          stderrTerminal,
         );
         return { built, since: window.since, window };
       }).pipe(
@@ -372,7 +375,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
     }
     for (const [name, window] of windows) {
       yield* Console.error(
-        `${name}: ${deploySinceText(window.deployment, window.since)}; ${baselineText(window)}`,
+        `${name}: ${deploySinceText(window.deployment, window.since, stderrTerminal)}; ${baselineText(window)}`,
       );
     }
     const deployFields = (group: ErrorGroup) => {

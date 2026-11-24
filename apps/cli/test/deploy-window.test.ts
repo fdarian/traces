@@ -4,6 +4,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { deploySinceText } from '#/deploy-window.ts';
 
 const DEPLOY_AT = '2026-10-15T12:00:00.000Z';
 const UNTIL = '2026-10-15T14:00:00Z';
@@ -535,5 +536,70 @@ describe('text output when piped', () => {
     );
     expect(lines[1]).toBe('       ECONNRESET talking to db');
     expect(result.stdout).not.toContain('\u001b');
+  });
+
+  test('the deploy lines on stderr carry the full deployment id', async () => {
+    const logs = await spawnCli(
+      'logs',
+      ['api', '--since', 'deploy', '--until', UNTIL],
+      configFor(false),
+      stateWithLongIds(),
+    );
+    expect(logs.code).toBe(0);
+    expect(logs.stderr).toContain(
+      `since deploy ${LONG_DEPLOY} at 2026-10-15T12:00:00Z`,
+    );
+    const errors = await spawnCli(
+      'errors',
+      ['api', '--since', 'deploy', '--until', UNTIL, '--source', 'logs'],
+      configFor(false),
+      stateWithLongIds(),
+    );
+    expect(errors.code).toBe(0);
+    expect(errors.stderr).toContain(
+      `api: since deploy ${LONG_DEPLOY} at 2026-10-15T12:00:00Z; baseline 2h before`,
+    );
+  });
+
+  test('--until before the deploy names the full deployment id', async () => {
+    const result = await spawnCli(
+      'errors',
+      [
+        'api',
+        '--since',
+        'deploy',
+        '--until',
+        '2026-10-15T11:00:00Z',
+        '--source',
+        'logs',
+      ],
+      configFor(false),
+      stateWithLongIds(),
+    );
+    expect(result.stderr).toContain(
+      `--until is not after the latest ready deploy (since deploy ${LONG_DEPLOY} at 2026-10-15T12:00:00Z)`,
+    );
+  });
+});
+
+describe('deploySinceText', () => {
+  const longDeployment = {
+    id: '0123456789abcdef0123456789abcdef',
+    provider: 'railway',
+    status: 'ready',
+    createdAt: DEPLOY_AT,
+  } as unknown as Parameters<typeof deploySinceText>[0];
+  const since = new Date(DEPLOY_AT);
+
+  test('shortens the id for a terminal', () => {
+    expect(deploySinceText(longDeployment, since, true)).toBe(
+      'since deploy 01234567 at 2026-10-15T12:00:00Z',
+    );
+  });
+
+  test('keeps the full id when not a terminal', () => {
+    expect(deploySinceText(longDeployment, since, false)).toBe(
+      `since deploy ${longDeployment.id} at 2026-10-15T12:00:00Z`,
+    );
   });
 });

@@ -46,6 +46,9 @@ export const outputMode = (jsonFlag: boolean): OutputMode =>
  */
 export const stdoutIsTerminal = (): boolean => process.stdout.isTTY === true;
 
+/** Stderr lines follow the same rule as stdout, but a stream can be piped independently of the other. */
+export const stderrIsTerminal = (): boolean => process.stderr.isTTY === true;
+
 export const EXIT_CODES = {
   ok: 0,
   runtime: 1,
