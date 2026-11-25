@@ -1,0 +1,60 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths: ['.changeset/**']
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - id: changesets
+        uses: changesets/action@v2
+        with:
+          version-script: bun run ci:version
+          publish-script: bun run ci:release
+          create-github-releases: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install rcodesign
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          curl -L https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-x86_64-unknown-linux-musl.tar.gz | tar --strip-components=1 -xzf -
+          sudo mv rcodesign /usr/local/bin/
+
+      - name: Build binaries
+        if: steps.changesets.outputs.published == 'true'
+        working-directory: apps/cli
+        run: |
+          for t in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+            bun run build:bin --target=bun-$t --outfile dist/bin/$t/traces
+            case $t in darwin-*) rcodesign sign dist/bin/$t/traces ;; esac
+            mkdir -p dist/releases
+            tar -czf dist/releases/traces-$t.tar.gz -C dist/bin/$t traces
+          done
+
+      - name: Upload release assets
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ fromJSON(steps.changesets.outputs.published-packages)[0].version }}
+        run: |
+          TAG="@traces/cli@${VERSION}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Release $VERSION"
+          gh release upload "$TAG" apps/cli/dist/releases/*.tar.gz --clobber
+
+      - name: Update Homebrew formula
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ fromJSON(steps.changesets.outputs.published-packages)[0].version }}
+        run: bun scripts/update-homebrew.ts
