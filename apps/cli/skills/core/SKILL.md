@@ -38,7 +38,7 @@ Global flags (not on `init`): `--project <name>`, `--env <name>` (Railway enviro
 | error group -> its trace | `traces errors --source traces --since 1d` (run a group's hint: `traces trace <id>`) |
 | did my deploy add errors | `traces errors --since deploy` (read the groups with `new: true`), then `traces logs api --since deploy --level error` |
 | why is prod 500ing | `traces errors api --since 1h`, then `traces logs api --level error --grep "<sample from above>"`, then `traces logs api --http --level error` (5xx requests) |
-| did my fix deploy | `traces deploys api` (compare the sha with `git rev-parse HEAD`; no commit shown: compare `createdAt` with the time of the push) |
+| did my fix deploy | `traces deploys api` (piped output has the full sha: compare it with `git rev-parse HEAD`; no commit shown: compare `createdAt` with the time of the push) |
 | build failed | `traces logs web --build` |
 | watch while reproducing | `traces logs api -f` |
 | what happened at 14:05 | `traces logs api --since 2026-10-12T14:00:00Z --until 2026-10-12T14:10:00Z` |

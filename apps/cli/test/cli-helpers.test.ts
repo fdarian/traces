@@ -471,16 +471,22 @@ describe('formatDeploymentLine', () => {
     url: 'https://x.example.com',
   } as Deployment;
 
-  test('shortens the id on a terminal', () => {
+  test('shortens the id and the commit sha on a terminal', () => {
     expect(formatDeploymentLine(deployment, true)).toBe(
       'ready     01234567 abcdef0 main 10-15 12:00:00.000Z fix https://x.example.com',
     );
   });
 
-  test('keeps the full id when not on a terminal; the commit sha stays 7 characters', () => {
+  test('keeps the full id and the full commit sha when not on a terminal', () => {
     expect(formatDeploymentLine(deployment, false)).toBe(
-      'ready     0123456789abcdef abcdef0 main 10-15 12:00:00.000Z fix https://x.example.com',
+      'ready     0123456789abcdef abcdef0123456 main 10-15 12:00:00.000Z fix https://x.example.com',
     );
+  });
+
+  test('a deployment without a commit prints a dash either way', () => {
+    const bare = { ...deployment, commit: undefined } as Deployment;
+    expect(formatDeploymentLine(bare, true)).toContain(' - - ');
+    expect(formatDeploymentLine(bare, false)).toContain(' - - ');
   });
 });
 

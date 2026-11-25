@@ -188,12 +188,16 @@ export const formatSpanTree = (
   });
 };
 
+/** 7 characters is for a terminal only; a pipe gets the full sha an agent compares with `git rev-parse HEAD`. */
+const displaySha = (sha: string, terminal: boolean): string =>
+  terminal ? sha.slice(0, 7) : sha;
+
 export const formatDeploymentLine = (
   deployment: Deployment,
   terminal: boolean,
 ): string => {
   const commit = deployment.commit;
-  const sha = commit === undefined ? '-' : commit.sha.slice(0, 7);
+  const sha = commit === undefined ? '-' : displaySha(commit.sha, terminal);
   const branch = commit?.branch ?? '-';
   const message = commit?.message?.split('\n')[0] ?? '';
   const url = deployment.url === undefined ? '' : ` ${deployment.url}`;

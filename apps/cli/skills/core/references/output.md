@@ -2,7 +2,7 @@
 
 ## Output
 
-stdout: compact text by default, piped or on a terminal; `--json` prints JSON instead, one record per line (LogRecord, Deployment, error group, TraceRow or SpanRow; fields are stable), except `traces services`, which prints one document. A terminal only adds color and shortens ids to 8 characters (`trace=a042d0ba`, `a042d0ba…`); piped text has no ANSI codes and full ids. `traces errors` text shows only a one-line sample (the first non-empty line, with `(+N lines)` when the sample has more) and times trimmed to milliseconds; `--json` has the full sample and timestamps. When older records exist, stderr gets `more: <full command with --cursor>`. Errors are one stderr line plus a `hint:` line (parse errors too, with no usage block). Empty results print a note on stderr, with the retention caveat when the window starts past it, and exit 0.
+stdout: compact text by default, piped or on a terminal; `--json` prints JSON instead, one record per line (LogRecord, Deployment, error group, TraceRow or SpanRow; fields are stable), except `traces services`, which prints one document. A terminal only adds color and shortens ids to 8 characters (`trace=a042d0ba`, `a042d0ba…`) and `deploys` commit shas to 7; piped text has no ANSI codes and full ids and shas. `traces errors` text shows only a one-line sample (the first non-empty line, with `(+N lines)` when the sample has more) and times trimmed to milliseconds; `--json` has the full sample and timestamps. When older records exist, stderr gets `more: <full command with --cursor>`. Errors are one stderr line plus a `hint:` line (parse errors too, with no usage block). Empty results print a note on stderr, with the retention caveat when the window starts past it, and exit 0.
 
 ## Exit codes
 

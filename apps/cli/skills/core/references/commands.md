@@ -1,6 +1,6 @@
 # Commands: output and notes
 
-Per-command record shape and behaviour notes. Flags and examples: `traces <command> --help`. Output is text by default; `--json` prints one JSON object per line (`services`: one document). On a terminal the text gains color and 8-character ids (`trace=` and `…` forms below); piped, ids are full.
+Per-command record shape and behaviour notes. Flags and examples: `traces <command> --help`. Output is text by default; `--json` prints one JSON object per line (`services`: one document). On a terminal the text gains color, 8-character ids (`trace=` and `…` forms below) and 7-character commit shas; piped, ids and shas are full.
 
 ## traces init
 
@@ -95,7 +95,7 @@ Deployment per line: id, service, provider, environment, status (queued | buildi
 - A trace-only service (config entry with only `otelService`) has no deployments: exit 2.
 - A service name the config doesn't list is looked up by Railway service id or name in every Railway project the config uses. Exactly one match is used (stderr says `<name> is not in the config; using Railway service ... in project <id>`); no match, or a match in several projects, exits 2 and the hint lists the available services. When the config uses one project in several environments, `--env <name>` picks the environment; without it the match is ambiguous (exit 2).
 - `commit` is absent when the provider did not record one, e.g. Railway deploys made from the CLI or from an image.
-- Did a fix deploy? Compare the newest `ready` deployment's sha with `git rev-parse HEAD`. Without a commit, compare its `createdAt` with the time of the push.
+- Did a fix deploy? Compare the newest `ready` deployment's sha with `git rev-parse HEAD`; piped text and `--json` carry the full sha, a terminal shows its first 7 characters. Without a commit, compare its `createdAt` with the time of the push.
 - Vercel lists the deployments of --env (default production); Railway lists the service's environment.
 
 ## traces errors
