@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { BunRuntime, BunServices } from '@effect/platform-bun';
-import { Cause, Effect, Exit, Layer, Option } from 'effect';
+import { Effect, Layer } from 'effect';
 import {
   CliConfig,
   CliError,
@@ -20,8 +20,8 @@ import { servicesCommand } from '#/commands/services.ts';
 import { spansCommand } from '#/commands/spans.ts';
 import { traceCommand } from '#/commands/trace.ts';
 import {
-  EXIT_CODES,
   ExitWith,
+  exitReport,
   parseErrorPresenter,
   renderError,
   reportError,
@@ -83,14 +83,9 @@ program.pipe(
   BunRuntime.runMain({
     disableErrorReporting: true,
     teardown: (exit, onExit) => {
-      if (Exit.isSuccess(exit)) return onExit(EXIT_CODES.ok);
-      if (Cause.hasInterruptsOnly(exit.cause)) return onExit(130);
-      const failure = Cause.findErrorOption(exit.cause);
-      onExit(
-        Option.isSome(failure) && failure.value instanceof ExitWith
-          ? failure.value.code
-          : EXIT_CODES.runtime,
-      );
+      const report = exitReport(exit, Boolean(process.env.TRACES_DEBUG));
+      if (report.stderr !== undefined) console.error(report.stderr);
+      onExit(report.code);
     },
   }),
 );

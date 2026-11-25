@@ -17,7 +17,7 @@ import {
   TraceNotFound,
   type TraceRow,
 } from '@traces/core';
-import { Console, Effect, Schema } from 'effect';
+import { Cause, Console, Effect, Exit, Option, Schema } from 'effect';
 import { CliError, CliOutput } from 'effect/cli';
 import {
   ConflictingFlags,
@@ -423,16 +423,47 @@ export const renderError = (error: unknown): RenderedError => {
   return { message: causeMessage(error), code: EXIT_CODES.runtime };
 };
 
+const formatError = (rendered: RenderedError): string =>
+  rendered.hint === undefined
+    ? `error: ${rendered.message}`
+    : `error: ${rendered.message}\nhint: ${rendered.hint}`;
+
 export const reportError = (rendered: RenderedError) =>
-  Console.error(
-    rendered.hint === undefined
-      ? `error: ${rendered.message}`
-      : `error: ${rendered.message}\nhint: ${rendered.hint}`,
-  );
+  Console.error(formatError(rendered));
 
 export class ExitWith extends Schema.TaggedError<ExitWith>()('ExitWith', {
   code: Schema.Number,
 }) {}
+
+export interface ExitReport {
+  readonly code: number;
+  readonly stderr?: string;
+}
+
+/**
+ * Typed failures were already reported before they became `ExitWith`; whatever
+ * else ends the run is a defect that nothing reported, so it is printed here.
+ */
+export const exitReport = (
+  exit: Exit.Exit<unknown, unknown>,
+  debug: boolean,
+): ExitReport => {
+  if (Exit.isSuccess(exit)) return { code: EXIT_CODES.ok };
+  if (Cause.hasInterruptsOnly(exit.cause)) return { code: 130 };
+  const failure = Cause.findErrorOption(exit.cause);
+  if (Option.isSome(failure) && failure.value instanceof ExitWith) {
+    return { code: failure.value.code };
+  }
+  const message = formatError({
+    message: singleLine(causeMessage(Cause.squash(exit.cause))),
+    hint: 'this is a bug in traces; rerun with TRACES_DEBUG=1 for the stack',
+    code: EXIT_CODES.runtime,
+  });
+  return {
+    code: EXIT_CODES.runtime,
+    stderr: debug ? `${message}\n${Cause.pretty(exit.cause)}` : message,
+  };
+};
 
 /**
  * The framework prints the full usage block before failing a parse. The

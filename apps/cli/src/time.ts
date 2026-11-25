@@ -26,10 +26,16 @@ export const parseWhen = (
   if (relative?.[1] !== undefined && relative[2] !== undefined) {
     const unit = UNIT_MS[relative[2]];
     if (unit !== undefined) {
-      return Effect.succeed<When>({
-        _tag: 'instant',
-        at: new Date(now.getTime() - Number(relative[1]) * unit),
-      });
+      const at = new Date(now.getTime() - Number(relative[1]) * unit);
+      if (Number.isNaN(at.getTime())) {
+        return Effect.fail(
+          new UsageError({
+            message: `${flag} "${text}" is out of range`,
+            hint: 'use a smaller duration like 30m, 1h, 2d or an ISO timestamp like 2026-10-12T08:00:00Z',
+          }),
+        );
+      }
+      return Effect.succeed<When>({ _tag: 'instant', at });
     }
   }
   const parsed = /^\d{4}-\d{2}-\d{2}/.test(text)

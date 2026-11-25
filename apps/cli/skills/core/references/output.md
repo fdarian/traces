@@ -9,7 +9,7 @@ stdout: compact text by default, piped or on a terminal; `--json` prints JSON in
 | Code | Meaning |
 | --- | --- |
 | 0 | ok |
-| 1 | runtime/provider error |
+| 1 | runtime/provider error, or an unexpected bug (`error:` plus a hint that it is a bug in traces; `TRACES_DEBUG=1` adds the stack) |
 | 2 | usage/config error |
 | 3 | auth error |
 

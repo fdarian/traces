@@ -11,10 +11,18 @@ export const RequestLogLine = Schema.Struct({
   message: Schema.String,
 });
 
+/** `new Date(...).toISOString()` throws on an unparseable value, so the row is rejected at decode time instead. */
+const ParseableTimestamp = Schema.String.check(
+  Schema.makeFilter(
+    (text) =>
+      !Number.isNaN(Date.parse(text)) || 'expected a parseable timestamp',
+  ),
+);
+
 export const RequestLogRow = Schema.Struct({
   requestId: Schema.String,
   traceId: Schema.optional(Schema.NullOr(Schema.String)),
-  timestamp: Schema.String,
+  timestamp: ParseableTimestamp,
   deploymentId: Schema.String,
   environment: Schema.String,
   branch: Schema.optional(Schema.NullOr(Schema.String)),

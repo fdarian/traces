@@ -7,7 +7,7 @@ import {
   ProviderNotFound,
   ProviderToolMissing,
 } from '@traces/core';
-import { Console, Context, Effect } from 'effect';
+import { Cause, Console, Context, Effect, Exit } from 'effect';
 import { CliError, type CliOutput, type HelpDoc } from 'effect/cli';
 import { ConfigError, UsageError } from '#/errors.ts';
 import { parseLevels } from '#/levels.ts';
@@ -15,6 +15,8 @@ import {
   commandLine,
   deploymentHeader,
   EXIT_CODES,
+  ExitWith,
+  exitReport,
   formatDeploymentLine,
   formatLogLine,
   parseErrorPresenter,
@@ -47,6 +49,14 @@ describe('parseWhen', () => {
     expect(
       await Effect.runPromise(parseWhen('--since', 'deploy', now)),
     ).toEqual({ _tag: 'deploy' });
+  });
+
+  test('a duration past the Date range is a usage error naming the value', async () => {
+    const result = await Effect.runPromise(
+      parseWhen('--since', '99999999999d', now).pipe(Effect.flip),
+    );
+    expect(result).toBeInstanceOf(UsageError);
+    expect(result.message).toContain('--since "99999999999d"');
   });
 
   test('rejects anything else with a usage error', async () => {
@@ -471,5 +481,41 @@ describe('formatDeploymentLine', () => {
     expect(formatDeploymentLine(deployment, false)).toBe(
       'ready     0123456789abcdef abcdef0 main 10-15 12:00:00.000Z fix https://x.example.com',
     );
+  });
+});
+
+describe('exitReport', () => {
+  test('success and interrupts print nothing', () => {
+    expect(exitReport(Exit.succeed(undefined), false)).toEqual({ code: 0 });
+    expect(exitReport(Exit.failCause(Cause.interrupt()), false)).toEqual({
+      code: 130,
+    });
+  });
+
+  test('an already-reported failure only carries its exit code', () => {
+    expect(exitReport(Exit.fail(new ExitWith({ code: 3 })), false)).toEqual({
+      code: 3,
+    });
+  });
+
+  test('a thrown defect exits 1 with error and hint lines, no stack', () => {
+    const report = exitReport(
+      Exit.die(new RangeError('Invalid time value')),
+      false,
+    );
+    expect(report.code).toBe(1);
+    expect(report.stderr).toBe(
+      'error: Invalid time value\nhint: this is a bug in traces; rerun with TRACES_DEBUG=1 for the stack',
+    );
+  });
+
+  test('TRACES_DEBUG adds the stack', () => {
+    const report = exitReport(
+      Exit.die(new RangeError('Invalid time value')),
+      true,
+    );
+    expect(report.stderr).toStartWith('error: Invalid time value\nhint: ');
+    expect(report.stderr).toContain('RangeError');
+    expect(report.stderr).toContain('at ');
   });
 });

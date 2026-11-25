@@ -362,4 +362,28 @@ describe('vercel source', () => {
       expect(result.failure).toMatchObject({ _tag: 'ProviderResponseInvalid' });
     }
   });
+
+  test('a request-logs row with an unparseable timestamp is a typed provider error, not a throw', async () => {
+    const rows = requestLogs.rows.map((row) => ({
+      ...(row as object),
+      timestamp: 'not-a-date',
+    }));
+    const result = await run(
+      sourceWith((url) =>
+        url.pathname === '/api/logs/request-logs'
+          ? { body: { rows, hasMoreRows: false } }
+          : respond(url),
+      ).pipe(
+        Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
+        Effect.result,
+      ),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure).toMatchObject({
+        _tag: 'ProviderResponseInvalid',
+        operation: 'request-logs',
+      });
+    }
+  });
 });
