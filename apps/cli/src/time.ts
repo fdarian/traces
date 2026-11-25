@@ -52,6 +52,24 @@ export const parseWhen = (
   return Effect.succeed<When>({ _tag: 'instant', at: new Date(parsed) });
 };
 
+/** A window needs a start before its end; an absent `until` means now. */
+export const requireWindow = (
+  since: Date,
+  until: Date | undefined,
+  now: Date,
+): Effect.Effect<void, UsageError> =>
+  since.getTime() < (until ?? now).getTime()
+    ? Effect.void
+    : Effect.fail(
+        new UsageError({
+          message:
+            until === undefined
+              ? '--since is not before now'
+              : '--since is not before --until',
+          hint: 'the window must have a start earlier than its end',
+        }),
+      );
+
 /** For flags that cannot mean "the latest deploy": `--until` everywhere, `--since` outside `logs` and `errors`. */
 export const parseInstant = (flag: string, text: string, now: Date) =>
   parseWhen(flag, text, now).pipe(

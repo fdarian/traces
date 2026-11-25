@@ -46,7 +46,7 @@ import {
   partialFields,
 } from '#/partial-coverage.ts';
 import { globalOptions, resolveErrorScope } from '#/resolve.ts';
-import { parseInstant, parseWhen } from '#/time.ts';
+import { parseInstant, parseWhen, requireWindow } from '#/time.ts';
 
 const countText = (record: ErrorGroupRecord): string => `${record.count}x`;
 
@@ -156,6 +156,7 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
     const until = Option.isSome(args.until)
       ? yield* parseInstant('--until', args.until.value, now)
       : undefined;
+    if (when._tag === 'instant') yield* requireWindow(when.at, until, now);
     const scope = yield* resolveErrorScope(args, args.service, args.source);
 
     // Each service anchors on its own latest ready deploy, so its window is settled before either side reads.

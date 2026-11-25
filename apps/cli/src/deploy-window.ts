@@ -9,10 +9,9 @@ import {
 } from '@traces/core';
 import { Effect } from 'effect';
 import { UsageError } from '#/errors.ts';
-import { DEPLOY_SCAN, ERROR_CAP } from '#/limits.ts';
+import { DEPLOY_SCAN, ERROR_CAP, HOUR_MS } from '#/limits.ts';
 import { displayId } from '#/output.ts';
 
-const HOUR_MS = 60 * 60 * 1000;
 const BASELINE_MAX_MS = 24 * HOUR_MS;
 
 /** A deploy-anchored `errors` window: the deploy onward, plus the stretch before it that says what was already failing. */
@@ -34,8 +33,9 @@ export const deploySinceText = (
   `since deploy ${displayId(deployment.id, terminal)} at ${isoSeconds(since)}`;
 
 const formatSpan = (ms: number): string => {
-  const hours = Math.floor(ms / HOUR_MS);
-  const minutes = Math.round((ms % HOUR_MS) / 60_000);
+  const totalMinutes = Math.round(ms / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   if (hours === 0) return `${minutes}m`;
   return minutes === 0 ? `${hours}h` : `${hours}h${minutes}m`;
 };
@@ -58,6 +58,30 @@ export const deployInstant = (
     : Effect.succeed(at);
 };
 
+/** The post-deploy length in ms; a deploy at or after the window end is a usage error that names whichever side is wrong. */
+export const postDeployLength = (
+  deployment: Deployment,
+  at: Date,
+  until: Date | undefined,
+  now: Date,
+  terminal: boolean,
+) => {
+  const length = (until ?? now).getTime() - at.getTime();
+  if (length > 0) return Effect.succeed(length);
+  const deploy = deploySinceText(deployment, at, terminal);
+  return Effect.fail(
+    until === undefined
+      ? new UsageError({
+          message: `the latest ready deploy is ahead of this machine's clock (${deploy})`,
+          hint: "check this machine's clock",
+        })
+      : new UsageError({
+          message: `--until is not after the latest ready deploy (${deploy})`,
+          hint: 'move --until later, or drop it',
+        }),
+  );
+};
+
 /** The baseline is as long as the post-deploy window, capped at 24h, so a short window is compared against a like-sized one. */
 export const deployWindow = (
   deployment: Deployment,
@@ -67,13 +91,13 @@ export const deployWindow = (
 ) =>
   Effect.gen(function* () {
     const at = yield* deployInstant(deployment);
-    const postLength = (until ?? now).getTime() - at.getTime();
-    if (postLength <= 0) {
-      return yield* new UsageError({
-        message: `--until is not after the latest ready deploy (${deploySinceText(deployment, at, terminal)})`,
-        hint: 'move --until later, or drop it',
-      });
-    }
+    const postLength = yield* postDeployLength(
+      deployment,
+      at,
+      until,
+      now,
+      terminal,
+    );
     return {
       deployment,
       since: at,

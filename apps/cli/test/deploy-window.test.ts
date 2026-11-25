@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deploySinceText } from '#/deploy-window.ts';
+import { baselineText, deploySinceText } from '#/deploy-window.ts';
 
 const DEPLOY_AT = '2026-10-15T12:00:00.000Z';
 const UNTIL = '2026-10-15T14:00:00Z';
@@ -418,6 +418,115 @@ describe('traces errors --since deploy', () => {
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('--until does not accept');
   });
+});
+
+describe('baselineText', () => {
+  const at = new Date('2026-10-15T12:00:00Z');
+  const baseline = (ms: number) =>
+    baselineText({
+      deployment: deployment('dep', 'SUCCESS', DEPLOY_AT) as never,
+      since: at,
+      baselineSince: new Date(at.getTime() - ms),
+    });
+
+  test('minutes that round up to an hour carry into the hours', () => {
+    expect(baseline(119.6 * 60_000)).toBe('baseline 2h before');
+    expect(baseline(59.6 * 60_000)).toBe('baseline 1h before');
+    expect(baseline(90 * 60_000)).toBe('baseline 1h30m before');
+    expect(baseline(45 * 60_000)).toBe('baseline 45m before');
+  });
+});
+
+describe('traces errors --since deploy window checks', () => {
+  const AHEAD = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+  test('a deploy ahead of the local clock blames the clock when --until is absent', async () => {
+    const state = writeState('ahead', [
+      deployment('dep-future', 'SUCCESS', AHEAD),
+    ]);
+    const result = await run(
+      'errors',
+      ['api', '--since', 'deploy', '--source', 'logs'],
+      configFor(false),
+      state,
+    );
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("ahead of this machine's clock");
+    expect(result.stderr).not.toContain('--until');
+  });
+
+  test('--until before the deploy still blames --until', async () => {
+    const state = writeState('until-before', DEPLOYMENTS);
+    const result = await run(
+      'errors',
+      [
+        'api',
+        '--since',
+        'deploy',
+        '--until',
+        '2026-10-15T11:00:00Z',
+        '--source',
+        'logs',
+      ],
+      configFor(false),
+      state,
+    );
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--until is not after the latest ready');
+  });
+
+  test('logs --since deploy rejects the same two cases', async () => {
+    const ahead = await run(
+      'logs',
+      ['api', '--since', 'deploy'],
+      configFor(false),
+      writeState('logs-ahead', [deployment('dep-future', 'SUCCESS', AHEAD)]),
+    );
+    expect(ahead.code).toBe(2);
+    expect(ahead.stderr).toContain("ahead of this machine's clock");
+    const before = await run(
+      'logs',
+      ['api', '--since', 'deploy', '--until', '2026-10-15T11:00:00Z'],
+      configFor(false),
+      writeState('logs-until-before', DEPLOYMENTS),
+    );
+    expect(before.code).toBe(2);
+    expect(before.stderr).toContain('--until is not after the latest ready');
+  });
+});
+
+describe('an inverted window', () => {
+  for (const command of ['logs', 'errors'] as const) {
+    test(`${command} rejects --since at or after --until with exit 2`, async () => {
+      const state = writeState(`inverted-${command}`, DEPLOYMENTS);
+      for (const [since, until] of [
+        ['2026-10-15T13:00:00Z', '2026-10-15T12:00:00Z'],
+        ['2026-10-15T12:00:00Z', '2026-10-15T12:00:00Z'],
+      ] as const) {
+        const result = await run(
+          command,
+          ['api', '--since', since, '--until', until],
+          configFor(false),
+          state,
+        );
+        expect(result.code).toBe(2);
+        expect(result.stderr).toContain('--since is not before --until');
+        expect(result.rows).toEqual([]);
+      }
+    });
+
+    test(`${command} rejects a --since in the future when --until is absent`, async () => {
+      const state = writeState(`future-${command}`, DEPLOYMENTS);
+      const result = await run(
+        command,
+        ['api', '--since', '2999-01-01T00:00:00Z'],
+        configFor(false),
+        state,
+      );
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain('--since is not before now');
+    });
+  }
 });
 
 describe('traces logs --since deploy', () => {

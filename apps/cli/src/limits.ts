@@ -13,7 +13,7 @@ export const DEPLOY_SCAN = 20;
 export const DEFAULT_WINDOW = '1h';
 export const FOLLOW_INTERVAL_SECONDS = 2;
 
-const HOUR_MS = 60 * 60 * 1000;
+export const HOUR_MS = 60 * 60 * 1000;
 /** Shortest retention per provider (Railway Free 3d, Vercel Hobby 1h); a window starting inside it can legitimately be empty. */
 export const SHORTEST_RETENTION_MS = {
   railway: 3 * 24 * HOUR_MS,

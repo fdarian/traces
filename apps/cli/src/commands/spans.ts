@@ -31,7 +31,7 @@ import {
   windowSpansDays,
 } from '#/output.ts';
 import { globalOptions, resolveTraceService } from '#/resolve.ts';
-import { parseDuration, parseInstant } from '#/time.ts';
+import { parseDuration, parseInstant, requireWindow } from '#/time.ts';
 
 const parseAttributes = (pairs: ReadonlyArray<string>) =>
   Effect.gen(function* () {
@@ -159,12 +159,7 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
     const until = Option.isSome(args.until)
       ? yield* parseInstant('--until', args.until.value, now)
       : undefined;
-    if (since.getTime() >= (until ?? now).getTime()) {
-      return yield* new UsageError({
-        message: '--since is not before --until',
-        hint: 'the window must have a start earlier than its end',
-      });
-    }
+    yield* requireWindow(since, until, now);
 
     const service = yield* resolveTraceService(args, args.service);
     const windowEnd = (until ?? now).toISOString();

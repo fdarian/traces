@@ -9,7 +9,11 @@ import {
 } from '@traces/core';
 import { Console, Duration, Effect, Option, Schedule } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
-import { deployInstant, deploySinceText } from '#/deploy-window.ts';
+import {
+  deployInstant,
+  deploySinceText,
+  postDeployLength,
+} from '#/deploy-window.ts';
 import { UsageError } from '#/errors.ts';
 import { parseLevels } from '#/levels.ts';
 import {
@@ -32,7 +36,7 @@ import {
   windowSpansDays,
 } from '#/output.ts';
 import { globalOptions, resolveService } from '#/resolve.ts';
-import { parseInstant, parseWhen } from '#/time.ts';
+import { parseInstant, parseWhen, requireWindow } from '#/time.ts';
 
 const FOLLOW_INTERVAL = Duration.seconds(FOLLOW_INTERVAL_SECONDS);
 
@@ -235,11 +239,19 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
         scan: DEPLOY_SCAN,
       });
       since = yield* deployInstant(deployment);
+      yield* postDeployLength(
+        deployment,
+        since,
+        until,
+        now,
+        stderrIsTerminal(),
+      );
       yield* Console.error(
         deploySinceText(deployment, since, stderrIsTerminal()),
       );
     } else {
       since = when?.at;
+      if (since !== undefined) yield* requireWindow(since, until, now);
     }
     const query: LogQuery = {
       since,

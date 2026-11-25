@@ -55,7 +55,7 @@ Print logs for one service, oldest to newest. Default: runtime logs of the last 
 
 Usage: `traces logs [service] [flags]`
 
-`--since` also takes `deploy`: the start time of the service's latest ready deploy (among the last 20); stderr says which one, and with none ready the command exits 1 (`traces deploys <service>` shows why). `--until` takes instants only.
+`--since` also takes `deploy`: the start time of the service's latest ready deploy (among the last 20); stderr says which one, and with none ready the command exits 1 (`traces deploys <service>` shows why). `--until` takes instants only. A window whose start is not before its end (`--since` at or after `--until`, or after now without `--until`) is a usage error (exit 2), as is a deploy that starts at or after the window end (a deploy ahead of this machine's clock, or `--until` before the deploy).
 
 ### Output
 
@@ -104,7 +104,7 @@ Group error and fatal logs, plus error spans from Jaeger when the project has `t
 
 Usage: `traces errors [service] [flags]`
 
-`--since` also takes `deploy`: each service with a log provider starts its window at the start time of its own latest ready deploy; see the `--since deploy` notes below. `--until` takes instants only.
+`--since` also takes `deploy`: each service with a log provider starts its window at the start time of its own latest ready deploy; see the `--since deploy` notes below. `--until` takes instants only. A window whose start is not before its end is a usage error (exit 2), as for `traces logs`.
 
 ### Output
 
