@@ -7,7 +7,7 @@ import {
   ProviderNotFound,
   ProviderToolMissing,
 } from '@traces/core';
-import { Cause, Console, Context, Effect, Exit } from 'effect';
+import { Cause, Console, Context, Effect, Exit, Schema } from 'effect';
 import { CliError, type CliOutput, type HelpDoc } from 'effect/cli';
 import { recordKey } from '#/commands/logs.ts';
 import { ConfigError, UsageError } from '#/errors.ts';
@@ -217,14 +217,17 @@ describe('renderError', () => {
   });
 
   describe('JaegerBadResponse', () => {
-    const badResponse = (fields: {
-      status: number;
-      contentType?: string;
-      body: string;
-    }) =>
+    const badResponse = (
+      fields: {
+        status: number;
+        contentType?: string;
+        body: string;
+      },
+      cause: unknown = new Error('Expected a valid JSON string'),
+    ) =>
       renderError(
         new JaegerBadResponse({
-          cause: new Error('Expected a valid JSON string'),
+          cause,
           ...fields,
         }),
       );
@@ -264,6 +267,47 @@ describe('renderError', () => {
           body: '<html>Moved</html>',
         }).hint,
       ).toBe('the URL redirects; use the final URL as tracing.url');
+    });
+
+    describe('a response that decoded only partway', () => {
+      const summaries = Schema.Struct({
+        summaries: Schema.Array(Schema.Struct({ traceId: Schema.String })),
+      });
+      const decodeFailure = (input: unknown) => {
+        try {
+          Schema.decodeUnknownSync(summaries)(input);
+        } catch (error) {
+          return error;
+        }
+        throw new Error('expected the decode to fail');
+      };
+      const json = { status: 200, contentType: 'application/json', body: '{}' };
+
+      test('a nested field mismatch points at a traces bug', () => {
+        const hint = badResponse(
+          json,
+          decodeFailure({ summaries: [{ traceId: 1 }] }),
+        ).hint;
+        expect(hint).toBe(
+          "the backend answered like Jaeger /api/v3 but a field didn't match what traces expects; likely a traces bug, please report it with the error above",
+        );
+      });
+
+      test('a mismatch at the root keeps the generic hint', () => {
+        expect(badResponse(json, decodeFailure([])).hint).toBe(
+          'the URL may not point at a Jaeger v2 query service (/api/v3)',
+        );
+      });
+
+      test('a non-2xx status keeps the generic hint', () => {
+        const hint = badResponse(
+          { ...json, status: 500 },
+          decodeFailure({ summaries: [{ traceId: 1 }] }),
+        ).hint;
+        expect(hint).toBe(
+          'the URL may not point at a Jaeger v2 query service (/api/v3)',
+        );
+      });
     });
 
     test('anything else keeps the generic hint', () => {
