@@ -54,8 +54,9 @@ const fetchPage = (
       ? source.httpLogs(query)
       : source.logs(query);
 
-const recordKey = (record: LogRecord) =>
-  `${record.ts}\0${record.deploymentId ?? ''}\0${record.message}`;
+/** JSON keeps an absent deployment id (`null`) apart from an empty one. */
+export const recordKey = (record: LogRecord) =>
+  JSON.stringify([record.ts, record.deploymentId ?? null, record.message]);
 
 /** Text mode prints a `deploy <id>` line whenever the deployment changes; the last one printed persists across -f polls. */
 const makeLogPrinter = (

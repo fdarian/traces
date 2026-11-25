@@ -181,9 +181,10 @@ export const formatSpanTree = (
     return [
       head,
       `${gutter}${indent}  ! ${problem}`,
-      ...topFrames(exception?.stacktrace ?? '').map(
-        (frame) => `${gutter}${indent}    ${frame}`,
-      ),
+      ...(exception?.stacktrace === undefined
+        ? []
+        : topFrames(exception.stacktrace)
+      ).map((frame) => `${gutter}${indent}    ${frame}`),
     ];
   });
 };

@@ -346,6 +346,20 @@ describe('formatSpanTree', () => {
     ]);
   });
 
+  test('an exception without a stack trace prints no frames', () => {
+    expect(
+      formatSpanTree([
+        row({
+          status: 'error',
+          exception: { type: 'TypeError', message: 'x is undefined' },
+        }),
+      ]),
+    ).toEqual([
+      '+0ms 412ms web GET /x ERR',
+      `${' '.repeat(13)}! TypeError: x is undefined`,
+    ]);
+  });
+
   test('an error without an exception shows its status message', () => {
     expect(
       formatSpanTree([

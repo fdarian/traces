@@ -9,6 +9,7 @@ import {
 } from '@traces/core';
 import { Cause, Console, Context, Effect, Exit } from 'effect';
 import { CliError, type CliOutput, type HelpDoc } from 'effect/cli';
+import { recordKey } from '#/commands/logs.ts';
 import { ConfigError, UsageError } from '#/errors.ts';
 import { parseLevels } from '#/levels.ts';
 import {
@@ -28,6 +29,30 @@ import { parseInstant, parseWhen } from '#/time.ts';
 import { vercelAuthFilePath } from '#/vercel-token.ts';
 
 const now = new Date('2026-10-12T12:00:00.000Z');
+
+describe('recordKey', () => {
+  const record = (deploymentId: string | undefined): LogRecord => ({
+    ts: '2026-10-12T12:00:00.000Z',
+    service: 'api',
+    provider: 'railway',
+    environment: 'production',
+    ...(deploymentId === undefined ? {} : { deploymentId }),
+    source: 'runtime',
+    level: 'info',
+    message: 'hello',
+    attrs: {},
+  });
+
+  test('an absent deployment id and an empty one are different keys', () => {
+    expect(recordKey(record(undefined))).not.toBe(recordKey(record('')));
+  });
+
+  test('a separator inside a field cannot make two records collide', () => {
+    expect(recordKey({ ...record('a'), message: 'b\0c' })).not.toBe(
+      recordKey({ ...record('a\0b'), message: 'c' }),
+    );
+  });
+});
 
 describe('parseWhen', () => {
   const at = async (text: string) => {
