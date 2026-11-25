@@ -10,8 +10,8 @@ import type {
   LogRecord,
   VercelTarget,
 } from '../model.js';
-import { levelAllowed, matchesGrep } from '../normalize.js';
-import { pageBackwards } from '../paging.js';
+import { levelAllowed, matchesGrep, shortHash } from '../normalize.js';
+import { type PageResume, pageBackwards } from '../paging.js';
 import type { LogSource } from '../source.js';
 import { makeVercelClient } from './client.js';
 import {
@@ -44,6 +44,32 @@ const encodeServerLevel = (levels: ReadonlyArray<LogLevel>) =>
     : undefined;
 
 const padMs = (ms: number) => String(ms).padStart(16, '0');
+
+/**
+ * Resume point for a capped fetch that kept fewer than a page of rows. It sits
+ * on the oldest kept row; when nothing was kept, on the oldest timestamped raw
+ * event, which has no delivered rows to remember.
+ */
+const resumeBelow = (
+  kept: ReadonlyArray<{ readonly position: string; readonly key: string }>,
+  raw: ReadonlyArray<{ readonly position: string }>,
+): PageResume | undefined => {
+  const oldest = kept[0];
+  if (oldest !== undefined) {
+    return {
+      before: oldest.position,
+      seen: kept
+        .filter((row) => row.position === oldest.position)
+        .map((row) => shortHash(row.key)),
+    };
+  }
+  const oldestRaw = raw.reduce<string | undefined>(
+    (min, event) =>
+      min === undefined || event.position < min ? event.position : min,
+    undefined,
+  );
+  return oldestRaw === undefined ? undefined : { before: oldestRaw, seen: [] };
+};
 
 const unwrapEnvironment = (target: VercelTarget) =>
   target.environment === 'production' ? 'production' : 'preview';
@@ -211,6 +237,7 @@ export const makeVercelSource = (
           cursor !== undefined ? cursor.until : input.until?.getTime();
         const seen = cursor === undefined ? 0 : cursor.seen.length;
         const filtered = input.levels.length > 0 || input.grep !== undefined;
+        const fetchLimit = input.limit + 1 + seen;
         const events = yield* get(
           'build-events',
           `${API}/v3/deployments/${encodeURIComponent(deploymentId)}/events`,
@@ -218,7 +245,7 @@ export const makeVercelSource = (
             ...teamParams,
             direction: 'backward',
             // Filters apply client-side, so a bounded fetch could hide matches.
-            limit: filtered ? '-1' : String(input.limit + 1 + seen),
+            limit: filtered ? '-1' : String(fetchLimit),
             // Widened by 1ms: whether the bound is inclusive is unverified.
             until: until === undefined ? undefined : String(until + 1),
           },
@@ -245,15 +272,32 @@ export const makeVercelSource = (
               ? undefined
               : { before: padMs(cursor.until), seen: cursor.seen },
         });
+        // Events without text or timestamp are dropped above, so only the raw
+        // count says whether a capped fetch left older events behind.
+        const rawCapped = !filtered && events.length >= fetchLimit;
+        const next =
+          page.next === undefined && rawCapped
+            ? resumeBelow(
+                page.kept.map((entry) => ({
+                  position: padMs(entry.created),
+                  key: entry.id ?? entry.record.message,
+                })),
+                events.flatMap((event) =>
+                  event.created === undefined
+                    ? []
+                    : [{ position: padMs(event.created) }],
+                ),
+              )
+            : page.next;
         return {
           records: page.kept.map((entry) => entry.record),
-          ...(page.next === undefined
+          ...(next === undefined
             ? {}
             : {
                 next: {
                   kind: 'vercel-until' as const,
-                  until: Number(page.next.before),
-                  seen: page.next.seen,
+                  until: Number(next.before),
+                  seen: next.seen,
                 },
               }),
         };

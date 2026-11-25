@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect, Option, Redacted } from 'effect';
 import {
+  type Cursor,
   makeVercelSource,
   mapBuildEvent,
   mapHttpRow,
@@ -260,6 +261,71 @@ describe('vercel source', () => {
     const events = calls.find((call) => call.url.includes('/events'));
     expect(events?.url).toContain('/v3/deployments/dpl_prod/events');
     expect(events?.url).toContain('direction=backward');
+  });
+
+  test('build logs keep paging when dropped events fill the fetch window', async () => {
+    const text = (id: string, at: number) => ({
+      at,
+      event: { id, created: at, type: 'stdout', text: `line ${id}` },
+    });
+    // newest first; `ghost` has no timestamp and `empty` no text, so the API's
+    // capped fetch spends rows on events that never become records
+    const timeline: ReadonlyArray<{ at: number; event: unknown }> = [
+      text('l8', 800),
+      { at: 700, event: { id: 'ghost', type: 'stdout', text: 'no timestamp' } },
+      text('l7', 700),
+      { at: 600, event: { id: 'empty', created: 600, type: 'state' } },
+      text('l6', 600),
+      text('l5', 500),
+      {
+        at: 400,
+        event: { id: 'ghost2', type: 'stdout', text: 'no timestamp' },
+      },
+      text('l4', 400),
+      text('l3', 300),
+      text('l2', 200),
+      text('l1', 100),
+    ];
+    const handler = (url: URL) => {
+      if (!url.pathname.endsWith('/events')) return respond(url);
+      const until = Number(url.searchParams.get('until') ?? Infinity);
+      const limit = Number(url.searchParams.get('limit'));
+      return {
+        body: timeline
+          .filter((row) => row.at <= until)
+          .slice(0, limit)
+          .map((row) => row.event),
+      };
+    };
+    const messages: Array<string> = [];
+    await run(
+      Effect.gen(function* () {
+        const source = yield* sourceWith(handler);
+        let cursor: Cursor | undefined;
+        for (let guard = 0; guard < 20; guard++) {
+          const page = yield* source.buildLogs({
+            levels: [],
+            limit: 2,
+            deploymentId: 'dpl_prod',
+            cursor,
+          });
+          messages.unshift(...page.records.map((r) => r.message));
+          if (page.next === undefined) return;
+          cursor = page.next;
+        }
+        throw new Error('paging did not terminate');
+      }),
+    );
+    expect(messages).toEqual([
+      'line l1',
+      'line l2',
+      'line l3',
+      'line l4',
+      'line l5',
+      'line l6',
+      'line l7',
+      'line l8',
+    ]);
   });
 
   test('401 and 403 become auth errors with a login hint', async () => {
