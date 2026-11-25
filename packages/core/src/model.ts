@@ -55,6 +55,9 @@ export interface TraceSummaryService {
   readonly spanCount: number;
 }
 
+/** Root service and operation of a trace with no root span (e.g. the root was never sampled or ingested). */
+export const UNKNOWN_ROOT = 'unknown';
+
 export interface TraceSummary {
   readonly traceId: string;
   readonly rootService: string;

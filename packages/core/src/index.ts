@@ -122,7 +122,7 @@ export type {
   TraceSummary,
   TraceSummaryService,
 } from './model.js';
-export { TraceRow, toTraceRow } from './model.js';
+export { TraceRow, toTraceRow, UNKNOWN_ROOT } from './model.js';
 export {
   extractExceptionInfo,
   normalizeAttribute,

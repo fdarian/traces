@@ -1,4 +1,4 @@
-import type { Trace, TraceSummary } from '../model.js';
+import { type Trace, type TraceSummary, UNKNOWN_ROOT } from '../model.js';
 import { nanosToMs } from '../normalize.js';
 
 export function countServices(
@@ -14,8 +14,8 @@ export function countServices(
 export function computeTraceSummary(trace: Trace): TraceSummary {
   const rootSpan = trace.spans.find((s) => s.parentSpanId === undefined);
   const rootService =
-    rootSpan !== undefined ? rootSpan.resource.serviceName : 'unknown';
-  const rootOperation = rootSpan !== undefined ? rootSpan.name : 'unknown';
+    rootSpan !== undefined ? rootSpan.resource.serviceName : UNKNOWN_ROOT;
+  const rootOperation = rootSpan !== undefined ? rootSpan.name : UNKNOWN_ROOT;
 
   let errorSpanCount = 0;
   let minStart = BigInt('0');
