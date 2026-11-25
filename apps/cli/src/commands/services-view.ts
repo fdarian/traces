@@ -3,6 +3,7 @@ import {
   hasLogProvider,
   type LogServiceConfig,
   otelServiceName,
+  railwayEnvironmentOf,
   type ServiceConfig,
 } from '#/config.ts';
 import type { ConfigSource, ResolvedProject } from '#/resolve.ts';
@@ -55,7 +56,7 @@ export type ServicesView = {
   readonly configPath: string;
   readonly configSource: ConfigSource;
   readonly matchedBy: ResolvedProject['matchedBy'];
-  /** Home directory, so the config path can be shown as `~/...`. Text view only. */
+  /** Home directory, so a terminal can show the config path as `~/...`. Text view only. */
   readonly home: string;
   readonly services: ReadonlyArray<ServiceEntry>;
   readonly providers: ReadonlyArray<ProviderEntry>;
@@ -152,6 +153,8 @@ const SECTION_INDENT = '  ';
 const shortenHome = (path: string, home: string): string =>
   path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
 
+const PROJECT_HEADER = 'PROJECT';
+
 const describeMatch = (view: ServicesView): string => {
   if (view.configSource === 'repo') return 'repo traces.json';
   const source = view.configSource === 'global' ? 'global' : '--config';
@@ -170,14 +173,20 @@ const describeMatch = (view: ServicesView): string => {
 };
 
 const environmentOf = (ref: LogServiceConfig): string =>
-  ref.provider === 'railway' ? (ref.environment ?? 'production') : '';
+  ref.provider === 'railway' ? railwayEnvironmentOf(ref) : '';
 
 const PROJECT_ID_PREFIX = 8;
 
-const projectPrefixOf = (ref: LogServiceConfig): string =>
-  ref.provider === 'railway' ? ref.project.slice(0, PROJECT_ID_PREFIX) : '';
+const railwayProjectOf = (ref: LogServiceConfig, terminal: boolean): string => {
+  if (ref.provider !== 'railway') return '';
+  return terminal ? ref.project.slice(0, PROJECT_ID_PREFIX) : ref.project;
+};
 
-const servicesSection = (view: ServicesView, style: Style): string => {
+const servicesSection = (
+  view: ServicesView,
+  style: Style,
+  terminal: boolean,
+): string => {
   const reported =
     view.tracing?.check.status === 'reachable'
       ? view.tracing.check.services
@@ -198,7 +207,10 @@ const servicesSection = (view: ServicesView, style: Style): string => {
       'PROVIDER'.length,
       ...logRefs.map((ref) => ref.provider.length),
     ),
-    project: PROJECT_ID_PREFIX,
+    project: Math.max(
+      PROJECT_HEADER.length,
+      ...logRefs.map((ref) => railwayProjectOf(ref, terminal).length),
+    ),
   };
 
   /** PROVIDER, PROJECT and ENV share one cell so a trace-only row can span them. */
@@ -220,7 +232,7 @@ const servicesSection = (view: ServicesView, style: Style): string => {
     return cell(
       targetOf(
         record.ref.provider,
-        projectPrefixOf(record.ref),
+        railwayProjectOf(record.ref, terminal),
         environmentOf(record.ref),
       ),
     );
@@ -240,7 +252,7 @@ const servicesSection = (view: ServicesView, style: Style): string => {
   const headerCell = (text: string): Cell => cell(text, style.dim(text));
   const headerRow = [
     headerCell('SERVICE'),
-    headerCell(targetOf('PROVIDER', 'PROJECT', 'ENV')),
+    headerCell(targetOf('PROVIDER', PROJECT_HEADER, 'ENV')),
     ...(reported === undefined ? [] : [headerCell('TRACES')]),
   ];
 
@@ -389,9 +401,20 @@ const providersSection = (view: ServicesView, style: Style) => {
   ].join('\n');
 };
 
-export const renderServices = (view: ServicesView, style: Style): string => {
-  const header = `${style.bold(view.project)}  ${style.dim(`${shortenHome(view.configPath, view.home)} (${describeMatch(view)})`)}`;
-  return [header, servicesSection(view, style), providersSection(view, style)]
+export const renderServices = (
+  view: ServicesView,
+  style: Style,
+  terminal: boolean,
+): string => {
+  const configPath = terminal
+    ? shortenHome(view.configPath, view.home)
+    : view.configPath;
+  const header = `${style.bold(view.project)}  ${style.dim(`${configPath} (${describeMatch(view)})`)}`;
+  return [
+    header,
+    servicesSection(view, style, terminal),
+    providersSection(view, style),
+  ]
     .filter((section) => section !== undefined)
     .join('\n\n');
 };

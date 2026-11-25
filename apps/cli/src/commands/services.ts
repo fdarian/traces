@@ -25,7 +25,12 @@ import {
   otelServiceName,
   type TracingConfig,
 } from '#/config.ts';
-import { causeMessage, outputMode, renderError } from '#/output.ts';
+import {
+  causeMessage,
+  outputMode,
+  renderError,
+  stdoutIsTerminal,
+} from '#/output.ts';
 import {
   globalOptions,
   type ResolvedProject,
@@ -196,7 +201,7 @@ export const servicesCommand = Command.make(
       yield* Console.log(
         mode === 'json'
           ? JSON.stringify(servicesDocument(view))
-          : renderServices(view, stdoutStyle()),
+          : renderServices(view, stdoutStyle(), stdoutIsTerminal()),
       );
     }),
 ).pipe(

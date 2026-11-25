@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import {
   groupProviders,
   type ProviderEntry,
-  renderServices,
+  renderServices as renderServicesFor,
   type ServiceEntry,
   type ServicesView,
   servicesDocument,
@@ -15,7 +15,7 @@ import {
   type TracingStatus,
 } from '#/commands/services-view.ts';
 import { hasLogProvider } from '#/config.ts';
-import { makeStyle } from '#/style.ts';
+import { makeStyle, type Style } from '#/style.ts';
 
 type Answer = (response: import('node:http').ServerResponse) => void;
 
@@ -231,6 +231,9 @@ describe('traces services tracing check', () => {
 
 const PROJECT_ID = 'df361d61-2d2a-4838-9295-cd227871305b';
 const plain = makeStyle(false);
+
+const renderServices = (view: ServicesView, style: Style) =>
+  renderServicesFor(view, style, true);
 
 const railwayRecord = (
   service: string,
@@ -697,6 +700,49 @@ describe('renderServices', () => {
         plain,
       );
       expect(output).not.toContain('\u001b');
+    });
+  });
+
+  describe('piped versus a terminal', () => {
+    const OTHER_PROJECT_ID = '9c1b7e20-5a44-4f0e-8a31-0d2f6b7c1e55';
+    const view = viewOf([
+      railwayRecord('engine'),
+      {
+        service: 'worker',
+        provider: 'railway',
+        ref: {
+          provider: 'railway',
+          project: OTHER_PROJECT_ID,
+          service: 'worker-id',
+        },
+      },
+    ]);
+
+    test('piped text prints full project ids and the full config path', () => {
+      const output = renderServicesFor(view, plain, false);
+      expect(servicesTable(output)).toBe(
+        [
+          'Services',
+          `  SERVICE  PROVIDER  PROJECT${' '.repeat(PROJECT_ID.length - 'PROJECT'.length)}  ENV`,
+          `  engine   railway   ${PROJECT_ID}  production`,
+          `  worker   railway   ${OTHER_PROJECT_ID}  production`,
+        ].join('\n'),
+      );
+      expect(output.split('\n')[0]).toBe(
+        'mockingbird  /home/me/.config/traces/config.json (global, picked by --project)',
+      );
+      expect(output).not.toContain('~');
+    });
+
+    test('a terminal shortens project ids to 8 characters and the home directory to ~', () => {
+      const output = renderServicesFor(view, plain, true);
+      expect(servicesTable(output)).toContain(
+        '  engine   railway   df361d61  ',
+      );
+      expect(servicesTable(output)).not.toContain(PROJECT_ID);
+      expect(output.split('\n')[0]).toBe(
+        'mockingbird  ~/.config/traces/config.json (global, picked by --project)',
+      );
     });
   });
 

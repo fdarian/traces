@@ -127,6 +127,15 @@ export type LogServiceConfig = Exclude<
   typeof TraceOnlyService.Type
 >;
 
+export type RailwayServiceConfig = Extract<
+  ServiceConfig,
+  { provider: 'railway' }
+>;
+
+/** Railway's own default, used when the config entry names no environment. */
+export const railwayEnvironmentOf = (config: RailwayServiceConfig): string =>
+  config.environment ?? 'production';
+
 export const hasLogProvider = (
   config: ServiceConfig,
 ): config is LogServiceConfig => 'provider' in config;
