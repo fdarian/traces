@@ -30,6 +30,7 @@ import { Secrets } from '#/secrets.ts';
 import { skills as embeddedSkills } from '#/skills.macro.ts' with {
   type: 'macro',
 };
+import packageJson from '../package.json' with { type: 'json' };
 
 const root = Command.make('traces').pipe(
   Command.withDescription(
@@ -48,7 +49,7 @@ const root = Command.make('traces').pipe(
   ]),
 );
 
-const run = Command.runWith(root, { version: '0.0.0' });
+const run = Command.runWith(root, { version: packageJson.version });
 
 const program = run(hoistGlobalFlags(process.argv.slice(2))).pipe(
   Effect.catch((error) => {
@@ -76,7 +77,7 @@ program.pipe(
       FetchHttpClient.layer,
       Secrets.layer,
       SkillSource.inline(embeddedSkills()),
-      CliConfig.layer({ builtIns: [GlobalFlag.Help] }),
+      CliConfig.layer({ builtIns: [GlobalFlag.Help, GlobalFlag.Version] }),
       CliOutput.layerPresenter(parseErrorPresenter),
     ),
   ),
