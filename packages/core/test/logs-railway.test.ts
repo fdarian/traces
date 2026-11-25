@@ -278,6 +278,71 @@ describe('railway source', () => {
     ]);
   });
 
+  describe.each([
+    { name: 'deployment logs', field: 'deploymentLogs', call: 'logs' },
+    { name: 'build logs', field: 'buildLogs', call: 'buildLogs' },
+  ] as const)('$name paging through one millisecond', (kind) => {
+    const row = (timestamp: string, message: string) => ({
+      timestamp,
+      message,
+      severity: 'info',
+      attributes: [],
+      tags: { deploymentId: 'dep-1' },
+    });
+    // oldest first; seven rows share the millisecond .664, two of them the same nanosecond
+    const rows = [
+      row('2026-10-12T00:25:57.100000000Z', 'before'),
+      row('2026-10-12T00:25:58.664100000Z', 'ms-1'),
+      row('2026-10-12T00:25:58.664200000Z', 'ms-2'),
+      row('2026-10-12T00:25:58.664300000Z', 'ms-3a'),
+      row('2026-10-12T00:25:58.664300000Z', 'ms-3b'),
+      row('2026-10-12T00:25:58.664400000Z', 'ms-4'),
+      row('2026-10-12T00:25:58.664500000Z', 'ms-5'),
+      row('2026-10-12T00:25:58.664600000Z', 'ms-6'),
+      row('2026-10-12T00:25:59.900000000Z', 'after'),
+    ];
+    const floorMs = (timestamp: string) =>
+      Date.parse(`${timestamp.slice(0, 23)}Z`);
+    // like the real API: rows up to an inclusive end, newest `l + 1` of them, oldest first
+    const provider = (call: RailwayCall) => {
+      if (!call.document.includes(kind.field)) return respondWith([])(call);
+      const end = call.variables.e;
+      const inWindow = rows.filter(
+        (r) =>
+          end === undefined || floorMs(r.timestamp) <= Date.parse(`${end}`),
+      );
+      return { [kind.field]: inWindow.slice(-(Number(call.variables.l) + 1)) };
+    };
+
+    for (const limit of [2, 3, 4]) {
+      test(`returns every row once with limit ${limit} and ends without a cursor`, async () => {
+        const messages: Array<string> = [];
+        const final = await run(
+          Effect.gen(function* () {
+            const source = yield* httpSourceFor(target).pipe(
+              Effect.provide(fakeRailwayHttp(provider)),
+            );
+            let cursor: Cursor | undefined;
+            for (let guard = 0; guard < 20; guard++) {
+              const page = yield* source[kind.call]({
+                levels: [],
+                limit,
+                deploymentId: 'dep-1',
+                cursor,
+              });
+              messages.unshift(...page.records.map((r) => r.message));
+              if (page.next === undefined) return page;
+              cursor = page.next;
+            }
+            throw new Error('paging did not terminate');
+          }),
+        );
+        expect(final.next).toBeUndefined();
+        expect(messages).toEqual(rows.map((r) => r.message));
+      });
+    }
+  });
+
   test('resolves services and environments by name, failing with the available names', async () => {
     const missing = httpSourceFor({ ...target, serviceName: 'ghost' }).pipe(
       Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),

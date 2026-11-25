@@ -24,7 +24,7 @@ import {
   mapRailwayLog,
   PROVIDER,
 } from './normalize.js';
-import { fetchLimitFor, pageRailway, type TimeCursor } from './paging.js';
+import { pageRailwayWidening, type TimeCursor } from './paging.js';
 import {
   BUILD_LOGS_QUERY,
   DEPLOYMENT_LOGS_QUERY,
@@ -186,28 +186,29 @@ export const makeRailwaySource = (
           levelFilter(input.levels),
           grepFilter(input.grep),
         ]);
-        const fetchLimit = fetchLimitFor(input, cursor);
         if (input.deploymentId !== undefined) {
           const deploymentId = yield* resolveDeploymentId(input.deploymentId);
           const endDate =
             cursor !== undefined
               ? new Date(floorMs(cursor.before) + 1).toISOString()
               : input.until?.toISOString();
-          const data = yield* query(
-            'deploymentLogs',
-            DEPLOYMENT_LOGS_QUERY,
-            {
-              d: deploymentId,
-              f: filter,
-              s:
-                since === undefined ? undefined : new Date(since).toISOString(),
-              e: endDate,
-              l: fetchLimit,
-            },
-            DeploymentLogsData,
-          );
-          const page = pageRailway({
-            rows: data.deploymentLogs,
+          const page = yield* pageRailwayWidening({
+            fetch: (fetchLimit) =>
+              query(
+                'deploymentLogs',
+                DEPLOYMENT_LOGS_QUERY,
+                {
+                  d: deploymentId,
+                  f: filter,
+                  s:
+                    since === undefined
+                      ? undefined
+                      : new Date(since).toISOString(),
+                  e: endDate,
+                  l: fetchLimit,
+                },
+                DeploymentLogsData,
+              ).pipe(Effect.map((data) => data.deploymentLogs)),
             timestamp: (row) => row.timestamp,
             key: (row) => row.message,
             limit: input.limit,
@@ -231,20 +232,23 @@ export const makeRailwaySource = (
           cursor !== undefined
             ? cursor.before
             : (input.until ?? new Date()).toISOString();
-        const data = yield* query(
-          'environmentLogs',
-          ENVIRONMENT_LOGS_QUERY,
-          {
-            e: resolved.environmentId,
-            f: joinFilter([`@service:${resolved.serviceId}`, filter]),
-            a: anchor,
-            b: since === undefined ? undefined : new Date(since).toISOString(),
-            l: fetchLimit,
-          },
-          EnvironmentLogsData,
-        );
-        const page = pageRailway({
-          rows: data.environmentLogs,
+        const page = yield* pageRailwayWidening({
+          fetch: (fetchLimit) =>
+            query(
+              'environmentLogs',
+              ENVIRONMENT_LOGS_QUERY,
+              {
+                e: resolved.environmentId,
+                f: joinFilter([`@service:${resolved.serviceId}`, filter]),
+                a: anchor,
+                b:
+                  since === undefined
+                    ? undefined
+                    : new Date(since).toISOString(),
+                l: fetchLimit,
+              },
+              EnvironmentLogsData,
+            ).pipe(Effect.map((data) => data.environmentLogs)),
           timestamp: (row) => row.timestamp,
           key: (row) => row.message,
           limit: input.limit,
@@ -271,20 +275,26 @@ export const makeRailwaySource = (
           cursor !== undefined
             ? new Date(floorMs(cursor.before) + 1).toISOString()
             : input.until?.toISOString();
-        const data = yield* query(
-          'buildLogs',
-          BUILD_LOGS_QUERY,
-          {
-            d: deploymentId,
-            f: joinFilter([levelFilter(input.levels), grepFilter(input.grep)]),
-            s: since === undefined ? undefined : new Date(since).toISOString(),
-            e: endDate,
-            l: fetchLimitFor(input, cursor),
-          },
-          BuildLogsData,
-        );
-        const page = pageRailway({
-          rows: data.buildLogs,
+        const page = yield* pageRailwayWidening({
+          fetch: (fetchLimit) =>
+            query(
+              'buildLogs',
+              BUILD_LOGS_QUERY,
+              {
+                d: deploymentId,
+                f: joinFilter([
+                  levelFilter(input.levels),
+                  grepFilter(input.grep),
+                ]),
+                s:
+                  since === undefined
+                    ? undefined
+                    : new Date(since).toISOString(),
+                e: endDate,
+                l: fetchLimit,
+              },
+              BuildLogsData,
+            ).pipe(Effect.map((data) => data.buildLogs)),
           timestamp: (row) => row.timestamp,
           key: (row) => row.message,
           limit: input.limit,
@@ -309,23 +319,26 @@ export const makeRailwaySource = (
           cursor !== undefined
             ? cursor.before
             : (input.until ?? new Date()).toISOString();
-        const data = yield* query(
-          'httpLogs',
-          HTTP_LOGS_QUERY,
-          {
-            d: deploymentId,
-            f: joinFilter([
-              httpStatusFilter(input.levels),
-              grepFilter(input.grep),
-            ]),
-            a: anchor,
-            b: since === undefined ? undefined : new Date(since).toISOString(),
-            l: fetchLimitFor(input, cursor),
-          },
-          HttpLogsData,
-        );
-        const page = pageRailway({
-          rows: data.httpLogs,
+        const page = yield* pageRailwayWidening({
+          fetch: (fetchLimit) =>
+            query(
+              'httpLogs',
+              HTTP_LOGS_QUERY,
+              {
+                d: deploymentId,
+                f: joinFilter([
+                  httpStatusFilter(input.levels),
+                  grepFilter(input.grep),
+                ]),
+                a: anchor,
+                b:
+                  since === undefined
+                    ? undefined
+                    : new Date(since).toISOString(),
+                l: fetchLimit,
+              },
+              HttpLogsData,
+            ).pipe(Effect.map((data) => data.httpLogs)),
           timestamp: (row) => row.timestamp,
           key: (row) => row.requestId,
           limit: input.limit,
