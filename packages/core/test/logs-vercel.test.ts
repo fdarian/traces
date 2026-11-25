@@ -328,6 +328,76 @@ describe('vercel source', () => {
     ]);
   });
 
+  describe('build logs paging through adjacent milliseconds', () => {
+    const event = (created: number, id: string) => ({
+      id,
+      created,
+      type: 'stdout',
+      text: `line ${id}`,
+    });
+    // newest first, like the API; four events in each of three consecutive milliseconds
+    const timeline = [
+      event(900, 'after'),
+      event(502, 'c4'),
+      event(502, 'c3'),
+      event(502, 'c2'),
+      event(502, 'c1'),
+      event(501, 'b4'),
+      event(501, 'b3'),
+      event(501, 'b2'),
+      event(501, 'b1'),
+      event(500, 'a4'),
+      event(500, 'a3'),
+      event(500, 'a2'),
+      event(500, 'a1'),
+      event(100, 'before'),
+    ];
+    // an inclusive `until` and the newest `limit` events, as the real API behaves
+    const handler = (url: URL) => {
+      if (!url.pathname.endsWith('/events')) return respond(url);
+      const until = Number(url.searchParams.get('until') ?? Infinity);
+      const limit = Number(url.searchParams.get('limit'));
+      return {
+        body: timeline.filter((row) => row.created <= until).slice(0, limit),
+      };
+    };
+
+    for (const limit of [2, 3, 4, 5]) {
+      test(`returns every event once with limit ${limit} and ends without a cursor`, async () => {
+        const messages: Array<string> = [];
+        let last: Cursor | undefined;
+        await run(
+          Effect.gen(function* () {
+            const source = yield* sourceWith(handler);
+            let cursor: Cursor | undefined;
+            for (let guard = 0; guard < 20; guard++) {
+              const page = yield* source.buildLogs({
+                levels: [],
+                limit,
+                deploymentId: 'dpl_prod',
+                until: new Date(800),
+                cursor,
+              });
+              messages.unshift(...page.records.map((r) => r.message));
+              last = page.next;
+              if (page.next === undefined) return;
+              cursor = page.next;
+            }
+            throw new Error('paging did not terminate');
+          }),
+        );
+        expect(last).toBeUndefined();
+        // events sharing a millisecond have no defined order, so compare as sets
+        expect([...messages].sort()).toEqual(
+          timeline
+            .filter((row) => row.created < 900)
+            .map((row) => `line ${row.id}`)
+            .sort(),
+        );
+      });
+    }
+  });
+
   test('401 and 403 become auth errors with a login hint', async () => {
     const result = await run(
       sourceWith(() => ({

@@ -11,7 +11,7 @@ import type {
   VercelTarget,
 } from '../model.js';
 import { levelAllowed, matchesGrep, shortHash } from '../normalize.js';
-import { type PageResume, pageBackwards } from '../paging.js';
+import { type PageResume, pageBackwards, pageWidening } from '../paging.js';
 import type { LogSource } from '../source.js';
 import { makeVercelClient } from './client.js';
 import {
@@ -22,6 +22,7 @@ import {
   PROVIDER,
 } from './normalize.js';
 import {
+  type BuildEvent,
   BuildEventsResponse,
   DeploymentsResponse,
   ProjectResponse,
@@ -32,6 +33,7 @@ import {
 const API = 'https://api.vercel.com';
 const REQUEST_LOGS = 'https://vercel.com/api/logs/request-logs';
 const MAX_RUNTIME_PAGES = 50;
+const MAX_BUILD_EVENTS = 5000;
 const DEFAULT_WINDOW_MS = 60 * 60 * 1000;
 
 export const VERCEL_RETENTION_NOTE =
@@ -237,52 +239,69 @@ export const makeVercelSource = (
           cursor !== undefined ? cursor.until : input.until?.getTime();
         const seen = cursor === undefined ? 0 : cursor.seen.length;
         const filtered = input.levels.length > 0 || input.grep !== undefined;
-        const fetchLimit = input.limit + 1 + seen;
-        const events = yield* get(
-          'build-events',
-          `${API}/v3/deployments/${encodeURIComponent(deploymentId)}/events`,
-          {
-            ...teamParams,
-            direction: 'backward',
-            // Filters apply client-side, so a bounded fetch could hide matches.
-            limit: filtered ? '-1' : String(fetchLimit),
-            // Widened by 1ms: whether the bound is inclusive is unverified.
-            until: until === undefined ? undefined : String(until + 1),
-          },
-          BuildEventsResponse,
-        );
+        const fetchEvents = (limit: string) =>
+          get(
+            'build-events',
+            `${API}/v3/deployments/${encodeURIComponent(deploymentId)}/events`,
+            {
+              ...teamParams,
+              direction: 'backward',
+              limit,
+              // Widened by 1ms: whether the bound is inclusive is unverified.
+              until: until === undefined ? undefined : String(until + 1),
+            },
+            BuildEventsResponse,
+          );
         const sinceMs = input.since?.getTime();
-        const entries = events.flatMap((event) => {
-          const record = mapBuildEvent(event, { target, deploymentId });
-          if (Option.isNone(record) || event.created === undefined) return [];
-          if (sinceMs !== undefined && event.created < sinceMs) return [];
-          if (!levelAllowed(input.levels, record.value)) return [];
-          if (!matchesGrep(input.grep, record.value)) return [];
-          return [
-            { record: record.value, created: event.created, id: event.id },
-          ];
-        });
-        const page = pageBackwards({
-          rows: entries,
-          position: (entry) => padMs(entry.created),
-          key: (entry) => entry.id ?? entry.record.message,
-          limit: input.limit,
-          resume:
-            cursor === undefined
-              ? undefined
-              : { before: padMs(cursor.until), seen: cursor.seen },
-        });
-        // Events without text or timestamp are dropped above, so only the raw
-        // count says whether a capped fetch left older events behind.
-        const rawCapped = !filtered && events.length >= fetchLimit;
+        const pageOf = (events: ReadonlyArray<BuildEvent>) => {
+          const entries = events.flatMap((event) => {
+            const record = mapBuildEvent(event, { target, deploymentId });
+            if (Option.isNone(record) || event.created === undefined) return [];
+            if (sinceMs !== undefined && event.created < sinceMs) return [];
+            if (!levelAllowed(input.levels, record.value)) return [];
+            if (!matchesGrep(input.grep, record.value)) return [];
+            return [
+              { record: record.value, created: event.created, id: event.id },
+            ];
+          });
+          return pageBackwards({
+            rows: entries,
+            position: (entry) => padMs(entry.created),
+            key: (entry) => entry.id ?? entry.record.message,
+            limit: input.limit,
+            resume:
+              cursor === undefined
+                ? undefined
+                : { before: padMs(cursor.until), seen: cursor.seen },
+          });
+        };
+        const fetched = filtered
+          ? // Filters apply client-side, so a bounded fetch could hide matches.
+            yield* fetchEvents('-1').pipe(
+              Effect.map((rows) => ({
+                rows,
+                page: pageOf(rows),
+                cutShort: false,
+              })),
+            )
+          : yield* pageWidening({
+              fetch: (fetchLimit) => fetchEvents(String(fetchLimit + 1)),
+              page: pageOf,
+              limit: input.limit,
+              initialFetchLimit: input.limit + seen,
+              maxFetchLimit: MAX_BUILD_EVENTS,
+            });
+        const page = fetched.page;
+        // Events without text or timestamp are dropped, so only the raw count
+        // says whether a fetch capped at `MAX_BUILD_EVENTS` left older events behind.
         const next =
-          page.next === undefined && rawCapped
+          page.next === undefined && fetched.cutShort
             ? resumeBelow(
                 page.kept.map((entry) => ({
                   position: padMs(entry.created),
                   key: entry.id ?? entry.record.message,
                 })),
-                events.flatMap((event) =>
+                fetched.rows.flatMap((event) =>
                   event.created === undefined
                     ? []
                     : [{ position: padMs(event.created) }],

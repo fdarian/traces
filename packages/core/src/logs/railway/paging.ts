@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import type { Cursor } from '../model.js';
 import { sortableIso } from '../normalize.js';
-import { pageBackwards } from '../paging.js';
+import { pageBackwards, pageWidening } from '../paging.js';
 
 const MAX_RAILWAY_LIMIT = 5000;
 
@@ -38,7 +38,7 @@ export const pageRailway = <A>(input: {
  * A resumed window ends 1ms past the cursor, so it re-sends every row already
  * delivered in that millisecond, not only those at the cursor's exact time. The
  * cursor remembers just the latter, so this is a first guess; the rest is found
- * by `pageRailwayWidening`.
+ * by `pageWidening`.
  */
 const initialFetchLimit = (limit: number, cursor: TimeCursor | undefined) =>
   Math.min(
@@ -46,12 +46,6 @@ const initialFetchLimit = (limit: number, cursor: TimeCursor | undefined) =>
     MAX_RAILWAY_LIMIT,
   );
 
-/**
- * The provider returns the newest `fetchLimit + 1` rows of the window. When
- * re-sent rows (dropped as already delivered) crowd out the fresh ones and the
- * fetch came back full, "no more" cannot be told from "cut short", so refetch
- * with room for exactly the rows that were dropped.
- */
 export const pageRailwayWidening = <A, E, R>(input: {
   readonly fetch: (fetchLimit: number) => Effect.Effect<ReadonlyArray<A>, E, R>;
   readonly timestamp: (row: A) => string;
@@ -59,28 +53,11 @@ export const pageRailwayWidening = <A, E, R>(input: {
   readonly limit: number;
   readonly since?: number;
   readonly cursor?: TimeCursor;
-}): Effect.Effect<
-  { readonly kept: ReadonlyArray<A>; readonly next?: TimeCursor },
-  E,
-  R
-> => {
-  const attempt = (
-    fetchLimit: number,
-  ): Effect.Effect<
-    { readonly kept: ReadonlyArray<A>; readonly next?: TimeCursor },
-    E,
-    R
-  > =>
-    Effect.gen(function* () {
-      const rows = yield* input.fetch(fetchLimit);
-      const page = pageRailway({ ...input, rows });
-      const cutShort =
-        page.next === undefined &&
-        rows.length > fetchLimit &&
-        fetchLimit < MAX_RAILWAY_LIMIT;
-      if (!cutShort) return page;
-      const dropped = rows.length - page.kept.length;
-      return yield* attempt(Math.min(input.limit + dropped, MAX_RAILWAY_LIMIT));
-    });
-  return attempt(initialFetchLimit(input.limit, input.cursor));
-};
+}) =>
+  pageWidening({
+    fetch: input.fetch,
+    page: (rows) => pageRailway({ ...input, rows }),
+    limit: input.limit,
+    initialFetchLimit: initialFetchLimit(input.limit, input.cursor),
+    maxFetchLimit: MAX_RAILWAY_LIMIT,
+  }).pipe(Effect.map((result) => result.page));
