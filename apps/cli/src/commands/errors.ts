@@ -512,6 +512,18 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
         `note: ${service.name}: the baseline hit the ${ERROR_CAP}-log cap; \`new\` may over-report for this service.`,
       );
     }
+    for (const service of fetched) {
+      if (service.window === undefined) continue;
+      if (
+        retentionNoteFor(service.source, service.window.baselineSince, now) ===
+        undefined
+      ) {
+        continue;
+      }
+      yield* Console.error(
+        `note: ${service.name}: the baseline reaches back past the shortest ${service.target.provider} log retention; groups may be wrongly marked \`new\`.`,
+      );
+    }
     for (const outcome of scanned) {
       if (outcome.baseline?.capped !== true) continue;
       yield* Console.error(

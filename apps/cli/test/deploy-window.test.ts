@@ -312,6 +312,38 @@ describe('traces errors --since deploy', () => {
     expect(byText('Schema mismatch')?.hint).toContain('--since deploy');
   });
 
+  test('warns that groups may be wrongly new when the baseline reaches past retention', async () => {
+    const state = writeState('retention-old', DEPLOYMENTS);
+    const result = await run(
+      'errors',
+      ['api', '--since', 'deploy', '--until', UNTIL, '--source', 'logs'],
+      configFor(false),
+      state,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(
+      'note: api: the baseline reaches back past the shortest railway log retention; groups may be wrongly marked `new`.',
+    );
+  });
+
+  test('says nothing about retention when the baseline is inside it', async () => {
+    const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const state = writeState(
+      'retention-recent',
+      [deployment('dep-recent', 'SUCCESS', recent)],
+      [],
+    );
+    const result = await run(
+      'errors',
+      ['api', '--since', 'deploy', '--source', 'logs'],
+      configFor(false),
+      state,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain('since deploy dep-recent');
+    expect(result.stderr).not.toContain('retention');
+  });
+
   test('without --since deploy the groups carry no new or deploy fields', async () => {
     const state = writeState('plain', DEPLOYMENTS);
     const result = await run(

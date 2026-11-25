@@ -21,4 +21,4 @@ stdout: compact text by default, piped or on a terminal; `--json` prints JSON in
 
 ## Retention
 
-Railway keeps logs 3d (Free), 7d (Hobby), 30d (Pro). Vercel runtime logs: 1h (Hobby), 1d (Pro), 30d (Observability Plus). An empty result older than that is not "no errors".
+Railway keeps logs 3d (Free), 7d (Hobby), 30d (Pro). Vercel runtime logs: 1h (Hobby), 1d (Pro), 30d (Observability Plus). An empty result older than that is not "no errors". The same goes for the `errors --since deploy` baseline: when it reaches past the shortest retention, stderr warns that groups may be wrongly marked `new`.
