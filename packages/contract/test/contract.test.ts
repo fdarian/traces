@@ -32,6 +32,7 @@ test('traces.get declares jaeger and not-found errors', () => {
   const errorMap = contract.traces.get['~orpc'].errorMap;
   expect(Object.keys(errorMap).sort()).toEqual([
     'JAEGER_BAD_RESPONSE',
+    'JAEGER_UNAUTHORIZED',
     'JAEGER_UNREACHABLE',
     'TRACE_NOT_FOUND',
   ]);

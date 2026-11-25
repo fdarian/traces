@@ -11,7 +11,7 @@ The wire contract between `services/engine` and `apps/web`: an oRPC contract rou
 ## Architecture
 - `src/index.ts` — `contract = oc.router({ traces, issues, home })`; re-exports everything
 - `src/{traces,issues,home}.ts` — per-domain procedures and schemas
-- `src/errors.ts` — typed error codes (`JAEGER_UNREACHABLE`, `JAEGER_BAD_RESPONSE`, `TRACE_NOT_FOUND`, `ISSUE_NOT_FOUND`)
+- `src/errors.ts` — typed error codes (`JAEGER_UNREACHABLE`, `JAEGER_BAD_RESPONSE`, `JAEGER_UNAUTHORIZED`, `TRACE_NOT_FOUND`, `ISSUE_NOT_FOUND`)
 
 ## Gotchas
 - `import '@orpc/effect/extensions/schema'` must stay the first import in `src/index.ts`; it lets `.input/.output/.errors` accept Effect Schemas (they are not Standard Schema natively)
