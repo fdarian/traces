@@ -45,7 +45,7 @@ const fakeTrace = {
       {
         resource: {
           attributes: [
-            { key: 'service.name', value: { stringValue: 'mockingbird-web' } },
+            { key: 'service.name', value: { stringValue: 'acme-web' } },
           ],
         },
         scopeSpans: [
@@ -124,7 +124,7 @@ const configFor = (tracing: unknown) => {
         app: {
           matcher: { type: 'git', repo: 'acme/app' },
           ...(tracing === undefined ? {} : { tracing }),
-          services: { web: { otelService: 'mockingbird-web' } },
+          services: { web: { otelService: 'acme-web' } },
         },
       },
     }),
@@ -223,7 +223,7 @@ describe('traces trace against a fake Jaeger', () => {
       traceId: TRACE_ID,
       spanId: 'root',
       depth: 0,
-      service: 'mockingbird-web',
+      service: 'acme-web',
       name: 'op-root',
       kind: 'server',
       startTs: '2026-10-12T10:13:20.000000000Z',
@@ -285,9 +285,7 @@ describe('traces trace text output when piped', () => {
     const result = await spawnTrace(TRACE_ID);
     expect(result.code).toBe(0);
     expect(result.stdout).not.toContain('\u001b');
-    expect(result.stdout.split('\n')[0]).toBe(
-      '  +0ms 412ms mockingbird-web op-root',
-    );
+    expect(result.stdout.split('\n')[0]).toBe('  +0ms 412ms acme-web op-root');
   });
 });
 

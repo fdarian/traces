@@ -25,7 +25,7 @@ let requests = 0;
 let answer: Answer = (response) => {
   response
     .writeHead(200, { 'content-type': 'application/json' })
-    .end(JSON.stringify({ services: ['mockingbird-web', 'jaeger'] }));
+    .end(JSON.stringify({ services: ['acme-web', 'jaeger'] }));
 };
 
 beforeAll(async () => {
@@ -58,8 +58,8 @@ const configFor = (tracing: unknown) => {
           matcher: { type: 'git', repo: 'acme/app' },
           ...(tracing === undefined ? {} : { tracing }),
           services: {
-            web: { otelService: 'mockingbird-web' },
-            worker: { otelService: 'mockingbird-worker' },
+            web: { otelService: 'acme-web' },
+            worker: { otelService: 'acme-worker' },
           },
         },
       },
@@ -151,7 +151,7 @@ describe('traces services tracing check', () => {
     const doc = document(result.stdout);
     const [web, worker] = doc.services;
     expect(doc.tracing).toMatchObject({
-      check: { status: 'reachable', services: ['mockingbird-web', 'jaeger'] },
+      check: { status: 'reachable', services: ['acme-web', 'jaeger'] },
     });
     expect(web?.otelInJaeger).toBe(true);
     expect(worker?.otelInJaeger).toBe(false);
@@ -163,7 +163,7 @@ describe('traces services tracing check', () => {
     answer = (response) =>
       response
         .writeHead(200, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ services: ['mockingbird-web', 'jaeger'] }));
+        .end(JSON.stringify({ services: ['acme-web', 'jaeger'] }));
     expect(result.code).toBe(0);
     const doc = document(result.stdout);
     expect(doc.tracing).toMatchObject({
@@ -183,7 +183,7 @@ describe('traces services tracing check', () => {
     answer = (response) =>
       response
         .writeHead(200, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ services: ['mockingbird-web', 'jaeger'] }));
+        .end(JSON.stringify({ services: ['acme-web', 'jaeger'] }));
     const check = (
       document(result.stdout).tracing as { check: { detail: string } }
     ).check;
@@ -216,11 +216,11 @@ describe('traces services tracing check', () => {
     expect(doc.services).toEqual([
       expect.objectContaining({
         service: 'web',
-        otelService: 'mockingbird-web',
+        otelService: 'acme-web',
       }),
       expect.objectContaining({
         service: 'worker',
-        otelService: 'mockingbird-worker',
+        otelService: 'acme-worker',
       }),
     ]);
     for (const entry of doc.services) {
@@ -262,7 +262,7 @@ const railwayProvider = (auth: ProviderEntry['auth']): ProviderEntry => ({
 
 const keychainAuth = {
   status: 'ok',
-  detail: 'token from keychain mockingbird.railway',
+  detail: 'token from keychain acme.railway',
 } as const;
 
 const jaeger = (
@@ -278,7 +278,7 @@ const jaeger = (
 const apiKey = {
   name: 'X-API-Key',
   source: 'keychain',
-  ref: 'mockingbird.jaeger',
+  ref: 'acme.jaeger',
   status: 'present',
 } as const;
 
@@ -287,7 +287,7 @@ const viewOf = (
   tracing?: TracingStatus,
   providers: ReadonlyArray<ProviderEntry> = [railwayProvider(keychainAuth)],
 ): ServicesView => ({
-  project: 'mockingbird',
+  project: 'acme',
   configPath: '/home/me/.config/traces/config.json',
   configSource: 'global',
   matchedBy: 'flag',
@@ -378,14 +378,14 @@ describe('renderServices', () => {
       viewOf(
         [
           railwayRecord('engine'),
-          railwayRecord('web', 'mockingbird-web'),
-          railwayRecord('worker', 'mockingbird-worker'),
+          railwayRecord('web', 'acme-web'),
+          railwayRecord('worker', 'acme-worker'),
           traceOnlyRecord('api'),
         ],
         jaeger(
           {
             status: 'reachable',
-            services: ['engine', 'mockingbird-web', 'api', 'jaeger', 'panel'],
+            services: ['engine', 'acme-web', 'api', 'jaeger', 'panel'],
           },
           [apiKey],
         ),
@@ -394,18 +394,18 @@ describe('renderServices', () => {
     );
     expect(output).toBe(
       [
-        'mockingbird  ~/.config/traces/config.json (global, picked by --project)',
+        'acme  ~/.config/traces/config.json (global, picked by --project)',
         '',
         'Services',
         '  SERVICE  PROVIDER  ENV         TRACES',
         '  engine   railway   production  ✓',
-        '  web      railway   production  ✓ mockingbird-web',
+        '  web      railway   production  ✓ acme-web',
         '  worker   railway   production  – no spans',
         '  api      traces only           ✓',
         '',
         'Providers',
-        `  railway  project ${PROJECT_ID}  ✓ token from keychain mockingbird.railway`,
-        '  jaeger   https://jaeger.example                        ✓ reachable, X-API-Key from keychain mockingbird.jaeger',
+        `  railway  project ${PROJECT_ID}  ✓ token from keychain acme.railway`,
+        '  jaeger   https://jaeger.example                        ✓ reachable, X-API-Key from keychain acme.jaeger',
         '           also reporting, not in config: jaeger, panel',
       ].join('\n'),
     );
@@ -428,7 +428,7 @@ describe('renderServices', () => {
         matchedBy: 'repo',
         configPath: '/r/traces.json',
       }),
-    ).toBe('mockingbird  /r/traces.json (repo traces.json)');
+    ).toBe('acme  /r/traces.json (repo traces.json)');
     expect(header({ configSource: 'flag' })).toContain(
       '(--config, picked by --project)',
     );
@@ -437,24 +437,22 @@ describe('renderServices', () => {
   test('shows the otel name only when it differs from the key', () => {
     const output = renderServices(
       viewOf(
-        [railwayRecord('engine'), railwayRecord('web', 'mockingbird-web')],
+        [railwayRecord('engine'), railwayRecord('web', 'acme-web')],
         jaeger({
           status: 'reachable',
-          services: ['engine', 'mockingbird-web'],
+          services: ['engine', 'acme-web'],
         }),
       ),
       plain,
     );
     expect(output).toContain('  engine   railway   production  ✓\n');
-    expect(output).toContain(
-      '  web      railway   production  ✓ mockingbird-web',
-    );
+    expect(output).toContain('  web      railway   production  ✓ acme-web');
   });
 
   test('a service Jaeger does not report is marked no spans', () => {
     const output = renderServices(
       viewOf(
-        [railwayRecord('worker', 'mockingbird-worker')],
+        [railwayRecord('worker', 'acme-worker')],
         jaeger({ status: 'reachable', services: ['other'] }),
       ),
       plain,
@@ -509,13 +507,13 @@ describe('renderServices', () => {
       viewOf([railwayRecord('engine')], undefined, [
         railwayProvider({
           status: 'missing',
-          detail: 'traces secret set mockingbird.railway',
+          detail: 'traces secret set acme.railway',
         }),
       ]),
       plain,
     );
     expect(output).toContain(
-      `  railway  project ${PROJECT_ID}  ✗ missing\n           traces secret set mockingbird.railway`,
+      `  railway  project ${PROJECT_ID}  ✗ missing\n           traces secret set acme.railway`,
     );
   });
 
@@ -541,17 +539,15 @@ describe('renderServices', () => {
         jaeger(
           {
             status: 'error',
-            detail: 'secret "mockingbird.jaeger" is not in the keychain',
+            detail: 'secret "acme.jaeger" is not in the keychain',
           },
           [{ ...apiKey, status: 'missing' }],
         ),
       ),
       plain,
     );
-    expect(output).toContain(
-      '✗ X-API-Key: keychain mockingbird.jaeger missing',
-    );
-    expect(output).toContain('hint: traces secret set mockingbird.jaeger');
+    expect(output).toContain('✗ X-API-Key: keychain acme.jaeger missing');
+    expect(output).toContain('hint: traces secret set acme.jaeger');
     expect(output).not.toContain('is not in the keychain');
   });
 
@@ -625,10 +621,10 @@ describe('renderServices', () => {
     test('one project: no PROJECT column, with tracing', () => {
       const output = renderServices(
         viewOf(
-          [railwayRecord('engine'), railwayRecord('web', 'mockingbird-web')],
+          [railwayRecord('engine'), railwayRecord('web', 'acme-web')],
           jaeger({
             status: 'reachable',
-            services: ['engine', 'mockingbird-web'],
+            services: ['engine', 'acme-web'],
           }),
         ),
         plain,
@@ -638,7 +634,7 @@ describe('renderServices', () => {
           'Services',
           '  SERVICE  PROVIDER  ENV         TRACES',
           '  engine   railway   production  ✓',
-          '  web      railway   production  ✓ mockingbird-web',
+          '  web      railway   production  ✓ acme-web',
         ].join('\n'),
       );
     });
@@ -729,7 +725,7 @@ describe('renderServices', () => {
         ].join('\n'),
       );
       expect(output.split('\n')[0]).toBe(
-        'mockingbird  /home/me/.config/traces/config.json (global, picked by --project)',
+        'acme  /home/me/.config/traces/config.json (global, picked by --project)',
       );
       expect(output).not.toContain('~');
     });
@@ -741,7 +737,7 @@ describe('renderServices', () => {
       );
       expect(servicesTable(output)).not.toContain(PROJECT_ID);
       expect(output.split('\n')[0]).toBe(
-        'mockingbird  ~/.config/traces/config.json (global, picked by --project)',
+        'acme  ~/.config/traces/config.json (global, picked by --project)',
       );
     });
   });
@@ -754,7 +750,7 @@ describe('renderServices', () => {
       ),
       makeStyle(true),
     );
-    expect(output).toContain('\u001b[1mmockingbird\u001b[22m');
+    expect(output).toContain('\u001b[1macme\u001b[22m');
     expect(output).toContain('\u001b[32m✓\u001b[39m');
     expect(output).toContain('\u001b[2m– no spans\u001b[22m');
     expect(output).toContain('\u001b[2mSERVICE');

@@ -7,7 +7,7 @@ import { Secrets } from '#/secrets.ts';
 export const secretOptions = {
   name: Argument.String('name').pipe(
     Argument.withDescription(
-      'the secret name used in the config, e.g. mockingbird.jaeger',
+      'the secret name used in the config, e.g. acme.jaeger',
     ),
   ),
 };
@@ -16,7 +16,7 @@ const requireName = (name: string) =>
   name.trim() === ''
     ? new UsageError({
         message: 'secret name must not be empty',
-        hint: 'use the name from the config, e.g. `traces secret set mockingbird.jaeger`',
+        hint: 'use the name from the config, e.g. `traces secret set acme.jaeger`',
       })
     : Effect.succeed(name);
 
@@ -54,9 +54,9 @@ const setCommand = Command.make('set', secretOptions, (args) =>
     'Store the value of a keychain secret. The value comes from a hidden prompt on a terminal, or from stdin when piped (one trailing newline is dropped); an empty value is refused. Agents cannot answer the hidden prompt: the user runs it once.',
   ),
   Command.withExamples([
-    { command: 'traces secret set mockingbird.jaeger' },
+    { command: 'traces secret set acme.jaeger' },
     {
-      command: 'pbpaste | traces secret set mockingbird.jaeger',
+      command: 'pbpaste | traces secret set acme.jaeger',
       description: 'from stdin',
     },
   ]),
@@ -77,9 +77,7 @@ const deleteCommand = Command.make('delete', secretOptions, (args) =>
   Command.withDescription(
     'Remove a keychain secret. A name that does not exist exits 0 and says so on stderr.',
   ),
-  Command.withExamples([
-    { command: 'traces secret delete mockingbird.jaeger' },
-  ]),
+  Command.withExamples([{ command: 'traces secret delete acme.jaeger' }]),
 );
 
 export const secretCommand = Command.make('secret').pipe(
