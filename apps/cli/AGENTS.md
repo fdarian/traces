@@ -10,7 +10,7 @@
 - `bun check:tsc` / `bun check:lint` / `bun test`
 
 ## Release
-- Add a changeset (`pnpm changeset`), merge, then merge the Version Packages PR: `.github/workflows/release.yml` builds the binaries (`bun run build:bin --target=bun-<os>-<arch> --outfile dist/bin/<os>-<arch>/traces`), uploads them to the `@traces/cli@<version>` GitHub Release and updates the Homebrew formula (`scripts/update-homebrew.ts`). Not published to npm.
+- Add a changeset (`pnpm changeset`), merge, then merge the Version Packages PR: `.github/workflows/release.yml` builds the binaries (`bun run build:bin --target=bun-<os>-<arch> --outfile dist/bin/<os>-<arch>/traces`), uploads them to the `@traces/cli@<version>` GitHub Release and updates the Homebrew formula (`scripts/update-homebrew.ts`). Not published to npm. If the release job fails after tagging, delete the `@traces/cli@<version>` tag and GitHub Release, then run the `release` workflow by hand (workflow_dispatch) to rebuild and re-upload.
 
 ## Notes
 - Provider adapters live in `@traces/core` (`packages/core/src/logs/`); this app owns config, project matching, commands, and output.
