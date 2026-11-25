@@ -78,6 +78,25 @@ describe('railwayLinkedProject', () => {
     });
   });
 
+  test('a successful run is parsed, not scanned for auth or link failures', async () => {
+    const result = await run(
+      railwayLinkedProject('/repo').pipe(
+        Effect.provide(
+          fakeRailwayCli(nothing, [], {
+            stdout: JSON.stringify({
+              id: 'proj-1',
+              name: 'unauthorized no linked project',
+            }),
+          }),
+        ),
+      ),
+    );
+    expect(result).toMatchObject({
+      _tag: 'Success',
+      success: { id: 'proj-1' },
+    });
+  });
+
   test('output without an id is a response-shape error', async () => {
     const result = await run(
       railwayLinkedProject('/repo').pipe(

@@ -69,21 +69,22 @@ export const railwayLinkedProject = (cwd: string) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const result = yield* runRailwayCli(spawner, ['status', '--json'], cwd);
-    const output = `${result.stderr}\n${result.stdout}`;
-    if (loggedOut([output])) {
-      return yield* new ProviderAuthError({
-        provider: PROVIDER,
-        hint: LOGIN_HINT,
-      });
-    }
-    if (/no linked project/i.test(output)) {
-      return yield* new ProviderNotFound({
-        provider: PROVIDER,
-        what: 'a linked project',
-        hint: 'run `railway link` in the folder, or pass --railway-project',
-      });
-    }
     if (result.exitCode !== 0) {
+      // Only a failed run is classified: a project or service name on stdout can say "unauthorized".
+      const output = `${result.stderr}\n${result.stdout}`;
+      if (loggedOut([output])) {
+        return yield* new ProviderAuthError({
+          provider: PROVIDER,
+          hint: LOGIN_HINT,
+        });
+      }
+      if (/no linked project/i.test(output)) {
+        return yield* new ProviderNotFound({
+          provider: PROVIDER,
+          what: 'a linked project',
+          hint: 'run `railway link` in the folder, or pass --railway-project',
+        });
+      }
       return yield* new ProviderRequestError({
         provider: PROVIDER,
         cause: new Error(
