@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: ['.changeset/**']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,15 +25,22 @@ jobs:
           publish-script: bun run ci:release
           create-github-releases: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      # privatePackages.tag makes `changeset publish` tag every untagged private
+      # workspace, so published-packages lists more than the CLI.
+      - id: cli
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          PUBLISHED: ${{ steps.changesets.outputs.published-packages }}
+        run: echo "version=$(jq -r '.[] | select(.name == "@traces/cli") | .version' <<< "$PUBLISHED")" >> "$GITHUB_OUTPUT"
 
       - name: Install rcodesign
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.cli.outputs.version != ''
         run: |
           curl -L https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-x86_64-unknown-linux-musl.tar.gz | tar --strip-components=1 -xzf -
           sudo mv rcodesign /usr/local/bin/
 
       - name: Build binaries
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.cli.outputs.version != ''
         working-directory: apps/cli
         run: |
           for t in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
@@ -43,18 +51,18 @@ jobs:
           done
 
       - name: Upload release assets
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.cli.outputs.version != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ fromJSON(steps.changesets.outputs.published-packages)[0].version }}
+          VERSION: ${{ steps.cli.outputs.version }}
         run: |
           TAG="@traces/cli@${VERSION}"
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Release $VERSION"
           gh release upload "$TAG" apps/cli/dist/releases/*.tar.gz --clobber
 
       - name: Update Homebrew formula
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.cli.outputs.version != ''
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          VERSION: ${{ fromJSON(steps.changesets.outputs.published-packages)[0].version }}
+          VERSION: ${{ steps.cli.outputs.version }}
         run: bun scripts/update-homebrew.ts
