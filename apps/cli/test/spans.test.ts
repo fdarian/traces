@@ -19,11 +19,11 @@ const traceAt = (index: number, traceId: string, errorSpanCount: number) => {
   const start = BASE_NANO + BigInt(index) * 1_000_000_000n;
   return {
     traceId,
-    rootServiceName: 'mockingbird-web',
+    rootServiceName: 'acme-web',
     rootOperationName: 'GET /api/x',
     spanCount: 3,
     errorSpanCount,
-    services: [{ name: 'mockingbird-web', spanCount: 3 }],
+    services: [{ name: 'acme-web', spanCount: 3 }],
     minStartTimeUnixNano: start.toString(),
     maxEndTimeUnixNano: (start + 412_000_000n).toString(),
   };
@@ -43,9 +43,7 @@ const fullTraceOf = (summary: ReturnType<typeof traceAt>) => {
   const index = Number(summary.traceId.slice(0, 2));
   return {
     resource: {
-      attributes: [
-        { key: 'service.name', value: { stringValue: 'mockingbird-web' } },
-      ],
+      attributes: [{ key: 'service.name', value: { stringValue: 'acme-web' } }],
     },
     scopeSpans: [
       {
@@ -100,7 +98,7 @@ const configFor = (tracing: unknown) => {
           matcher: { type: 'git', repo: 'acme/app' },
           ...(tracing === undefined ? {} : { tracing }),
           services: {
-            web: { otelService: 'mockingbird-web' },
+            web: { otelService: 'acme-web' },
           },
         },
       },
@@ -240,7 +238,7 @@ describe('traces spans against a fake Jaeger', () => {
     try {
       const page = await run([...WINDOW, '--errors', '--limit', '2']);
       expect(page.rows).toEqual([]);
-      expect(page.stderr).toContain('no error traces for mockingbird-web');
+      expect(page.stderr).toContain('no error traces for acme-web');
       expect(page.stderr).toContain('in the scanned range (');
       expect(page.stderr).toContain('); more below');
       expect(page.stderr).not.toContain('in 2026-10-01');
@@ -257,16 +255,16 @@ describe('traces spans against a fake Jaeger', () => {
     expect(idsOf(first.rows)).toEqual(['07', '08', '09', '10', '11']);
     expect(first.rows[0]).toEqual({
       traceId: '07'.repeat(16),
-      rootService: 'mockingbird-web',
+      rootService: 'acme-web',
       rootOperation: 'GET /api/x',
       startTs: '2026-10-12T10:13:27.000000000Z',
       durationMs: 412,
       spanCount: 3,
       errorSpanCount: 0,
-      services: ['mockingbird-web'],
+      services: ['acme-web'],
     });
     expect(seen[0]?.apiKey).toBe('secret-token');
-    expect(seen[0]?.params['query.service_name']).toBe('mockingbird-web');
+    expect(seen[0]?.params['query.service_name']).toBe('acme-web');
     expect(first.cursor).toBeDefined();
     expect(first.more).toContain('--limit 5');
 
@@ -511,7 +509,7 @@ describe('traces spans text output when piped', () => {
     const lines = result.stdout.split('\n').filter((line) => line !== '');
     expect(lines).toHaveLength(12);
     expect(lines[0]).toBe(
-      `10-12 10:13:20.000Z 412ms mockingbird-web GET /api/x  ${'00'.repeat(16)}`,
+      `10-12 10:13:20.000Z 412ms acme-web GET /api/x  ${'00'.repeat(16)}`,
     );
     expect(result.stdout).not.toContain('\u001b');
     expect(result.stdout).not.toContain('…');
@@ -521,30 +519,30 @@ describe('traces spans text output when piped', () => {
 describe('formatTraceLine', () => {
   const row = {
     traceId: 'a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e',
-    rootService: 'mockingbird-web',
+    rootService: 'acme-web',
     rootOperation: 'GET /api/x',
     startTs: '2026-10-12T02:55:09.123456789Z',
     durationMs: 412,
     spanCount: 5,
     errorSpanCount: 0,
-    services: ['mockingbird-web'],
+    services: ['acme-web'],
   };
 
   test('prints the full id without an ellipsis when not on a terminal', () => {
     expect(formatTraceLine(row, false, false)).toBe(
-      '02:55:09.123Z 412ms mockingbird-web GET /api/x  a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e',
+      '02:55:09.123Z 412ms acme-web GET /api/x  a042d0ba5f0e4b9c8d7e6f5a4b3c2d1e',
     );
   });
 
   test('matches the documented line, with ERR only when there are error spans', () => {
     expect(formatTraceLine({ ...row, errorSpanCount: 2 }, false, true)).toBe(
-      '02:55:09.123Z 412ms ERR×2 mockingbird-web GET /api/x  a042d0ba…',
+      '02:55:09.123Z 412ms ERR×2 acme-web GET /api/x  a042d0ba…',
     );
     expect(formatTraceLine({ ...row, errorSpanCount: 0 }, false, true)).toBe(
-      '02:55:09.123Z 412ms mockingbird-web GET /api/x  a042d0ba…',
+      '02:55:09.123Z 412ms acme-web GET /api/x  a042d0ba…',
     );
     expect(formatTraceLine(row, true, true)).toBe(
-      '10-12 02:55:09.123Z 412ms mockingbird-web GET /api/x  a042d0ba…',
+      '10-12 02:55:09.123Z 412ms acme-web GET /api/x  a042d0ba…',
     );
   });
 });

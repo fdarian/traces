@@ -28,12 +28,12 @@ const at = (index: number) =>
 
 const summaryOf = (index: number) => ({
   traceId: traceIdOf(index),
-  rootServiceName: 'mockingbird-web',
+  rootServiceName: 'acme-web',
   rootOperationName: 'GET /api/x',
   spanCount: 2,
   errorSpanCount: ERROR_INDEXES.includes(index) ? 2 : 0,
   services: [
-    { name: 'mockingbird-web', spanCount: 1 },
+    { name: 'acme-web', spanCount: 1 },
     { name: 'x-data', spanCount: 1 },
   ],
   minStartTimeUnixNano: at(index),
@@ -46,7 +46,7 @@ const traceOf = (index: number) => ({
       {
         resource: {
           attributes: [
-            { key: 'service.name', value: { stringValue: 'mockingbird-web' } },
+            { key: 'service.name', value: { stringValue: 'acme-web' } },
           ],
         },
         scopeSpans: [
@@ -115,7 +115,7 @@ let unauthorizedService: string | undefined;
 let seen: Array<{ service: string | undefined; apiKey: string | null }> = [];
 
 const SERVICES = {
-  web: { otelService: 'mockingbird-web' },
+  web: { otelService: 'acme-web' },
   x: { otelService: 'x-data' },
 };
 

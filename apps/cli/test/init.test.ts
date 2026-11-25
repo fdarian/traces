@@ -190,7 +190,7 @@ case "$1" in
       echo "No linked project found. Run railway link to connect to a project" >&2
       exit 1
     fi
-    echo '{"id":"proj-1","name":"mockingbird","environments":{"edges":[]}}'
+    echo '{"id":"proj-1","name":"acme","environments":{"edges":[]}}'
     ;;
   api)
     if [ "$FAKE_RAILWAY" = missing ]; then

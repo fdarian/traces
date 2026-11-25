@@ -133,7 +133,7 @@ Usage: `traces spans [service] [flags]`
 
 ### Output
 
-TraceRow per line: traceId, rootService, rootOperation, startTs (ISO, nanosecond precision), durationMs, spanCount, errorSpanCount (0 when the backend reports none), services[]. Text: `02:55:09.123Z 412ms ERR×2 mockingbird-web GET /api/x  a042d0ba…` (ERR×n only when the trace has error spans; the last column is the traceId: full piped, first 8 characters plus `…` on a terminal).
+TraceRow per line: traceId, rootService, rootOperation, startTs (ISO, nanosecond precision), durationMs, spanCount, errorSpanCount (0 when the backend reports none), services[]. Text: `02:55:09.123Z 412ms ERR×2 acme-web GET /api/x  a042d0ba…` (ERR×n only when the trace has error spans; the last column is the traceId: full piped, first 8 characters plus `…` on a terminal).
 
 ### Notes
 

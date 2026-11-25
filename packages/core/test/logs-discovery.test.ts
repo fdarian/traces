@@ -30,7 +30,7 @@ describe('railwayLinkedProject', () => {
           fakeRailwayCli(nothing, [], {
             stdout: JSON.stringify({
               id: 'proj-1',
-              name: 'mockingbird',
+              name: 'acme',
               environments: { edges: [] },
             }),
           }),

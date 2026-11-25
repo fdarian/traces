@@ -64,15 +64,15 @@ const trace = (index: number, spans: ReadonlyArray<Span>): Trace => ({
   spans,
 });
 
-const SCOPE = { service: 'web', otelService: 'mockingbird-web' };
+const SCOPE = { service: 'web', otelService: 'acme-web' };
 
 describe('groupTraceErrors', () => {
   test('groups error spans without an exception by service, name and normalized status message', () => {
     const groups = groupTraceErrors(
       [
-        trace(1, [errorSpan(1, 'mockingbird-web')]),
+        trace(1, [errorSpan(1, 'acme-web')]),
         trace(2, [
-          errorSpan(2, 'mockingbird-web', {
+          errorSpan(2, 'acme-web', {
             status: { code: 'error', message: 'query failed for user 977' },
           }),
         ]),
@@ -90,17 +90,13 @@ describe('groupTraceErrors', () => {
       traceIds: ['t0001', 't0002'],
     });
     expect(groups[0]?.fingerprint).toBe(
-      fingerprintFromErrorSpan(errorSpan(1, 'mockingbird-web')),
+      fingerprintFromErrorSpan(errorSpan(1, 'acme-web')),
     );
   });
 
   test('uses the span name as the sample when the status has no message', () => {
     const [group] = groupTraceErrors(
-      [
-        trace(1, [
-          errorSpan(1, 'mockingbird-web', { status: { code: 'error' } }),
-        ]),
-      ],
+      [trace(1, [errorSpan(1, 'acme-web', { status: { code: 'error' } })])],
       SCOPE,
     );
     expect(group?.sample).toBe('GET /api/x');
@@ -110,7 +106,7 @@ describe('groupTraceErrors', () => {
     const groups = groupTraceErrors(
       [
         trace(1, [
-          errorSpan(1, 'mockingbird-web', {
+          errorSpan(1, 'acme-web', {
             events: [
               exceptionEvent('TypeError', 'x is undefined'),
               exceptionEvent('RangeError', 'out of range'),
@@ -125,7 +121,7 @@ describe('groupTraceErrors', () => {
       'TypeError: x is undefined',
     ]);
     expect(groups.map((group) => group.fingerprint)).toContain(
-      fingerprintFromException('mockingbird-web', {
+      fingerprintFromException('acme-web', {
         type: 'TypeError',
         message: 'x is undefined',
         stacktrace: '',
@@ -138,7 +134,7 @@ describe('groupTraceErrors', () => {
       [
         trace(1, [
           errorSpan(1, 'engine'),
-          errorSpan(1, 'mockingbird-web', {
+          errorSpan(1, 'acme-web', {
             spanId: 'ok',
             status: { code: 'ok' },
           }),
@@ -151,10 +147,10 @@ describe('groupTraceErrors', () => {
 
   test('keeps three distinct sample traces, newest scanned first, and orders by count', () => {
     const traces = [5, 4, 3, 2, 1].map((index) =>
-      trace(index, [errorSpan(index, 'mockingbird-web')]),
+      trace(index, [errorSpan(index, 'acme-web')]),
     );
     const other = trace(9, [
-      errorSpan(9, 'mockingbird-web', {
+      errorSpan(9, 'acme-web', {
         status: { code: 'error', message: 'other' },
       }),
     ]);
@@ -235,8 +231,8 @@ describe('scanTraceErrors', () => {
     const fake = fakeBackend(
       [summary(1, 0), summary(2, 1), summary(3, 0), summary(4, 2)],
       [
-        trace(2, [errorSpan(2, 'mockingbird-web')]),
-        trace(4, [errorSpan(4, 'mockingbird-web')]),
+        trace(2, [errorSpan(2, 'acme-web')]),
+        trace(4, [errorSpan(4, 'acme-web')]),
       ],
     );
     const result = await scan(fake);
@@ -249,15 +245,13 @@ describe('scanTraceErrors', () => {
     expect(result.countedSince).toBeUndefined();
     expect(result.groups[0]).toMatchObject({ count: 2 });
     expect(result.groups[0]?.traceIds).toEqual(['t0004', 't0002']);
-    expect(fake.searches.every((s) => s.service === 'mockingbird-web')).toBe(
-      true,
-    );
+    expect(fake.searches.every((s) => s.service === 'acme-web')).toBe(true);
   });
 
   test('asks Jaeger for error traces first and falls back to the unfiltered window when it answers nothing', async () => {
     const fake = fakeBackend(
       [summary(1, 1)],
-      [trace(1, [errorSpan(1, 'mockingbird-web')])],
+      [trace(1, [errorSpan(1, 'acme-web')])],
     );
     const filteredSearch = fake.backend.searchTraces;
     const backend = {
@@ -282,7 +276,7 @@ describe('scanTraceErrors', () => {
   test('sends the error filter on the first search', async () => {
     const fake = fakeBackend(
       [summary(1, 1)],
-      [trace(1, [errorSpan(1, 'mockingbird-web')])],
+      [trace(1, [errorSpan(1, 'acme-web')])],
     );
     await scan(fake);
     expect(fake.searches[0]?.errorsOnly).toBe(true);
@@ -292,9 +286,7 @@ describe('scanTraceErrors', () => {
     const summaries = [1, 2, 3, 4, 5, 6].map((index) => summary(index, 1));
     const fake = fakeBackend(
       summaries,
-      summaries.map((s, i) =>
-        trace(i + 1, [errorSpan(i + 1, 'mockingbird-web')]),
-      ),
+      summaries.map((s, i) => trace(i + 1, [errorSpan(i + 1, 'acme-web')])),
     );
     const result = await scan(fake, { maxErrorTraces: 3 });
     expect(result.errorTraces).toBe(3);
@@ -322,7 +314,7 @@ describe('scanTraceErrors', () => {
   test('skips a trace that expired between search and fetch', async () => {
     const fake = fakeBackend(
       [summary(1, 1), summary(2, 1)],
-      [trace(2, [errorSpan(2, 'mockingbird-web')])],
+      [trace(2, [errorSpan(2, 'acme-web')])],
     );
     const result = await scan(fake);
     expect(result.errorTraces).toBe(1);

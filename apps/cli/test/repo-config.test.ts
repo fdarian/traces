@@ -55,7 +55,7 @@ describe('repo config schema', () => {
       (
         await decode({
           $schema: 'https://example.com/s.json',
-          name: 'mockingbird',
+          name: 'acme',
           services,
         })
       )._tag,
@@ -107,11 +107,11 @@ describe('findRepoConfig', () => {
   test('walks up from a subdirectory, and an explicit name wins', async () => {
     const repo = join(root, 'walk-repo');
     initRepo(repo);
-    write(join(repo, 'traces.json'), { name: 'mockingbird', services });
+    write(join(repo, 'traces.json'), { name: 'acme', services });
     mkdirSync(join(repo, 'apps', 'web'), { recursive: true });
     const found = Option.getOrThrow(await find(join(repo, 'apps', 'web')));
     expect(found.path).toBe(join(repo, 'traces.json'));
-    expect(found.name).toBe('mockingbird');
+    expect(found.name).toBe('acme');
   });
 
   test('the nearest file wins over one at the git root', async () => {
@@ -167,7 +167,7 @@ describe('config lookup precedence', () => {
     xdg = join(root, 'xdg');
     write(join(xdg, 'traces', 'config.json'), {
       projects: {
-        mockingbird: {
+        acme: {
           matcher: { type: 'path', path: '/nonexistent-traces-test' },
           services: { web: { otelService: 'global-web' } },
         },
@@ -176,7 +176,7 @@ describe('config lookup precedence', () => {
     repo = join(root, 'precedence-repo');
     initRepo(repo);
     write(join(repo, 'traces.json'), {
-      name: 'mockingbird',
+      name: 'acme',
       services: { web: { otelService: 'repo-web' } },
     });
     mkdirSync(join(repo, 'apps'), { recursive: true });
@@ -204,14 +204,14 @@ describe('config lookup precedence', () => {
     expect(result.document).toMatchObject({
       configSource: 'repo',
       matchedBy: 'repo',
-      project: 'mockingbird',
+      project: 'acme',
       configPath: join(repo, 'traces.json'),
       services: [{ service: 'web', otelService: 'repo-web' }],
     });
   });
 
   test('--project skips the repo file for the global config', async () => {
-    const result = await runServices(repo, ['--project', 'mockingbird']);
+    const result = await runServices(repo, ['--project', 'acme']);
     expect(result.document).toMatchObject({
       configSource: 'global',
       matchedBy: 'flag',
@@ -224,7 +224,7 @@ describe('config lookup precedence', () => {
       '--config',
       join(xdg, 'traces', 'config.json'),
       '--project',
-      'mockingbird',
+      'acme',
     ]);
     expect(result.document).toMatchObject({
       configSource: 'flag',
