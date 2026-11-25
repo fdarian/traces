@@ -17,7 +17,15 @@ import {
   TraceNotFound,
   type TraceRow,
 } from '@traces/core';
-import { Cause, Console, Effect, Exit, Option, Schema } from 'effect';
+import {
+  Cause,
+  Console,
+  Effect,
+  Exit,
+  Option,
+  Schema,
+  SchemaIssue,
+} from 'effect';
 import { CliError, CliOutput } from 'effect/cli';
 import {
   ConflictingFlags,
@@ -267,9 +275,25 @@ const renderCliError = (error: CliError.CliError): RenderedError => {
   };
 };
 
+const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
+
+/** A non-empty path means the top-level shape matched and a nested field didn't; a body that isn't JSON or isn't an object fails at the root. */
+const failsBelowRoot = (cause: unknown): boolean =>
+  Schema.isSchemaError(cause) &&
+  formatIssues(cause.issue).issues.some(
+    (issue) => issue.path !== undefined && issue.path.length > 0,
+  );
+
 const badResponseHint = (error: JaegerBadResponse): string => {
   if (error.status >= 300 && error.status < 400) {
     return 'the URL redirects; use the final URL as tracing.url';
+  }
+  if (
+    error.status >= 200 &&
+    error.status < 300 &&
+    failsBelowRoot(error.cause)
+  ) {
+    return "the backend answered like Jaeger /api/v3 but a field didn't match what traces expects; likely a traces bug, please report it with the error above";
   }
   const servesHtml =
     /html/i.test(error.contentType ?? '') ||

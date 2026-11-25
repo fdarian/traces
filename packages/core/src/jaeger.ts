@@ -20,13 +20,14 @@ import {
   type OtelTraceSummary,
   OtelTracesResultSchema,
 } from './jaeger-schema.js';
-import type {
-  Span,
-  SpanEvent,
-  SpanResource,
-  SpanStatus,
-  Trace,
-  TraceSummary,
+import {
+  type Span,
+  type SpanEvent,
+  type SpanResource,
+  type SpanStatus,
+  type Trace,
+  type TraceSummary,
+  UNKNOWN_ROOT,
 } from './model.js';
 import {
   isoToEpochMicrosCeil,
@@ -152,12 +153,12 @@ export function mapTraceSummary(raw: OtelTraceSummary): TraceSummary {
 
   return {
     traceId: raw.traceId,
-    rootService: raw.rootServiceName,
-    rootOperation: raw.rootOperationName,
-    spanCount: raw.spanCount,
+    rootService: raw.rootServiceName ?? UNKNOWN_ROOT,
+    rootOperation: raw.rootOperationName ?? UNKNOWN_ROOT,
+    spanCount: raw.spanCount ?? 0,
     // proto3 JSON omits zero fields, so a trace without errors has no errorSpanCount key.
     errorSpanCount: raw.errorSpanCount ?? 0,
-    services: raw.services.map((s) => ({
+    services: (raw.services ?? []).map((s) => ({
       name: s.name,
       spanCount: s.spanCount,
     })),
@@ -198,8 +199,8 @@ export function mapLegacyTrace(trace: JaegerLegacyTrace): TraceSummary {
 
   return {
     traceId: trace.traceID,
-    rootService: root !== undefined ? serviceOf(root) : 'unknown',
-    rootOperation: root !== undefined ? root.operationName : 'unknown',
+    rootService: root !== undefined ? serviceOf(root) : UNKNOWN_ROOT,
+    rootOperation: root !== undefined ? root.operationName : UNKNOWN_ROOT,
     spanCount: trace.spans.length,
     errorSpanCount,
     services: countServices(trace.spans.map(serviceOf)),

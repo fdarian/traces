@@ -108,15 +108,18 @@ export type OtelOperationsResult = typeof OtelOperationsResultSchema.Type;
 
 export const OtelTraceSummarySchema = S.Struct({
   traceId: S.String,
-  rootServiceName: S.String,
-  rootOperationName: S.String,
-  spanCount: S.Number,
+  // proto3 JSON omits empty and zero fields, so a trace without a root span has no root names.
+  rootServiceName: S.optional(S.String),
+  rootOperationName: S.optional(S.String),
+  spanCount: S.optional(S.Number),
   errorSpanCount: S.optional(S.Number),
-  services: S.Array(
-    S.Struct({
-      name: S.String,
-      spanCount: S.Number,
-    }),
+  services: S.optional(
+    S.Array(
+      S.Struct({
+        name: S.String,
+        spanCount: S.Number,
+      }),
+    ),
   ),
   minStartTimeUnixNano: S.Union([S.String, S.Number]),
   maxEndTimeUnixNano: S.Union([S.String, S.Number]),

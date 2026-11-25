@@ -7,6 +7,7 @@ import {
   TraceNotFound,
 } from '#/errors.js';
 import { joinUrl, makeJaegerBackend } from '#/jaeger.js';
+import { UNKNOWN_ROOT } from '#/model.js';
 import { nanoToIso } from '#/normalize.js';
 import servicesFixture from './fixtures/services.json';
 import traceDetailFixture from './fixtures/trace-detail.json';
@@ -499,6 +500,60 @@ function rawClient(
     ),
   );
 }
+
+describe('searchTraces over trace-summaries that proto3 JSON abbreviated', () => {
+  const query = {
+    service: 'web',
+    startTimeMin: '2026-10-12T00:00:00.000Z',
+    startTimeMax: '2026-10-15T00:00:00.000Z',
+    limit: 20,
+  };
+
+  test('a summary without root names, services or spanCount still decodes', async () => {
+    const { client } = recordingClient(200, {
+      summaries: [
+        {
+          traceId: 'aaa',
+          rootServiceName: 'web',
+          rootOperationName: 'GET /',
+          spanCount: 2,
+          services: [{ name: 'web', spanCount: 2 }],
+          minStartTimeUnixNano: '1781270068282000000',
+          maxEndTimeUnixNano: '1781270068889000000',
+        },
+        {
+          traceId: 'bbb',
+          spanCount: 1,
+          services: [{ name: 'web', spanCount: 1 }],
+          minStartTimeUnixNano: '1781270068283000000',
+          maxEndTimeUnixNano: '1781270068289000000',
+        },
+        {
+          traceId: 'ccc',
+          rootServiceName: 'web',
+          rootOperationName: 'GET /',
+          minStartTimeUnixNano: '1781270068284000000',
+          maxEndTimeUnixNano: '1781270068289000000',
+        },
+      ],
+    });
+    const exit = await run(
+      client,
+      { url: 'http://localhost:16686', headers: {} },
+      (b) => b.searchTraces(query),
+    );
+    if (!Exit.isSuccess(exit)) throw new Error('searchTraces failed');
+    const root = exit.value[0];
+    const rootless = exit.value[1];
+    const empty = exit.value[2];
+    expect(root?.rootService).toBe('web');
+    expect(rootless?.rootService).toBe(UNKNOWN_ROOT);
+    expect(rootless?.rootOperation).toBe(UNKNOWN_ROOT);
+    expect(rootless?.spanCount).toBe(1);
+    expect(empty?.spanCount).toBe(0);
+    expect(empty?.services).toEqual([]);
+  });
+});
 
 describe('JaegerBadResponse', () => {
   const failure = async (
