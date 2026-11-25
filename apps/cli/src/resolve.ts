@@ -182,10 +182,16 @@ const railwayServices = (resolved: ResolvedProject) =>
 const environmentOf = (config: RailwayServiceConfig) =>
   config.environment ?? 'production';
 
-const distinctRailwayTargets = (configs: RailwayServiceConfig[]) => {
+/** With `--env` the flag picks the environment later, so targets differing only in environment are one. */
+const distinctRailwayTargets = (
+  configs: RailwayServiceConfig[],
+  envFlag: Option.Option<string>,
+) => {
   const seen = new Set<string>();
   return configs.filter((config) => {
-    const key = `${config.project}\u0000${environmentOf(config)}`;
+    const key = Option.isSome(envFlag)
+      ? config.project
+      : `${config.project}\u0000${environmentOf(config)}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -221,14 +227,16 @@ const describeTarget = (config: RailwayServiceConfig) =>
 
 /**
  * `logs`, `deploys` and `errors <service>` accept a Railway service the config doesn't list. A
- * name that isn't a config key is looked up in each distinct Railway project and environment the
- * config's Railway services use; it resolves only when exactly one of them has it. With a single
- * project and environment there's nothing to choose between, so the name goes straight to the
- * source's own by-id-or-name lookup, which lists the project's services when it isn't there.
+ * name that isn't a config key is looked up live in every Railway project the config's Railway
+ * services use, by service id or name; it resolves only when exactly one project has it, and the
+ * stderr note is printed only then. No match exits 2 with the live services as the hint. When
+ * the config uses one project in several environments, `--env` picks the environment; without
+ * it a match is ambiguous, since the environment is the only thing left to choose.
  */
 export const selectLogService = (
   resolved: ResolvedProject,
   requested: Option.Option<string>,
+  envFlag: Option.Option<string>,
 ) =>
   Effect.gen(function* () {
     if (Option.isNone(requested))
@@ -237,44 +245,44 @@ export const selectLogService = (
     const configured = resolved.project.services[name];
     if (configured !== undefined) return { name, config: configured };
 
-    const targets = distinctRailwayTargets(railwayServices(resolved));
+    const targets = distinctRailwayTargets(railwayServices(resolved), envFlag);
     const available = `available services in "${resolved.projectName}": ${Object.keys(resolved.project.services).join(', ')}`;
     const notFound = (hint: string) =>
       new UsageError({
         message: `no service named "${name}" in project "${resolved.projectName}"`,
         hint,
       });
+    if (targets.length === 0) return yield* notFound(available);
 
-    let target = targets[0];
-    if (target === undefined) return yield* notFound(available);
-
-    if (targets.length > 1) {
-      const projects = [...new Set(targets.map((entry) => entry.project))];
-      const live = yield* railwayServiceListings(resolved, projects);
-      const liveHint = `${available}; ${live
-        .map(
-          (entry) =>
-            `Railway project ${entry.project} has: ${entry.services.map((service) => service.name).join(', ')}`,
-        )
-        .join('; ')}`;
-      const matches = targets.filter((entry) =>
-        live.some(
-          (listing) =>
-            listing.project === entry.project &&
-            listing.services.some(
-              (service) => service.id === name || service.name === name,
-            ),
-        ),
+    const projects = [...new Set(targets.map((entry) => entry.project))];
+    const live = yield* railwayServiceListings(resolved, projects);
+    const liveHint = `${available}; ${live
+      .map(
+        (entry) =>
+          `Railway project ${entry.project} has: ${entry.services.map((service) => service.name).join(', ')}`,
+      )
+      .join('; ')}`;
+    const matches = targets.filter((entry) =>
+      live.some(
+        (listing) =>
+          listing.project === entry.project &&
+          listing.services.some(
+            (service) => service.id === name || service.name === name,
+          ),
+      ),
+    );
+    const target = matches[0];
+    if (target === undefined) return yield* notFound(liveHint);
+    if (matches.length > 1) {
+      const sameProject = matches.every(
+        (entry) => entry.project === target.project,
       );
-      const match = matches[0];
-      if (match === undefined) return yield* notFound(liveHint);
-      if (matches.length > 1) {
-        return yield* new UsageError({
-          message: `"${name}" is ambiguous: ${matches.map(describeTarget).join(', ')} all have a Railway service with that id or name`,
-          hint: `${liveHint}; add the one you mean to the config under a name of its own`,
-        });
-      }
-      target = match;
+      return yield* new UsageError({
+        message: `"${name}" is ambiguous: ${matches.map(describeTarget).join(', ')} all have a Railway service with that id or name`,
+        hint: sameProject
+          ? `${liveHint}; pass --env <name> to pick the environment (${matches.map(environmentOf).join(', ')})`
+          : `${liveHint}; add the one you mean to the config under a name of its own`,
+      });
     }
 
     yield* Console.error(
@@ -382,7 +390,7 @@ export const resolveService = (
 ) =>
   Effect.gen(function* () {
     const resolved = yield* resolveProject(flags);
-    const selected = yield* selectLogService(resolved, service);
+    const selected = yield* selectLogService(resolved, service, flags.env);
     const config = yield* requireLogProvider(selected.name, selected.config);
     const target = yield* buildTarget(selected.name, config, flags.env);
     const source = yield* buildSource(target, resolveRailwayClient(resolved));
@@ -511,7 +519,7 @@ export const resolveErrorScope = (
 
     const candidates: Array<{ name: string; config: ServiceConfig }> =
       Option.isSome(requested)
-        ? [yield* selectLogService(resolved, requested)]
+        ? [yield* selectLogService(resolved, requested, flags.env)]
         : Object.entries(resolved.project.services).map(([name, config]) => ({
             name,
             config,

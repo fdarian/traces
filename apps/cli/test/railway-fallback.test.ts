@@ -22,7 +22,7 @@ if (document.includes('project(')) {
   const names = [...(SERVICES[id] ?? ['api', 'telegram-cron']), ...(process.env.FAKE_RAILWAY_EXTRA_NAME_PROJECT === id ? [process.env.FAKE_RAILWAY_EXTRA_NAME] : [])];
   reply({ project: {
     services: { edges: names.map((name) => ({ node: { id: 'svc-' + name, name } })) },
-    environments: { edges: [{ node: { id: 'env-prod', name: 'production' } }] },
+    environments: { edges: [{ node: { id: 'env-prod', name: 'production' } }, { node: { id: 'env-staging', name: 'staging' } }] },
   } });
 } else if (document.includes('deployments(')) {
   reply({ deployments: {
@@ -75,6 +75,7 @@ const run = async (
   service: string,
   config: string,
   extra: Record<string, string> = {},
+  flags: string[] = [],
 ) => {
   const child = Bun.spawn(
     [
@@ -87,6 +88,7 @@ const run = async (
       '--config',
       config,
       '--json',
+      ...flags,
       ...(command === 'errors' ? ['--source', 'logs'] : []),
     ],
     {
@@ -133,11 +135,15 @@ describe('a service the config does not list', () => {
     expect(result.stderr).not.toContain('not in the config');
   });
 
-  test('a name Railway does not know fails with the Railway project services listed', async () => {
-    const config = configWith({ api: railway('proj-1', 'api') });
+  test('a typo with a single target exits 2 with the live hint and no "using" note', async () => {
+    const config = configWith({ api: railway('proj-1', 'api', 'production') });
     const result = await run('deploys', 'nope', config);
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain('available services: api (svc-api)');
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('no service named "nope" in project "app"');
+    expect(result.stderr).toContain(
+      'Railway project proj-1 has: api, telegram-cron',
+    );
+    expect(result.stderr).not.toContain('using Railway service');
   });
 
   test('with Railway services in two projects, the one project that has the name wins, and the note names it', async () => {
@@ -246,6 +252,35 @@ describe('a service the config does not list', () => {
     expect(result.stderr).toContain(
       'Railway project proj-1 has: api, telegram-cron',
     );
+  });
+
+  test('--env resolves a name in one project listed under two environments', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api', 'production'),
+      staging: railway('proj-1', 'api', 'staging'),
+    });
+    const result = await run('deploys', 'telegram-cron', config, {}, [
+      '--env',
+      'staging',
+    ]);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(NOTE);
+    expect(result.stdout).toContain('"service":"telegram-cron"');
+  });
+
+  test('without --env the same config exits 2 and the hint names the environments and --env', async () => {
+    const config = configWith({
+      api: railway('proj-1', 'api', 'production'),
+      staging: railway('proj-1', 'api', 'staging'),
+    });
+    const result = await run('deploys', 'telegram-cron', config);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(
+      '"telegram-cron" is ambiguous: proj-1 (production), proj-1 (staging)',
+    );
+    expect(result.stderr).toContain('pass --env <name>');
+    expect(result.stderr).toContain('production, staging');
+    expect(result.stderr).not.toContain('using Railway service');
   });
 
   test('when Railway cannot be reached the real error is reported, not "no service named"', async () => {
