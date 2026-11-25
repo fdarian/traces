@@ -9,6 +9,7 @@ import type {
 import {
   appTimestampOf,
   decodeJsonAttribute,
+  httpLevel,
   normalizeLevel,
   stripAnsi,
   traceContextOf,
@@ -105,9 +106,6 @@ export const mapRailwayHttpLog = (
   },
   attrs: { host: row.host },
 });
-
-const httpLevel = (status: number): LogLevel =>
-  status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
 
 export const mapRailwayDeployment = (
   node: typeof DeploymentNode.Type,

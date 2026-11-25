@@ -13,7 +13,7 @@ import type {
 import { levelAllowed, matchesGrep, shortHash } from '../normalize.js';
 import { type PageResume, pageBackwards, pageWidening } from '../paging.js';
 import type { LogSource } from '../source.js';
-import { makeVercelClient } from './client.js';
+import { makeVercelClient, VERCEL_API } from './client.js';
 import {
   mapBuildEvent,
   mapHttpRow,
@@ -30,7 +30,6 @@ import {
   RequestLogsResponse,
 } from './schema.js';
 
-const API = 'https://api.vercel.com';
 const REQUEST_LOGS = 'https://vercel.com/api/logs/request-logs';
 const MAX_RUNTIME_PAGES = 50;
 const MAX_BUILD_EVENTS = 5000;
@@ -88,7 +87,7 @@ export const makeVercelSource = (
     const project = yield* Effect.cached(
       get(
         'project',
-        `${API}/v9/projects/${encodeURIComponent(target.project)}`,
+        `${VERCEL_API}/v9/projects/${encodeURIComponent(target.project)}`,
         teamParams,
         ProjectResponse,
       ),
@@ -105,7 +104,7 @@ export const makeVercelSource = (
             : undefined;
         const data = yield* get(
           'deployments',
-          `${API}/v6/deployments`,
+          `${VERCEL_API}/v6/deployments`,
           {
             ...teamParams,
             projectId: resolved.id,
@@ -242,7 +241,7 @@ export const makeVercelSource = (
         const fetchEvents = (limit: string) =>
           get(
             'build-events',
-            `${API}/v3/deployments/${encodeURIComponent(deploymentId)}/events`,
+            `${VERCEL_API}/v3/deployments/${encodeURIComponent(deploymentId)}/events`,
             {
               ...teamParams,
               direction: 'backward',

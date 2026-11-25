@@ -1,21 +1,28 @@
 import type { Trace, TraceSummary } from '../model.js';
 import { nanosToMs } from '../normalize.js';
 
+export function countServices(
+  serviceNames: ReadonlyArray<string>,
+): TraceSummary['services'] {
+  const counts = new Map<string, number>();
+  for (const name of serviceNames) {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return Array.from(counts, ([name, spanCount]) => ({ name, spanCount }));
+}
+
 export function computeTraceSummary(trace: Trace): TraceSummary {
   const rootSpan = trace.spans.find((s) => s.parentSpanId === undefined);
   const rootService =
     rootSpan !== undefined ? rootSpan.resource.serviceName : 'unknown';
   const rootOperation = rootSpan !== undefined ? rootSpan.name : 'unknown';
 
-  const serviceMap: Map<string, number> = new Map();
   let errorSpanCount = 0;
   let minStart = BigInt('0');
   let maxEnd = BigInt('0');
   let first = true;
 
   for (const span of trace.spans) {
-    const serviceName = span.resource.serviceName;
-    serviceMap.set(serviceName, (serviceMap.get(serviceName) ?? 0) + 1);
     if (span.status.code === 'error') {
       errorSpanCount += 1;
     }
@@ -35,8 +42,8 @@ export function computeTraceSummary(trace: Trace): TraceSummary {
     }
   }
 
-  const services = Array.from(serviceMap.entries()).map(
-    ([name, spanCount]) => ({ name, spanCount }),
+  const services = countServices(
+    trace.spans.map((span) => span.resource.serviceName),
   );
 
   const durationMs = nanosToMs(maxEnd - minStart);

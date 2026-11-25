@@ -14,6 +14,8 @@ import {
 import type { VercelTarget } from '../model.js';
 import { PROVIDER } from './normalize.js';
 
+export const VERCEL_API = 'https://api.vercel.com';
+
 const LOGIN_HINT = 'run `vercel login` or set VERCEL_TOKEN';
 
 /** Authenticated JSON GETs against Vercel; `teamParams` scopes team-bound API calls. */

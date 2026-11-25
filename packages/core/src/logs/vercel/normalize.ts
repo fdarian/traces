@@ -6,7 +6,12 @@ import type {
   LogRecord,
   VercelTarget,
 } from '../model.js';
-import { normalizeLevel, stripAnsi, traceContextOf } from '../normalize.js';
+import {
+  httpLevel,
+  normalizeLevel,
+  stripAnsi,
+  traceContextOf,
+} from '../normalize.js';
 import type { BuildEvent, RequestLogRow, VercelDeployment } from './schema.js';
 
 export const PROVIDER = 'vercel' as const;
@@ -73,9 +78,6 @@ export const mapVercelDeployment = (
         }),
   };
 };
-
-const httpLevel = (status: number): LogLevel =>
-  status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
 
 const requestOf = (row: RequestLogRow) => ({
   method: row.requestMethod,

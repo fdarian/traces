@@ -1,8 +1,6 @@
 import { Effect, type Redacted } from 'effect';
-import { makeVercelClient } from './client.js';
+import { makeVercelClient, VERCEL_API } from './client.js';
 import { ProjectResponse } from './schema.js';
-
-const API = 'https://api.vercel.com';
 
 /** The project's name, for naming a service in a generated config. `team` is the `orgId` of a `.vercel/project.json`. */
 export const fetchVercelProjectName = (
@@ -16,7 +14,7 @@ export const fetchVercelProjectName = (
     );
     const found = yield* client.get(
       'project',
-      `${API}/v9/projects/${encodeURIComponent(project.id)}`,
+      `${VERCEL_API}/v9/projects/${encodeURIComponent(project.id)}`,
       client.teamParams,
       ProjectResponse,
     );

@@ -34,6 +34,9 @@ export const normalizeLevel = (raw: string | null | undefined): LogLevel => {
   }
 };
 
+export const httpLevel = (status: number): LogLevel =>
+  status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+
 export const shortHash = (text: string): string =>
   createHash('sha1').update(text).digest('hex').slice(0, 10);
 
