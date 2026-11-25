@@ -17,7 +17,8 @@ import { SecretMissing } from '#/secrets.ts';
 import { findVercelToken } from '#/vercel-token.ts';
 
 export interface AuthStatus {
-  readonly status: 'ok' | 'missing' | 'invalid';
+  /** `error`: the provider could not answer the check (rate limit, outage), so the credentials are neither confirmed nor rejected. */
+  readonly status: 'ok' | 'missing' | 'invalid' | 'error';
   readonly detail: string;
 }
 
@@ -101,13 +102,21 @@ export const vercelAuthStatus = Effect.gen(function* () {
       HttpClientRequest.bearerToken(Redacted.value(found.success.token)),
     ),
   );
-  return response.status === 200
-    ? ({
-        status: 'ok',
-        detail: `token from ${found.success.source}`,
-      } as const satisfies AuthStatus)
-    : ({
-        status: 'invalid',
-        detail: `token from ${found.success.source} was rejected (HTTP ${response.status}); run \`vercel login\` or set VERCEL_TOKEN`,
-      } as const satisfies AuthStatus);
+  const source = found.success.source;
+  if (response.status === 200) {
+    return {
+      status: 'ok',
+      detail: `token from ${source}`,
+    } as const satisfies AuthStatus;
+  }
+  if (response.status === 401 || response.status === 403) {
+    return {
+      status: 'invalid',
+      detail: `token from ${source} was rejected (HTTP ${response.status}); run \`vercel login\` or set VERCEL_TOKEN`,
+    } as const satisfies AuthStatus;
+  }
+  return {
+    status: 'error',
+    detail: `could not check the token from ${source}: the Vercel API answered HTTP ${response.status}; try again later`,
+  } as const satisfies AuthStatus;
 });
