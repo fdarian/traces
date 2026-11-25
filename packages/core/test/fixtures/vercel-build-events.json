@@ -1,0 +1,27 @@
+[
+  {
+    "created": 1791614887689,
+    "id": "e5",
+    "type": "stdout",
+    "text": "Build cache uploaded: 2.438s"
+  },
+  { "id": "e4", "type": "stdout", "text": "keepalive without a timestamp" },
+  {
+    "created": 1791614885250,
+    "id": "e3",
+    "type": "stderr",
+    "text": "\u001b[33mwarn\u001b[0m: deprecated flag"
+  },
+  {
+    "created": 1791614856614,
+    "id": "e2",
+    "type": "fatal",
+    "text": "Error: Command \"bun run build\" exited with 1"
+  },
+  {
+    "created": 1791614856000,
+    "id": "e1",
+    "type": "deployment-state",
+    "payload": {}
+  }
+]

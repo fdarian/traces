@@ -1,0 +1,111 @@
+import { describe, expect, test } from 'bun:test';
+import { type Coalesced, groupErrors } from '#/index.js';
+
+const record = (
+  message: string,
+  ts: string,
+  overrides: Partial<Coalesced> = {},
+): Coalesced => ({
+  lines: 1,
+  ts,
+  service: 'api',
+  provider: 'railway',
+  environment: 'production',
+  deploymentId: 'dep-1',
+  source: 'runtime',
+  level: 'error',
+  message,
+  attrs: {},
+  ...overrides,
+});
+
+describe('groupErrors', () => {
+  test('groups messages that differ only in ids and numbers', () => {
+    const groups = groupErrors([
+      record('Timeout after 3000ms for user 41', '2026-10-12T00:00:01Z'),
+      record('Timeout after 5000ms for user 977', '2026-10-12T00:00:09Z', {
+        deploymentId: 'dep-2',
+      }),
+      record('Timeout after 100ms for user 5', '2026-10-12T00:00:05Z'),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      source: 'logs',
+      count: 3,
+      firstSeen: '2026-10-12T00:00:01Z',
+      lastSeen: '2026-10-12T00:00:09Z',
+      sample: 'Timeout after 3000ms for user 41',
+    });
+    expect(groups[0]?.deploymentIds).toEqual(['dep-1', 'dep-2']);
+  });
+
+  test('only the first line decides the group', () => {
+    const groups = groupErrors([
+      record(
+        'TypeError: x is undefined\n    at a.ts:1',
+        '2026-10-12T00:00:01Z',
+      ),
+      record(
+        'TypeError: x is undefined\n    at b.ts:2',
+        '2026-10-12T00:00:02Z',
+      ),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.count).toBe(2);
+  });
+
+  test('sorts by count (ties: most recent first) and keeps services apart', () => {
+    const groups = groupErrors([
+      record('rare failure', '2026-10-12T00:00:01Z'),
+      record('common failure', '2026-10-12T00:00:02Z'),
+      record('common failure', '2026-10-12T00:00:03Z'),
+      record('common failure', '2026-10-12T00:00:04Z', { service: 'web' }),
+    ]);
+    expect(groups.map((g) => [g.service, g.sample, g.count])).toEqual([
+      ['api', 'common failure', 2],
+      ['web', 'common failure', 1],
+      ['api', 'rare failure', 1],
+    ]);
+  });
+
+  test('records without a deployment contribute no deployment ids', () => {
+    const groups = groupErrors([
+      record('boom', '2026-10-12T00:00:01Z', { deploymentId: undefined }),
+    ]);
+    expect(groups[0]?.deploymentIds).toEqual([]);
+  });
+
+  test('samples the first trace id found in the group', () => {
+    const trace = 'a'.repeat(32);
+    const groups = groupErrors([
+      record('boom', '2026-10-12T00:00:01Z'),
+      record('boom', '2026-10-12T00:00:02Z', { traceId: trace }),
+      record('boom', '2026-10-12T00:00:03Z', { traceId: 'b'.repeat(32) }),
+      record('quiet', '2026-10-12T00:00:04Z'),
+    ]);
+    expect(groups.find((g) => g.sample === 'boom')?.traceId).toBe(trace);
+    expect(groups.find((g) => g.sample === 'quiet')?.traceId).toBeUndefined();
+  });
+
+  test('merges records of several services into one count-ordered list', () => {
+    const groups = groupErrors([
+      record('db down', '2026-10-12T00:00:01Z', { service: 'web' }),
+      record('db down', '2026-10-12T00:00:02Z', { service: 'web' }),
+      record('db down', '2026-10-12T00:00:03Z', { service: 'worker' }),
+      record('db down', '2026-10-12T00:00:04Z', { service: 'worker' }),
+      record('db down', '2026-10-12T00:00:05Z', { service: 'worker' }),
+    ]);
+    expect(groups.map((g) => [g.service, g.count])).toEqual([
+      ['worker', 3],
+      ['web', 2],
+    ]);
+  });
+
+  test('sums the lines behind each event, while count stays the events', () => {
+    const groups = groupErrors([
+      record('Boom 1', '2026-10-12T00:00:01Z', { lines: 12 }),
+      record('Boom 2', '2026-10-12T00:00:09Z', { lines: 8 }),
+    ]);
+    expect(groups[0]).toMatchObject({ count: 2, lines: 20 });
+  });
+});

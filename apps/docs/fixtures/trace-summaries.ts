@@ -6,6 +6,7 @@ export const sampleTraceSummaries: TraceSummary[] = [
     rootService: 'web',
     rootOperation: 'GET /dashboard',
     spanCount: 4,
+    errorSpanCount: 0,
     startTimeUnixNano: '1700000000000000000',
     durationMs: 142,
     services: [
@@ -32,6 +33,7 @@ export const sampleTraceSummaries: TraceSummary[] = [
     rootService: 'api',
     rootOperation: 'GET /api/users',
     spanCount: 3,
+    errorSpanCount: 0,
     startTimeUnixNano: '1700000002000000000',
     durationMs: 67,
     services: [
@@ -44,6 +46,7 @@ export const sampleTraceSummaries: TraceSummary[] = [
     rootService: 'worker',
     rootOperation: 'process.job',
     spanCount: 5,
+    errorSpanCount: 0,
     startTimeUnixNano: '1700000003000000000',
     durationMs: 910,
     services: [

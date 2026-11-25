@@ -4,9 +4,10 @@ import {
   JaegerUnreachable,
   TraceBackend,
   type TraceBackendInterface,
+  TraceBackendUnauthorized,
   TraceNotFound,
 } from '@traces/core';
-import { Context, Effect } from 'effect';
+import { Context, Effect, Option } from 'effect';
 import { HttpServerResponse } from 'effect/http';
 import { handler } from '#/rpc/handler';
 import type { EngineContext } from '#/rpc/implementer';
@@ -15,11 +16,20 @@ import { router } from '#/rpc/router';
 const stubBackend: TraceBackendInterface = {
   listServices: Effect.succeed(['checkout', 'payments']),
   listOperations: () => Effect.succeed([]),
+  searchFullTraces: () => Effect.succeed([]),
+  searchTagged: () => Effect.succeed(Option.none()),
   searchTraces: () => Effect.succeed([]),
-  getTrace: (traceId) =>
-    traceId === 'unreachable'
-      ? Effect.fail(new JaegerUnreachable({ cause: new Error('down') }))
-      : Effect.fail(new TraceNotFound({ traceId })),
+  getTrace: (traceId) => {
+    if (traceId === 'unreachable') {
+      return Effect.fail(new JaegerUnreachable({ cause: new Error('down') }));
+    }
+    if (traceId === 'unauthorized') {
+      return Effect.fail(
+        new TraceBackendUnauthorized({ status: 401, url: 'http://jaeger' }),
+      );
+    }
+    return Effect.fail(new TraceNotFound({ traceId }));
+  },
 };
 
 // The issue store is never touched by traces.* procedures.
@@ -53,6 +63,17 @@ test('traces.get maps JaegerUnreachable to JAEGER_UNREACHABLE', async () => {
   ).catch((caught: unknown) => caught);
   if (!(error instanceof ORPCError)) throw error;
   expect(error.code).toBe('JAEGER_UNREACHABLE');
+});
+
+test('traces.get maps TraceBackendUnauthorized to JAEGER_UNAUTHORIZED', async () => {
+  const error = await call(
+    router.traces.get,
+    { traceId: 'unauthorized' },
+    { context },
+  ).catch((caught: unknown) => caught);
+  if (!(error instanceof ORPCError)) throw error;
+  expect(error.code).toBe('JAEGER_UNAUTHORIZED');
+  expect(error.message).toBe('Jaeger rejected the configured credentials');
 });
 
 test('RPC responses carry the contract status for defined errors', async () => {

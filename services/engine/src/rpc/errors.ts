@@ -1,13 +1,22 @@
 import type { ORPCError, ORPCErrorConstructorMap } from '@orpc/server';
 import type { jaegerErrors } from '@traces/contract';
-import { JaegerBadResponse, JaegerUnreachable } from '@traces/core';
+import {
+  JaegerBadResponse,
+  JaegerUnreachable,
+  TraceBackendUnauthorized,
+} from '@traces/core';
 import { Effect } from 'effect';
 import { IssueNotFound } from '#/issues/errors';
 
-type JaegerError = JaegerUnreachable | JaegerBadResponse;
+type JaegerError =
+  | JaegerUnreachable
+  | JaegerBadResponse
+  | TraceBackendUnauthorized;
 
 const isJaegerError = (error: unknown): error is JaegerError =>
-  error instanceof JaegerUnreachable || error instanceof JaegerBadResponse;
+  error instanceof JaegerUnreachable ||
+  error instanceof JaegerBadResponse ||
+  error instanceof TraceBackendUnauthorized;
 
 // `errors` is the constructor map oRPC hands every handler; any procedure whose
 // contract spreads `jaegerErrors` satisfies this parameter type.
@@ -19,7 +28,9 @@ export const mapJaegerErrors =
         Effect.fail(
           error instanceof JaegerUnreachable
             ? errors.JAEGER_UNREACHABLE({ cause: error })
-            : errors.JAEGER_BAD_RESPONSE({ cause: error }),
+            : error instanceof TraceBackendUnauthorized
+              ? errors.JAEGER_UNAUTHORIZED({ cause: error })
+              : errors.JAEGER_BAD_RESPONSE({ cause: error }),
         ),
       ),
     );

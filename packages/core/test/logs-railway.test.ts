@@ -1,0 +1,564 @@
+import { describe, expect, test } from 'bun:test';
+import { Effect, Redacted } from 'effect';
+import {
+  type Cursor,
+  makeRailwayHttpClient,
+  makeRailwaySource,
+  mapRailwayHttpLog,
+  mapRailwayLog,
+  mapRailwayStatus,
+  type RailwayTarget,
+  shortHash,
+} from '#/index.js';
+import {
+  fakeRailwayHttp,
+  fixture,
+  type RailwayCall,
+  type RailwayHttpCall,
+} from './logs-helpers.ts';
+
+const token = Redacted.make('rw-token');
+
+const target: RailwayTarget = {
+  provider: 'railway',
+  service: 'api',
+  project: 'proj-1',
+  serviceName: 'api',
+  environment: 'production',
+};
+
+const logRows = fixture('railway-environment-logs.json') as ReadonlyArray<{
+  timestamp: string;
+}>;
+
+const respondWith =
+  (rows: unknown) =>
+  (call: RailwayCall): unknown => {
+    if (call.document.includes('project(id'))
+      return fixture('railway-project.json');
+    if (call.document.includes('environmentLogs'))
+      return { environmentLogs: rows };
+    if (call.document.includes('deploymentLogs'))
+      return { deploymentLogs: rows };
+    if (call.document.includes('buildLogs')) return { buildLogs: rows };
+    if (call.document.includes('httpLogs'))
+      return { httpLogs: fixture('railway-http-logs.json') };
+    if (call.document.includes('deployments('))
+      return fixture('railway-deployments.json');
+    throw new Error(`unexpected query: ${call.document}`);
+  };
+
+const run = <A>(effect: Effect.Effect<A, unknown, never>) =>
+  Effect.runPromise(effect);
+
+const httpSourceFor = (railwayTarget: RailwayTarget) =>
+  makeRailwayHttpClient(token).pipe(
+    Effect.flatMap((client) => makeRailwaySource(railwayTarget, client)),
+  );
+
+const sourceWith = (rows: unknown, calls: Array<RailwayHttpCall> = []) =>
+  httpSourceFor(target).pipe(
+    Effect.provide(fakeRailwayHttp(respondWith(rows), calls)),
+  );
+
+describe('railway log mapping', () => {
+  test('decodes JSON-encoded attributes and drops the level attribute', () => {
+    const rows = fixture('railway-environment-logs.json') as Array<never>;
+    const record = mapRailwayLog(rows[1] as never, {
+      target,
+      source: 'runtime',
+    });
+    expect(record.attrs).toEqual({ fiberId: '#9', spans: {}, count: 3 });
+    expect(record.traceId).toBeUndefined();
+    expect(record.level).toBe('info');
+    expect(record.deploymentId).toBe('dep-1');
+  });
+
+  test('decodes nested Effect annotations and promotes well-formed trace ids', () => {
+    const traceId = 'a'.repeat(32);
+    const spanId = 'b'.repeat(16);
+    const row = {
+      timestamp: '2026-10-12T00:25:58.664Z',
+      message: 'hello',
+      attributes: [
+        {
+          key: 'annotations',
+          value: JSON.stringify({ traceId, spanId, userId: 7 }),
+        },
+        { key: 'raw', value: 'not json {' },
+      ],
+    };
+    const record = mapRailwayLog(row as never, { target, source: 'runtime' });
+    expect(record.traceId).toBe(traceId);
+    expect(record.spanId).toBe(spanId);
+    expect(record.attrs.annotations).toEqual({ traceId, spanId, userId: 7 });
+    expect(record.attrs.raw).toBe('not json {');
+  });
+
+  test('accepts top-level snake_case ids and ignores malformed ones', () => {
+    const encode = (attributes: Record<string, string>) => ({
+      timestamp: '2026-10-12T00:25:58.664Z',
+      message: 'hello',
+      attributes: Object.entries(attributes).map(([key, value]) => ({
+        key,
+        value: JSON.stringify(value),
+      })),
+    });
+    const good = mapRailwayLog(
+      encode({ trace_id: 'C'.repeat(32), span_id: 'd'.repeat(16) }) as never,
+      { target, source: 'runtime' },
+    );
+    expect(good.traceId).toBe('C'.repeat(32));
+    expect(good.spanId).toBe('d'.repeat(16));
+    const bad = mapRailwayLog(
+      encode({ traceId: 'req-123', spanId: 'abc' }) as never,
+      { target, source: 'runtime' },
+    );
+    expect(bad.traceId).toBeUndefined();
+    expect(bad.spanId).toBeUndefined();
+    expect(bad.attrs.traceId).toBe('req-123');
+  });
+
+  describe('appTs', () => {
+    const rowWith = (timestamp: unknown) => ({
+      timestamp: '2026-10-12T00:26:03.100Z',
+      message: 'hello',
+      attributes: [{ key: 'timestamp', value: JSON.stringify(timestamp) }],
+    });
+    const record = (timestamp: unknown) =>
+      mapRailwayLog(rowWith(timestamp) as never, {
+        target,
+        source: 'runtime',
+      });
+
+    test('promotes attrs.timestamp as an ISO instant and leaves ts and attrs alone', () => {
+      const mapped = record('2026-10-12T00:25:58.664Z');
+      expect(mapped.appTs).toBe('2026-10-12T00:25:58.664Z');
+      expect(mapped.ts).toBe('2026-10-12T00:26:03.100Z');
+      expect(mapped.attrs.timestamp).toBe('2026-10-12T00:25:58.664Z');
+    });
+
+    test('normalizes an offset to UTC', () => {
+      expect(record('2026-10-12T07:25:58.664+07:00').appTs).toBe(
+        '2026-10-12T00:25:58.664Z',
+      );
+    });
+
+    test.each([
+      ['a bare number', 1_791_764_758_664],
+      ['not a date', 'yesterday'],
+      ['a lenient Date.parse hit', '1'],
+      ['a date with no zone', '2026-10-12T00:25:58.664'],
+      ['an impossible date', '2026-13-45T00:25:58Z'],
+      ['an object', { at: '2026-10-12T00:25:58Z' }],
+    ])('ignores %s', (_label, value) => {
+      expect(record(value).appTs).toBeUndefined();
+    });
+
+    test('a record without the attribute has no appTs key', () => {
+      const mapped = mapRailwayLog(
+        {
+          timestamp: '2026-10-12T00:26:03.100Z',
+          message: 'x',
+          attributes: [],
+        } as never,
+        { target, source: 'runtime' },
+      );
+      expect('appTs' in mapped).toBe(false);
+    });
+  });
+
+  test('strips ANSI escapes from messages', () => {
+    const rows = fixture('railway-environment-logs.json') as Array<never>;
+    const record = mapRailwayLog(rows[2] as never, {
+      target,
+      source: 'runtime',
+    });
+    expect(record.message).toBe('boom: failed to bind port 8080');
+    expect(record.level).toBe('error');
+  });
+
+  test('falls back to the level attribute and the query deployment id', () => {
+    const rows = fixture('railway-environment-logs.json') as Array<never>;
+    const record = mapRailwayLog(rows[3] as never, {
+      target,
+      source: 'build',
+      deploymentId: 'dep-ctx',
+    });
+    expect(record.level).toBe('warn');
+    expect(record.deploymentId).toBe('dep-ctx');
+    expect(record.source).toBe('build');
+  });
+
+  test('maps http rows to request records with a status-derived level', () => {
+    const rows = fixture('railway-http-logs.json') as Array<never>;
+    const record = mapRailwayHttpLog(rows[1] as never, {
+      target,
+      deploymentId: 'dep-1',
+    });
+    expect(record.level).toBe('error');
+    expect(record.message).toBe('POST /api/pay 502 1200ms');
+    expect(record.request).toEqual({
+      method: 'POST',
+      path: '/api/pay',
+      status: 502,
+      durationMs: 1200,
+      requestId: 'req-2',
+    });
+  });
+
+  test('normalizes deployment statuses', () => {
+    expect(mapRailwayStatus('SUCCESS')).toBe('ready');
+    expect(mapRailwayStatus('SKIPPED')).toBe('canceled');
+    expect(mapRailwayStatus('CRASHED')).toBe('crashed');
+    expect(mapRailwayStatus('SOMETHING_NEW')).toBe('unknown');
+  });
+});
+
+describe('railway source', () => {
+  test('trims the limit+1 extra row and signals more history', async () => {
+    const calls: Array<RailwayHttpCall> = [];
+    const page = await run(
+      Effect.flatMap(sourceWith(logRows, calls), (source) =>
+        source.logs({
+          levels: [],
+          limit: 3,
+          since: new Date('2026-10-12T00:00:00Z'),
+        }),
+      ),
+    );
+    expect(page.records.map((r) => r.message)).toEqual([
+      'Connected to postgres',
+      'boom: failed to bind port 8080',
+      'slow query',
+    ]);
+    expect(page.next?.kind).toBe('railway-time');
+    const query = calls.find((c) => c.document.includes('environmentLogs'));
+    expect(query?.variables.f).toBe(`@service:svc-api`);
+    expect(query?.variables.l).toBe(3);
+  });
+
+  test('does not signal more history when the window is exhausted', async () => {
+    const page = await run(
+      Effect.flatMap(sourceWith(logRows.slice(1)), (source) =>
+        source.logs({ levels: [], limit: 3 }),
+      ),
+    );
+    expect(page.records).toHaveLength(3);
+    expect(page.next).toBeUndefined();
+  });
+
+  test('builds level and grep filters', async () => {
+    const calls: Array<RailwayHttpCall> = [];
+    await run(
+      Effect.flatMap(sourceWith([], calls), (source) =>
+        source.logs({ levels: ['error', 'warn'], grep: 'say "hi"', limit: 10 }),
+      ),
+    );
+    const query = calls.find((c) => c.document.includes('environmentLogs'));
+    expect(query?.variables.f).toBe(
+      '@service:svc-api (@level:error OR @level:warn) "say \\"hi\\""',
+    );
+  });
+
+  test('resumes after the cursor without repeating delivered rows', async () => {
+    const cursor: Cursor = {
+      kind: 'railway-time',
+      before: '2026-10-12T00:25:58.664093687Z',
+      seen: [shortHash('Connected to postgres')],
+    };
+    // the inclusive anchor re-sends the cursor row; the later rows must not leak in
+    const page = await run(
+      Effect.flatMap(sourceWith(logRows), (source) =>
+        source.logs({ levels: [], limit: 5, cursor }),
+      ),
+    );
+    expect(page.records.map((r) => r.message)).toEqual([
+      'oldest row, the limit+1 extra',
+    ]);
+  });
+
+  describe.each([
+    { name: 'deployment logs', field: 'deploymentLogs', call: 'logs' },
+    { name: 'build logs', field: 'buildLogs', call: 'buildLogs' },
+  ] as const)('$name paging through one millisecond', (kind) => {
+    const row = (timestamp: string, message: string) => ({
+      timestamp,
+      message,
+      severity: 'info',
+      attributes: [],
+      tags: { deploymentId: 'dep-1' },
+    });
+    // oldest first; seven rows share the millisecond .664, two of them the same nanosecond
+    const rows = [
+      row('2026-10-12T00:25:57.100000000Z', 'before'),
+      row('2026-10-12T00:25:58.664100000Z', 'ms-1'),
+      row('2026-10-12T00:25:58.664200000Z', 'ms-2'),
+      row('2026-10-12T00:25:58.664300000Z', 'ms-3a'),
+      row('2026-10-12T00:25:58.664300000Z', 'ms-3b'),
+      row('2026-10-12T00:25:58.664400000Z', 'ms-4'),
+      row('2026-10-12T00:25:58.664500000Z', 'ms-5'),
+      row('2026-10-12T00:25:58.664600000Z', 'ms-6'),
+      row('2026-10-12T00:25:59.900000000Z', 'after'),
+    ];
+    const floorMs = (timestamp: string) =>
+      Date.parse(`${timestamp.slice(0, 23)}Z`);
+    // like the real API: rows up to an inclusive end, newest `l + 1` of them, oldest first
+    const provider = (call: RailwayCall) => {
+      if (!call.document.includes(kind.field)) return respondWith([])(call);
+      const end = call.variables.e;
+      const inWindow = rows.filter(
+        (r) =>
+          end === undefined || floorMs(r.timestamp) <= Date.parse(`${end}`),
+      );
+      return { [kind.field]: inWindow.slice(-(Number(call.variables.l) + 1)) };
+    };
+
+    for (const limit of [2, 3, 4]) {
+      test(`returns every row once with limit ${limit} and ends without a cursor`, async () => {
+        const messages: Array<string> = [];
+        const final = await run(
+          Effect.gen(function* () {
+            const source = yield* httpSourceFor(target).pipe(
+              Effect.provide(fakeRailwayHttp(provider)),
+            );
+            let cursor: Cursor | undefined;
+            for (let guard = 0; guard < 20; guard++) {
+              const page = yield* source[kind.call]({
+                levels: [],
+                limit,
+                deploymentId: 'dep-1',
+                cursor,
+              });
+              messages.unshift(...page.records.map((r) => r.message));
+              if (page.next === undefined) return page;
+              cursor = page.next;
+            }
+            throw new Error('paging did not terminate');
+          }),
+        );
+        expect(final.next).toBeUndefined();
+        expect(messages).toEqual(rows.map((r) => r.message));
+      });
+    }
+  });
+
+  test('resolves services and environments by name, failing with the available names', async () => {
+    const missing = httpSourceFor({ ...target, serviceName: 'ghost' }).pipe(
+      Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
+      Effect.provide(fakeRailwayHttp(respondWith([]))),
+      Effect.result,
+    );
+    const result = await run(missing);
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(JSON.stringify(result.failure)).toContain(
+        'api (svc-api), web (svc-web)',
+      );
+    }
+  });
+
+  test('resolves services and environments given by id', async () => {
+    const calls: Array<RailwayHttpCall> = [];
+    await run(
+      httpSourceFor({
+        ...target,
+        serviceName: 'svc-web',
+        environment: 'env-stg',
+      }).pipe(
+        Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
+        Effect.provide(fakeRailwayHttp(respondWith([]), calls)),
+      ),
+    );
+    const query = calls.find((c) => c.document.includes('environmentLogs'));
+    expect(query?.variables.e).toBe('env-stg');
+    expect(query?.variables.f).toBe('@service:svc-web');
+  });
+
+  test('lists deployments with commit info from meta and skips missing fields', async () => {
+    const page = await run(
+      Effect.flatMap(sourceWith([]), (source) =>
+        source.deployments({ limit: 3 }),
+      ),
+    );
+    expect(page.deployments.map((d) => d.status)).toEqual([
+      'canceled',
+      'ready',
+      'crashed',
+    ]);
+    expect(page.deployments[0]?.commit).toEqual({
+      sha: '3e8c0810b11462237b12e6e4e8b6e2e21583b3d1',
+      message: 'feat: skipped\n\nbody',
+      branch: 'main',
+    });
+    expect(page.deployments[1]?.commit).toBeUndefined();
+    expect(page.deployments[1]?.url).toBe('panel.example.com');
+    expect(page.next).toEqual({ kind: 'railway-relay', after: 'R1BDOlM6YWJj' });
+  });
+
+  test('latest deployment skips SKIPPED ones for build logs', async () => {
+    const calls: Array<RailwayHttpCall> = [];
+    await run(
+      Effect.flatMap(sourceWith([], calls), (source) =>
+        source.buildLogs({ levels: [], limit: 5, deploymentId: 'latest' }),
+      ),
+    );
+    const build = calls.find((c) => c.document.includes('buildLogs'));
+    expect(build?.variables.d).toBe('dep-ready');
+  });
+
+  describe('resolving latest', () => {
+    const deploymentNode = (id: string, status: string, createdAt: string) => ({
+      node: { id, status, createdAt, staticUrl: null, meta: null },
+    });
+    const pagedDeployments = (calls: Array<RailwayHttpCall>) =>
+      httpSourceFor(target).pipe(
+        Effect.provide(
+          fakeRailwayHttp((call) => {
+            if (call.document.includes('project(id'))
+              return fixture('railway-project.json');
+            if (call.document.includes('deployments(')) {
+              const first = call.variables.after === undefined;
+              return {
+                deployments: {
+                  edges: first
+                    ? Array.from({ length: 10 }, (_, index) =>
+                        deploymentNode(
+                          `dep-skipped-${index}`,
+                          'SKIPPED',
+                          '2026-10-11T00:00:00.000Z',
+                        ),
+                      )
+                    : [
+                        deploymentNode(
+                          'dep-failed',
+                          'FAILED',
+                          '2026-10-10T00:00:00.000Z',
+                        ),
+                        deploymentNode(
+                          'dep-ok',
+                          'SUCCESS',
+                          '2026-10-09T00:00:00.000Z',
+                        ),
+                      ],
+                  pageInfo: {
+                    hasNextPage: first,
+                    endCursor: first ? 'page-2' : null,
+                  },
+                },
+              };
+            }
+            throw new Error(`unexpected query: ${call.document}`);
+          }, calls),
+        ),
+      );
+
+    test('pages past ten deployments when they are all skipped', async () => {
+      const calls: Array<RailwayHttpCall> = [];
+      const id = await run(
+        Effect.flatMap(pagedDeployments(calls), (source) =>
+          source.resolveDeploymentId('latest'),
+        ),
+      );
+      expect(id).toBe('dep-failed');
+      expect(
+        calls
+          .filter((call) => call.document.includes('deployments('))
+          .map((call) => call.variables.after),
+      ).toEqual([undefined, 'page-2']);
+    });
+
+    test('a concrete id comes back unchanged without a request', async () => {
+      const calls: Array<RailwayHttpCall> = [];
+      const id = await run(
+        Effect.flatMap(pagedDeployments(calls), (source) =>
+          source.resolveDeploymentId('dep-given'),
+        ),
+      );
+      expect(id).toBe('dep-given');
+      expect(calls).toEqual([]);
+    });
+  });
+
+  describe('transport', () => {
+    const failWith = (
+      override: { readonly status?: number; readonly body: unknown },
+      calls: Array<RailwayHttpCall> = [],
+    ) =>
+      run(
+        httpSourceFor(target).pipe(
+          Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
+          Effect.provide(fakeRailwayHttp(() => null, calls, override)),
+          Effect.flip,
+        ),
+      );
+
+    test('sends the token as a bearer header', async () => {
+      const calls: Array<RailwayHttpCall> = [];
+      await run(
+        Effect.flatMap(sourceWith([], calls), (source) =>
+          source.logs({ levels: [], limit: 1 }),
+        ),
+      );
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(call.authorization).toBe('Bearer rw-token');
+      }
+    });
+
+    test('sends numeric variables as numbers and drops undefined ones', async () => {
+      const calls: Array<RailwayHttpCall> = [];
+      await run(
+        Effect.flatMap(sourceWith([], calls), (source) =>
+          source.logs({ levels: [], limit: 1 }),
+        ),
+      );
+      const query = calls.find((c) => c.document.includes('environmentLogs'));
+      expect(typeof query?.variables.l).toBe('number');
+      expect(query?.variables).not.toHaveProperty('b');
+    });
+
+    test('turns a 200 with "Not Authorized" errors into an auth error', async () => {
+      const failure = await failWith({
+        body: { data: null, errors: [{ message: 'Not Authorized' }] },
+      });
+      expect(failure).toMatchObject({ _tag: 'ProviderAuthError' });
+    });
+
+    test('turns HTTP 401 into an auth error', async () => {
+      const failure = await failWith({ status: 401, body: {} });
+      expect(failure).toMatchObject({ _tag: 'ProviderAuthError' });
+    });
+
+    test('turns HTTP 429 into a rate-limit request error', async () => {
+      const failure = await failWith({ status: 429, body: {} });
+      expect(failure).toMatchObject({ _tag: 'ProviderRequestError' });
+      expect(String((failure as { cause: unknown }).cause)).toContain(
+        'rate limited by Railway',
+      );
+    });
+
+    test('reports other GraphQL errors as request errors with the messages', async () => {
+      const failure = await failWith({
+        body: { data: null, errors: [{ message: 'boom' }] },
+      });
+      expect(failure).toMatchObject({ _tag: 'ProviderRequestError' });
+      expect(String((failure as { cause: unknown }).cause)).toContain('boom');
+    });
+  });
+
+  test('fails loudly when a row has the wrong shape', async () => {
+    const result = await run(
+      sourceWith([
+        { timestamp: 'not a timestamp', message: 'x', attributes: [] },
+      ]).pipe(
+        Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
+        Effect.result,
+      ),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure).toMatchObject({ _tag: 'ProviderResponseInvalid' });
+    }
+  });
+});

@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": "2026-10-12T00:30:56.913124675Z",
+    "method": "GET",
+    "path": "/",
+    "httpStatus": 307,
+    "totalDuration": 51,
+    "requestId": "req-1",
+    "host": "panel.example.com"
+  },
+  {
+    "timestamp": "2026-10-12T00:30:57.321644044Z",
+    "method": "POST",
+    "path": "/api/pay",
+    "httpStatus": 502,
+    "totalDuration": 1200,
+    "requestId": "req-2",
+    "host": "panel.example.com"
+  }
+]

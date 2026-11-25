@@ -1,3 +1,6 @@
+import { Schema } from 'effect';
+import { nanoToIso } from './normalize.js';
+
 export type StatusCode = 'ok' | 'error' | 'unset';
 
 export interface AttributeValue {
@@ -57,8 +60,32 @@ export interface TraceSummary {
   readonly rootService: string;
   readonly rootOperation: string;
   readonly spanCount: number;
-  readonly errorSpanCount?: number;
+  readonly errorSpanCount: number;
   readonly services: ReadonlyArray<TraceSummaryService>;
   readonly startTimeUnixNano: string;
   readonly durationMs: number;
 }
+
+export const TraceRow = Schema.Struct({
+  traceId: Schema.String,
+  rootService: Schema.String,
+  rootOperation: Schema.String,
+  /** ISO timestamp with nanosecond precision, so it sorts and pages without loss. */
+  startTs: Schema.String,
+  durationMs: Schema.Number,
+  spanCount: Schema.Number,
+  errorSpanCount: Schema.Number,
+  services: Schema.Array(Schema.String),
+});
+export type TraceRow = typeof TraceRow.Type;
+
+export const toTraceRow = (summary: TraceSummary): TraceRow => ({
+  traceId: summary.traceId,
+  rootService: summary.rootService,
+  rootOperation: summary.rootOperation,
+  startTs: nanoToIso(summary.startTimeUnixNano),
+  durationMs: summary.durationMs,
+  spanCount: summary.spanCount,
+  errorSpanCount: summary.errorSpanCount,
+  services: summary.services.map((service) => service.name),
+});

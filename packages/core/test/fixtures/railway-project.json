@@ -1,0 +1,16 @@
+{
+  "project": {
+    "services": {
+      "edges": [
+        { "node": { "id": "svc-api", "name": "api" } },
+        { "node": { "id": "svc-web", "name": "web" } }
+      ]
+    },
+    "environments": {
+      "edges": [
+        { "node": { "id": "env-prod", "name": "production" } },
+        { "node": { "id": "env-stg", "name": "staging" } }
+      ]
+    }
+  }
+}

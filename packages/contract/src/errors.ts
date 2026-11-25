@@ -9,6 +9,10 @@ export const jaegerErrors = {
     status: 502,
     message: 'Jaeger returned an unexpected response',
   },
+  JAEGER_UNAUTHORIZED: {
+    status: 502,
+    message: 'Jaeger rejected the configured credentials',
+  },
 } as const;
 
 export const traceNotFoundErrors = {

@@ -91,7 +91,9 @@ function TracesError(props: ErrorComponentProps) {
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-12">
       <p className="text-body text-status-error">failed to load traces</p>
       <p className="font-data text-data text-text-tertiary">
-        {props.error.message}
+        {props.error instanceof Error
+          ? props.error.message
+          : String(props.error)}
       </p>
     </div>
   );
@@ -142,9 +144,7 @@ function TracesPage() {
   const filteredTraces = useMemo(() => {
     let result = allTraces;
     if (local.status === 'errors-only') {
-      result = result.filter(
-        (t) => t.errorSpanCount === undefined || t.errorSpanCount > 0,
-      );
+      result = result.filter((t) => t.errorSpanCount > 0);
     }
     if (local.operation !== undefined) {
       result = result.filter((t) => t.rootOperation === local.operation);

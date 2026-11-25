@@ -8,6 +8,7 @@ function summary(traceId: string, startTimeUnixNano: string): TraceSummary {
     rootService: 'web',
     rootOperation: 'GET /',
     spanCount: 1,
+    errorSpanCount: 0,
     services: [{ name: 'web', spanCount: 1 }],
     startTimeUnixNano,
     durationMs: 100,

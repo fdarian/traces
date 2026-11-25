@@ -1,19 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import assert from 'node:assert';
 import { Effect, Exit } from 'effect';
-import {
-  computeTraceSummary,
-  mapTrace,
-  mapTraceSummary,
-  parseJson,
-  validate,
-} from '#/jaeger.js';
+import { mapTrace, mapTraceSummary, parseJson, validate } from '#/jaeger.js';
 import {
   type OtelResourceSpan,
   OtelTraceSummariesResultSchema,
   type OtelTraceSummary,
   OtelTracesResultSchema,
 } from '#/jaeger-schema.js';
+import { computeTraceSummary } from '#/traces/summary.js';
 import traceMultiSpan from './fixtures/trace-multi-span.json';
 import traceSummaries from './fixtures/trace-summaries.json';
 
@@ -173,9 +168,7 @@ describe('mapTraceSummary', () => {
       expect(summary.rootService).toBeDefined();
       expect(summary.rootOperation).toBeDefined();
       expect(summary.spanCount).toBeGreaterThan(0);
-      if (summary.errorSpanCount !== undefined) {
-        expect(summary.errorSpanCount).toBeGreaterThanOrEqual(0);
-      }
+      expect(summary.errorSpanCount).toBeGreaterThanOrEqual(0);
       expect(summary.services.length).toBeGreaterThan(0);
       expect(summary.durationMs).toBeGreaterThanOrEqual(0);
       expect(summary.startTimeUnixNano).toBeDefined();
@@ -183,15 +176,17 @@ describe('mapTraceSummary', () => {
   });
 });
 
+const ok = (body: string) => ({ status: 200, body });
+
 describe('parseJson', () => {
   test('parses valid JSON', async () => {
-    const program = parseJson('{"hello":"world"}');
+    const program = parseJson(ok('{"hello":"world"}'));
     const result = await Effect.runPromise(program);
     expect(result).toEqual({ hello: 'world' });
   });
 
   test('fails on invalid JSON', async () => {
-    const program = parseJson('not-json');
+    const program = parseJson(ok('not-json'));
     const exit = await Effect.runPromiseExit(program);
     expect(Exit.isFailure(exit)).toBe(true);
   });
@@ -201,8 +196,9 @@ describe('validate', () => {
   test('validates traces schema from fixture', async () => {
     const data = traceMultiSpan;
     const program = Effect.gen(function* () {
-      const parsed = yield* parseJson(JSON.stringify(data));
-      return yield* validate(OtelTracesResultSchema, parsed);
+      const response = ok(JSON.stringify(data));
+      const parsed = yield* parseJson(response);
+      return yield* validate(OtelTracesResultSchema, parsed, response);
     });
     const result = await Effect.runPromise(program);
     expect(result.result?.resourceSpans?.length).toBe(2);
@@ -211,8 +207,9 @@ describe('validate', () => {
   test('validates trace summaries schema from fixture', async () => {
     const data = traceSummaries;
     const program = Effect.gen(function* () {
-      const parsed = yield* parseJson(JSON.stringify(data));
-      return yield* validate(OtelTraceSummariesResultSchema, parsed);
+      const response = ok(JSON.stringify(data));
+      const parsed = yield* parseJson(response);
+      return yield* validate(OtelTraceSummariesResultSchema, parsed, response);
     });
     const result = await Effect.runPromise(program);
     expect(result.summaries?.length).toBeGreaterThan(0);

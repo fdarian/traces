@@ -65,8 +65,7 @@ export function toCountedTrace(summary: TraceSummary): CountedTrace {
     startMs: Number(BigInt(summary.startTimeUnixNano) / NS_PER_MS),
     // Clock skew between spans can yield a negative duration; NaN is left for the store to reject
     durationMs: Math.max(0, summary.durationMs),
-    errorSpanCount:
-      summary.errorSpanCount === undefined ? 0 : summary.errorSpanCount,
+    errorSpanCount: summary.errorSpanCount,
     rootService: summary.rootService,
     rootOperation: summary.rootOperation,
     spanCount: summary.spanCount,

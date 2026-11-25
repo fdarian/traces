@@ -7,6 +7,7 @@ export { TraceBackend } from './backend.js';
 export {
   JaegerBadResponse,
   JaegerUnreachable,
+  TraceBackendUnauthorized,
   TraceNotFound,
 } from './errors.js';
 export {
@@ -35,7 +36,80 @@ export { OCCURRENCES_PAGE_SIZE } from './issues/model.js';
 export { normalizeExceptionMessage } from './issues/normalize-message.js';
 export { isRegressedIssue } from './issues/regression.js';
 export { parseTopInAppStackFrame } from './issues/stack-frame.js';
-export { JaegerBackendLayer } from './jaeger.js';
+export type { JaegerBackendOptions } from './jaeger.js';
+export { JaegerBackendLayer, makeJaegerBackend } from './jaeger.js';
+export type { ProviderError } from './logs/errors.js';
+export {
+  InvalidCursor,
+  ProviderAuthError,
+  ProviderNotFound,
+  ProviderRequestError,
+  ProviderResponseInvalid,
+  ProviderToolMissing,
+} from './logs/errors.js';
+export type { ErrorGroup } from './logs/errors-group.js';
+export {
+  byFrequency,
+  errorFingerprint,
+  firstLine,
+  groupErrors,
+} from './logs/errors-group.js';
+export {
+  latestReadyDeployment,
+  NoReadyDeployment,
+} from './logs/latest-deploy.js';
+export type {
+  Cursor,
+  DeploymentCommit,
+  DeploymentPage,
+  DeploymentQuery,
+  DeploymentStatus,
+  LogLevel,
+  LogPage,
+  LogQuery,
+  LogRequest,
+  LogSourceKind,
+  RailwayTarget,
+  ServiceTarget,
+  VercelTarget,
+} from './logs/model.js';
+export {
+  Cursor as CursorSchema,
+  Deployment,
+  decodeCursor,
+  encodeCursor,
+  LogRecord,
+} from './logs/model.js';
+export type { Coalesced } from './logs/multiline.js';
+export { coalesceMultiline } from './logs/multiline.js';
+export { normalizeLevel, shortHash, stripAnsi } from './logs/normalize.js';
+export type { BackwardPage, PageResume } from './logs/paging.js';
+export { pageBackwards } from './logs/paging.js';
+export { Provider } from './logs/provider.js';
+export {
+  checkRailwayAccess,
+  makeRailwayCliClient,
+  makeRailwayHttpClient,
+  makeRailwaySource,
+  mapRailwayHttpLog,
+  mapRailwayLog,
+  mapRailwayStatus,
+  RAILWAY_RETENTION_NOTE,
+  type RailwayClient,
+  railwayLinkedProject,
+  railwayProjectLayout,
+} from './logs/railway/index.js';
+export type { LogSource } from './logs/source.js';
+export {
+  fetchVercelProjectName,
+  makeVercelSource,
+  mapBuildEvent,
+  mapHttpRow,
+  mapRuntimeRow,
+  mapVercelDeployment,
+  mapVercelStatus,
+  VERCEL_RETENTION_NOTE,
+} from './logs/vercel/index.js';
 export type {
   AttributeValue,
   ExceptionInfo,
@@ -48,6 +122,7 @@ export type {
   TraceSummary,
   TraceSummaryService,
 } from './model.js';
+export { TraceRow, toTraceRow } from './model.js';
 export {
   extractExceptionInfo,
   normalizeAttribute,
@@ -65,3 +140,25 @@ export type {
   SerializableJson,
 } from './serialize.js';
 export { serializeAttribute, serializeValue } from './serialize.js';
+export type { TraceErrorScanResult } from './traces/error-scan.js';
+export {
+  groupTraceErrors,
+  memoizeGetTrace,
+  scanTraceErrors,
+} from './traces/error-scan.js';
+export type {
+  ErrorScanMode,
+  ErrorTraceScan,
+  ScanPage,
+} from './traces/paging.js';
+export {
+  attributePage,
+  fromTraceCursor,
+  pageTraces,
+  scanErrorTraces,
+  scanTraceWindow,
+  toTraceCursor,
+  traceFetchSize,
+} from './traces/paging.js';
+export type { SpanKind } from './traces/span-rows.js';
+export { normalizeSpanKind, SpanRow, toSpanRows } from './traces/span-rows.js';

@@ -12,6 +12,25 @@ export function normalizeTimestamp(value: string | number): string {
   return value.toString();
 }
 
+/** Sub-microsecond digits round up; `Date.parse` alone would floor to the millisecond. */
+export function isoToEpochMicrosCeil(iso: string): number {
+  const fraction = /\.(\d+)/.exec(iso);
+  const wholeMicros = Date.parse(iso) * 1000;
+  if (fraction === null || fraction[1] === undefined) return wholeMicros;
+  const digits = fraction[1].padEnd(9, '0');
+  const micros = Number(digits.slice(3, 6));
+  const roundUp = Number(digits.slice(6)) > 0 ? 1 : 0;
+  return wholeMicros + micros + roundUp;
+}
+
+/** Fixed-width `YYYY-MM-DDTHH:mm:ss.nnnnnnnnnZ`, so the strings sort chronologically. */
+export function nanoToIso(unixNano: string): string {
+  const nanos = BigInt(unixNano);
+  const millis = new Date(Number(nanos / 1_000_000n)).toISOString();
+  const subMillis = String(nanos % 1_000_000n).padStart(6, '0');
+  return `${millis.slice(0, -1)}${subMillis}Z`;
+}
+
 export function normalizeTimestampToMs(value: string | number): number {
   const nanoStr = typeof value === 'string' ? value : value.toString();
   const nanos = BigInt(nanoStr);
