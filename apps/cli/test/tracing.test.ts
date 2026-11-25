@@ -28,6 +28,7 @@ const fakeSecrets = (entries: Record<string, string>) => {
   const reads: Array<string> = [];
   const stored = new Map(Object.entries(entries));
   const layer = Layer.succeed(Secrets, {
+    filePath: '/fake/traces/secrets.json',
     get: (name: string) => {
       reads.push(name);
       const value = stored.get(name);
@@ -35,9 +36,14 @@ const fakeSecrets = (entries: Record<string, string>) => {
         ? Effect.fail(new SecretMissing({ name }))
         : Effect.succeed(value);
     },
+    source: (name: string) =>
+      stored.has(name)
+        ? Effect.succeed({ store: 'keychain', shadowed: false } as const)
+        : Effect.fail(new SecretMissing({ name })),
     set: (name: string, value: string) =>
       Effect.sync(() => void stored.set(name, value)),
     delete: (name: string) => Effect.sync(() => stored.delete(name)),
+    fileStatus: Effect.succeed(Option.none()),
   });
   return { layer, reads, stored };
 };

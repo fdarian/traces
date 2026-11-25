@@ -26,7 +26,7 @@ import {
   renderError,
   reportError,
 } from '#/output.ts';
-import { Secrets } from '#/secrets.ts';
+import { Keychain, Secrets } from '#/secrets.ts';
 import { skills as embeddedSkills } from '#/skills.macro.ts' with {
   type: 'macro',
 };
@@ -75,7 +75,10 @@ program.pipe(
     Layer.mergeAll(
       BunServices.layer,
       FetchHttpClient.layer,
-      Secrets.layer,
+      Secrets.layer.pipe(
+        Layer.provide(Keychain.layer),
+        Layer.provide(BunServices.layer),
+      ),
       SkillSource.inline(embeddedSkills()),
       CliConfig.layer({ builtIns: [GlobalFlag.Help, GlobalFlag.Version] }),
       CliOutput.layerPresenter(parseErrorPresenter),

@@ -147,13 +147,20 @@ export type ProjectMatcher = typeof Matcher.Type;
 const ConfigJson = Schema.fromJsonString(TracesConfigSchema);
 const RepoConfigJson = Schema.fromJsonString(RepoConfigSchema);
 
-export const defaultConfigPath = (home: string, xdgConfigHome?: string) =>
-  join(xdgConfigHome ?? join(home, '.config'), 'traces', 'config.json');
+export const defaultConfigDir = (home: string, xdgConfigHome?: string) =>
+  join(xdgConfigHome ?? join(home, '.config'), 'traces');
 
-export const resolveDefaultConfigPath = Effect.gen(function* () {
+export const defaultConfigPath = (home: string, xdgConfigHome?: string) =>
+  join(defaultConfigDir(home, xdgConfigHome), 'config.json');
+
+export const resolveDefaultConfigDir = Effect.gen(function* () {
   const xdg = yield* Config.String('XDG_CONFIG_HOME').pipe(Config.option);
-  return defaultConfigPath(homedir(), Option.getOrUndefined(xdg));
+  return defaultConfigDir(homedir(), Option.getOrUndefined(xdg));
 });
+
+export const resolveDefaultConfigPath = resolveDefaultConfigDir.pipe(
+  Effect.map((dir) => join(dir, 'config.json')),
+);
 
 const EXAMPLE_HINT =
   '`traces skills get core --file references/config.md` shows a minimal example for each provider';

@@ -34,7 +34,12 @@ import {
   UsageError,
 } from '#/errors.ts';
 import { SHORTEST_RETENTION_MS } from '#/limits.ts';
-import { SecretMissing, SecretStoreError } from '#/secrets.ts';
+import {
+  keychainCantPrompt,
+  SecretFileError,
+  SecretMissing,
+  SecretStoreError,
+} from '#/secrets.ts';
 
 export type OutputMode = 'text' | 'json';
 
@@ -366,7 +371,7 @@ export const renderError = (error: unknown): RenderedError => {
   }
   if (error instanceof SecretMissing) {
     return {
-      message: `secret "${error.name}" is not in the keychain`,
+      message: `secret "${error.name}" is not in the secrets file or the keychain`,
       hint: `traces secret set ${error.name}`,
       code: EXIT_CODES.auth,
     };
@@ -374,7 +379,16 @@ export const renderError = (error: unknown): RenderedError => {
   if (error instanceof SecretStoreError) {
     return {
       message: `keychain ${error.operation} of "${error.name}" failed: ${causeMessage(error.cause)}`,
-      hint: 'unlock the keychain and retry',
+      hint: keychainCantPrompt(error)
+        ? `the keychain can't prompt in this session (SSH?); store it in a file instead: \`traces secret set ${error.name} --insecure-storage\``
+        : 'unlock the keychain and retry',
+      code: EXIT_CODES.runtime,
+    };
+  }
+  if (error instanceof SecretFileError) {
+    return {
+      message: `secrets file ${error.operation} failed (${error.path}): ${causeMessage(error.cause)}`,
+      hint: `check that ${error.path} is readable and valid JSON`,
       code: EXIT_CODES.runtime,
     };
   }

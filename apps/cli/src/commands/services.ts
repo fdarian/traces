@@ -52,6 +52,11 @@ const keychainStatus = (
           status: 'error',
           detail: causeMessage(error.cause),
         }),
+      SecretFileError: (error) =>
+        Effect.succeed<SecretStatus>({
+          status: 'error',
+          detail: causeMessage(error.cause),
+        }),
     }),
   );
 

@@ -36,6 +36,7 @@ import {
 } from '#/project-match.ts';
 import { findRepoConfig } from '#/repo-config.ts';
 import {
+  type SecretFileError,
   type SecretMissing,
   type SecretStoreError,
   Secrets,
@@ -438,7 +439,11 @@ export const resolveSecretRef = (
   ref: SecretRef,
 ): Effect.Effect<
   string,
-  SecretMissing | SecretStoreError | EnvVarMissing | Config.ConfigError,
+  | SecretMissing
+  | SecretStoreError
+  | SecretFileError
+  | EnvVarMissing
+  | Config.ConfigError,
   Secrets
 > => {
   if ('keychain' in ref) {
