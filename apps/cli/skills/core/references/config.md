@@ -38,6 +38,7 @@ Lookup order:
   - A token: `{"keychain": "<name>"}` (store it with `traces secret set <name>`) or `{"env": "<VAR>"}`, no literal. It is a workspace or account token from railway.com/account/tokens, sent to Railway's GraphQL API over HTTP. Recommended for agents: it grants only Railway API access.
   - `"cli"`: use the logged-in `railway` CLI (`railway login`; the binary must be on PATH). Convenient locally, but the login lets anything that can run `railway` use every railway command, not just this CLI's reads.
   - Without `railway.auth` a Railway service exits 3 with a hint listing both.
+- `{"keychain": "<name>"}` refs read `~/.config/traces/secrets.json` (`$XDG_CONFIG_HOME/traces/secrets.json`, mode 0600) first, then the OS keychain. The file is written only by `traces secret set <name> --insecure-storage`, plain text: the way to run over SSH or headless, where the keychain cannot prompt. The same config works on both.
 - Vercel auth: `VERCEL_TOKEN` or the token the `vercel login` CLI stored.
 - `otelService` (optional, any service entry) is the Jaeger service name; it defaults to the service key. An entry with only `{"otelService": "x-data"}` is trace-only: logs, deploys and the log side of errors skip it (naming one there exits 2); the trace side of errors takes it.
 
