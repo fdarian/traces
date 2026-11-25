@@ -15,6 +15,7 @@ import {
   type ServiceEntry,
   type ServicesView,
   servicesDocument,
+  servicesWarnings,
   type TracingCheck,
   type TracingStatus,
 } from '#/commands/services-view.ts';
@@ -37,25 +38,33 @@ import {
   resolveProject,
   resolveTraceBackend,
 } from '#/resolve.ts';
-import { Secrets } from '#/secrets.ts';
+import { keychainCantPrompt, Secrets } from '#/secrets.ts';
 import { stdoutStyle } from '#/style.ts';
 
-const keychainStatus = (
+export const keychainStatus = (
   name: string,
 ): Effect.Effect<SecretStatus, never, Secrets> =>
-  Secrets.use((secrets) => secrets.get(name)).pipe(
-    Effect.map((): SecretStatus => ({ status: 'present' })),
+  Secrets.use((secrets) => secrets.source(name)).pipe(
+    Effect.map(
+      (found): SecretStatus => ({
+        status: 'present',
+        store: found.store,
+        shadowed: found.shadowed,
+      }),
+    ),
     Effect.catchTags({
       SecretMissing: () => Effect.succeed<SecretStatus>({ status: 'missing' }),
       SecretStoreError: (error) =>
         Effect.succeed<SecretStatus>({
           status: 'error',
           detail: causeMessage(error.cause),
+          cantPrompt: keychainCantPrompt(error),
         }),
       SecretFileError: (error) =>
         Effect.succeed<SecretStatus>({
           status: 'error',
           detail: causeMessage(error.cause),
+          cantPrompt: false,
         }),
     }),
   );
@@ -64,10 +73,11 @@ const envStatus = (name: string) =>
   Config.String(name).pipe(
     Config.option,
     Effect.map(
-      (found): SecretStatus => ({
-        status:
-          Option.isSome(found) && found.value !== '' ? 'present' : 'missing',
-      }),
+      (found) =>
+        ({
+          status:
+            Option.isSome(found) && found.value !== '' ? 'present' : 'missing',
+        }) as const,
     ),
   );
 
@@ -193,6 +203,8 @@ export const servicesCommand = Command.make(
         }
         authChecks.push({ ref, auth });
       }
+      const providers = groupProviders(authChecks);
+      const secrets = yield* Secrets;
       const view: ServicesView = {
         project: resolved.projectName,
         configPath: resolved.configPath,
@@ -200,8 +212,14 @@ export const servicesCommand = Command.make(
         matchedBy: resolved.matchedBy,
         home: homedir(),
         services,
-        providers: groupProviders(authChecks),
+        providers,
         ...(tracing === undefined ? {} : { tracing }),
+        warnings: servicesWarnings({
+          secretsFile: secrets.filePath,
+          fileStatus: yield* secrets.fileStatus,
+          headers: tracing?.headers ?? [],
+          providers,
+        }),
       };
       yield* Console.log(
         mode === 'json'

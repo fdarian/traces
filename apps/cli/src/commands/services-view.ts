@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { AuthStatus } from '#/auth-status.ts';
 import {
   hasLogProvider,
@@ -7,17 +8,36 @@ import {
   type ServiceConfig,
 } from '#/config.ts';
 import type { ConfigSource, ResolvedProject } from '#/resolve.ts';
+import type { SecretStore } from '#/secrets.ts';
 import type { Style } from '#/style.ts';
 
 export type SecretStatus =
-  | { readonly status: 'present' | 'missing' }
-  | { readonly status: 'error'; readonly detail: string };
+  | {
+      readonly status: 'present';
+      /** Which store answered; the file is read before the keychain. */
+      readonly store: SecretStore;
+      /** The file holds it and the keychain does too, so the keychain copy is never read. */
+      readonly shadowed: boolean;
+    }
+  | { readonly status: 'missing' }
+  | {
+      readonly status: 'error';
+      readonly detail: string;
+      /** The keychain refused without a user to ask (typical over SSH); `--insecure-storage` is the way out. */
+      readonly cantPrompt: boolean;
+    };
 
 export type HeaderStatus =
   | { readonly name: string; readonly source: 'literal' }
+  | {
+      readonly name: string;
+      readonly source: 'env';
+      readonly ref: string;
+      readonly status: 'present' | 'missing';
+    }
   | ({
       readonly name: string;
-      readonly source: 'env' | 'keychain';
+      readonly source: 'keychain';
       readonly ref: string;
     } & SecretStatus);
 
@@ -61,6 +81,73 @@ export type ServicesView = {
   readonly services: ReadonlyArray<ServiceEntry>;
   readonly providers: ReadonlyArray<ProviderEntry>;
   readonly tracing?: TracingStatus;
+  readonly warnings: ReadonlyArray<ServicesWarning>;
+};
+
+export type ServicesWarning =
+  | {
+      readonly kind: 'file-mode';
+      readonly path: string;
+      /** Octal permission bits, e.g. `0644`. */
+      readonly mode: string;
+      readonly message: string;
+    }
+  | {
+      readonly kind: 'shadowed';
+      readonly name: string;
+      readonly path: string;
+      readonly message: string;
+    };
+
+const OTHERS_BITS = 0o077;
+
+/** The file warning first, then one per secret held by both the file and the keychain, in first-seen order. */
+export const servicesWarnings = (input: {
+  readonly secretsFile: string;
+  readonly fileStatus: Option.Option<{
+    readonly path: string;
+    readonly mode: number;
+  }>;
+  readonly headers: ReadonlyArray<HeaderStatus>;
+  readonly providers: ReadonlyArray<ProviderEntry>;
+}): ReadonlyArray<ServicesWarning> => {
+  const warnings: Array<ServicesWarning> = [];
+  if (
+    Option.isSome(input.fileStatus) &&
+    (input.fileStatus.value.mode & OTHERS_BITS) !== 0
+  ) {
+    const path = input.fileStatus.value.path;
+    const mode = input.fileStatus.value.mode.toString(8).padStart(4, '0');
+    warnings.push({
+      kind: 'file-mode',
+      path,
+      mode,
+      message: `${path} is readable by others (mode ${mode}); run chmod 600 ${path}`,
+    });
+  }
+  const shadowed = new Set<string>([
+    ...input.headers.flatMap((header) =>
+      header.source === 'keychain' &&
+      header.status === 'present' &&
+      header.shadowed
+        ? [header.ref]
+        : [],
+    ),
+    ...input.providers.flatMap((entry) =>
+      entry.auth.shadowedSecret === undefined
+        ? []
+        : [entry.auth.shadowedSecret],
+    ),
+  ]);
+  for (const name of shadowed) {
+    warnings.push({
+      kind: 'shadowed',
+      name,
+      path: input.secretsFile,
+      message: `secret "${name}" is in both ${input.secretsFile} and the keychain; the file wins`,
+    });
+  }
+  return warnings;
 };
 
 const providerScope = (ref: LogServiceConfig): string =>
@@ -99,6 +186,7 @@ export const servicesDocument = (view: ServicesView) => ({
   services: view.services,
   providers: view.providers,
   ...(view.tracing === undefined ? {} : { tracing: view.tracing }),
+  warnings: view.warnings,
 });
 
 type Cell = { readonly plain: string; readonly render: string };
@@ -306,20 +394,31 @@ const describeHeader = (header: HeaderStatus, style: Style) => {
   if (header.source === 'literal') {
     return { part: cell(`${header.name} literal`), hint: undefined };
   }
-  const where = `${header.source} ${header.ref}`;
   if (header.status === 'present') {
-    return { part: cell(`${header.name} from ${where}`), hint: undefined };
+    const store = header.source === 'keychain' ? header.store : 'env';
+    return {
+      part: cell(`${header.name} from ${store} ${header.ref}`),
+      hint: undefined,
+    };
   }
+  const where = `${header.source} ${header.ref}`;
   const state =
     header.status === 'error' ? `error (${header.detail})` : 'missing';
   const text = `✗ ${header.name}: ${where} ${state}`;
   return {
     part: cell(text, style.red(text)),
-    hint:
-      header.source === 'keychain' && header.status === 'missing'
-        ? `hint: traces secret set ${header.ref}`
-        : undefined,
+    hint: keychainHint(header),
   };
+};
+
+const keychainHint = (header: HeaderStatus): string | undefined => {
+  if (header.source !== 'keychain') return undefined;
+  if (header.status === 'missing')
+    return `hint: traces secret set ${header.ref}`;
+  if (header.status === 'error' && header.cantPrompt) {
+    return `hint: traces secret set ${header.ref} --insecure-storage`;
+  }
+  return undefined;
 };
 
 const checkPart = (check: TracingCheck, style: Style): Cell => {
@@ -401,6 +500,13 @@ const providersSection = (view: ServicesView, style: Style) => {
   ].join('\n');
 };
 
+const warningsSection = (view: ServicesView, style: Style) =>
+  view.warnings.length === 0
+    ? undefined
+    : view.warnings
+        .map((warning) => `${style.yellow('warning:')} ${warning.message}`)
+        .join('\n');
+
 export const renderServices = (
   view: ServicesView,
   style: Style,
@@ -414,6 +520,7 @@ export const renderServices = (
     header,
     servicesSection(view, style, terminal),
     providersSection(view, style),
+    warningsSection(view, style),
   ]
     .filter((section) => section !== undefined)
     .join('\n\n');

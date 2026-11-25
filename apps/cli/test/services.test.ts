@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Effect, Layer, Option } from 'effect';
+import { keychainStatus } from '#/commands/services.ts';
 import {
   groupProviders,
   type ProviderEntry,
@@ -11,10 +13,17 @@ import {
   type ServiceEntry,
   type ServicesView,
   servicesDocument,
+  servicesWarnings,
   type TracingCheck,
   type TracingStatus,
 } from '#/commands/services-view.ts';
 import { hasLogProvider } from '#/config.ts';
+import {
+  type SecretFileError,
+  SecretMissing,
+  SecretStoreError,
+  Secrets,
+} from '#/secrets.ts';
 import { makeStyle, type Style } from '#/style.ts';
 
 type Answer = (response: import('node:http').ServerResponse) => void;
@@ -127,7 +136,9 @@ describe('traces services tracing check', () => {
       'services',
       'providers',
       'tracing',
+      'warnings',
     ]);
+    expect(doc.warnings).toEqual([]);
     expect(doc).toMatchObject({
       configSource: 'flag',
       project: 'app',
@@ -229,6 +240,132 @@ describe('traces services tracing check', () => {
   });
 });
 
+describe('traces services secrets file', () => {
+  const withSecretsFile = (mode: number) => {
+    const xdg = mkdtempSync(join(tmpdir(), 'traces-services-xdg-'));
+    mkdirSync(join(xdg, 'traces'), { recursive: true });
+    const file = join(xdg, 'traces', 'secrets.json');
+    writeFileSync(file, JSON.stringify({ 'app.jaeger': 'file-token' }));
+    chmodSync(file, mode);
+    return { xdg, file };
+  };
+  const keyed = () =>
+    configFor(tracing({ 'X-API-Key': { keychain: 'app.jaeger' } }));
+
+  test('a header held by the file reads "from file" and reports the store', async () => {
+    const found = withSecretsFile(0o600);
+    const text = await run(keyed(), [], { XDG_CONFIG_HOME: found.xdg });
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(
+      '✓ reachable, X-API-Key from file app.jaeger',
+    );
+    expect(text.stdout).not.toContain('warning:');
+    const json = await run(keyed(), ['--json'], {
+      XDG_CONFIG_HOME: found.xdg,
+    });
+    const doc = document(json.stdout);
+    expect(
+      (doc.tracing as { headers: ReadonlyArray<unknown> }).headers,
+    ).toEqual([
+      {
+        name: 'X-API-Key',
+        source: 'keychain',
+        ref: 'app.jaeger',
+        status: 'present',
+        store: 'file',
+        shadowed: false,
+      },
+    ]);
+    expect(doc.warnings).toEqual([]);
+  });
+
+  test('a file broader than 0600 warns with the mode and the chmod fix', async () => {
+    const found = withSecretsFile(0o644);
+    const text = await run(keyed(), [], { XDG_CONFIG_HOME: found.xdg });
+    expect(text.stdout.trimEnd().split('\n').at(-1)).toBe(
+      `warning: ${found.file} is readable by others (mode 0644); run chmod 600 ${found.file}`,
+    );
+    const json = await run(keyed(), ['--json'], {
+      XDG_CONFIG_HOME: found.xdg,
+    });
+    expect(document(json.stdout).warnings).toEqual([
+      {
+        kind: 'file-mode',
+        path: found.file,
+        mode: '0644',
+        message: `${found.file} is readable by others (mode 0644); run chmod 600 ${found.file}`,
+      },
+    ]);
+  });
+});
+
+type SourceResult = Effect.Effect<
+  | { readonly store: 'file'; readonly shadowed: boolean }
+  | { readonly store: 'keychain'; readonly shadowed: false },
+  SecretMissing | SecretStoreError | SecretFileError
+>;
+
+const fakeSecretsFor = (source: (name: string) => SourceResult) =>
+  Layer.succeed(Secrets, {
+    filePath: '/fake/traces/secrets.json',
+    get: () => Effect.die('unused'),
+    source,
+    set: () => Effect.die('unused'),
+    delete: () => Effect.die('unused'),
+    fileStatus: Effect.succeed(Option.none()),
+  });
+
+describe('keychainStatus', () => {
+  const statusFrom = (source: (name: string) => SourceResult) =>
+    Effect.runPromise(
+      keychainStatus('app.jaeger').pipe(Effect.provide(fakeSecretsFor(source))),
+    );
+
+  test('carries the store and shadowed flag of the secret', async () => {
+    expect(
+      await statusFrom(() =>
+        Effect.succeed({ store: 'file', shadowed: true } as const),
+      ),
+    ).toEqual({ status: 'present', store: 'file', shadowed: true });
+  });
+
+  test('is missing when neither store holds it', async () => {
+    expect(
+      await statusFrom((name) => Effect.fail(new SecretMissing({ name }))),
+    ).toEqual({ status: 'missing' });
+  });
+
+  test('flags a keychain that cannot prompt', async () => {
+    const status = await statusFrom((name) =>
+      Effect.fail(
+        new SecretStoreError({
+          operation: 'get',
+          name,
+          cause: new Error('User interaction is not allowed. (code: -25308)'),
+        }),
+      ),
+    );
+    expect(status).toEqual({
+      status: 'error',
+      detail: 'User interaction is not allowed. (code: -25308)',
+      cantPrompt: true,
+    });
+  });
+
+  test('does not flag another keychain failure', async () => {
+    const status = await statusFrom((name) =>
+      Effect.fail(
+        new SecretStoreError({
+          operation: 'get',
+          name,
+          cause: new Error('keychain exploded'),
+        }),
+      ),
+    );
+    expect(status).toMatchObject({ status: 'error', cantPrompt: false });
+  });
+});
+
 const PROJECT_ID = 'df361d61-2d2a-4838-9295-cd227871305b';
 const plain = makeStyle(false);
 
@@ -280,6 +417,8 @@ const apiKey = {
   source: 'keychain',
   ref: 'mockingbird.jaeger',
   status: 'present',
+  store: 'keychain',
+  shadowed: false,
 } as const;
 
 const viewOf = (
@@ -295,6 +434,7 @@ const viewOf = (
   ...(tracing === undefined ? {} : { tracing }),
   services,
   providers,
+  warnings: [],
 });
 
 const vercelRecord = (project: string, team?: string): ServiceEntry => ({
@@ -339,6 +479,74 @@ describe('groupProviders', () => {
   });
 });
 
+describe('servicesWarnings', () => {
+  const file = (mode: number) =>
+    Option.some({ path: '/home/me/.config/traces/secrets.json', mode });
+  const input = {
+    secretsFile: '/home/me/.config/traces/secrets.json',
+    fileStatus: Option.none<{ path: string; mode: number }>(),
+    headers: [] as ReadonlyArray<TracingStatus['headers'][number]>,
+    providers: [] as ReadonlyArray<ProviderEntry>,
+  };
+
+  test('0600 and a missing file are quiet', () => {
+    expect(servicesWarnings({ ...input, fileStatus: file(0o600) })).toEqual([]);
+    expect(servicesWarnings({ ...input, fileStatus: file(0o400) })).toEqual([]);
+    expect(servicesWarnings(input)).toEqual([]);
+  });
+
+  test.each([
+    [0o644, '0644'],
+    [0o660, '0660'],
+    [0o604, '0604'],
+  ])('mode %o warns that the file is readable by others', (mode, shown) => {
+    expect(servicesWarnings({ ...input, fileStatus: file(mode) })).toEqual([
+      {
+        kind: 'file-mode',
+        path: '/home/me/.config/traces/secrets.json',
+        mode: shown,
+        message: `/home/me/.config/traces/secrets.json is readable by others (mode ${shown}); run chmod 600 /home/me/.config/traces/secrets.json`,
+      },
+    ]);
+  });
+
+  test('warns once per secret that is in both the file and the keychain', () => {
+    const warnings = servicesWarnings({
+      ...input,
+      headers: [
+        { ...apiKey, store: 'file', shadowed: true },
+        { ...apiKey, name: 'X-Other', store: 'file', shadowed: false },
+      ],
+      providers: [
+        railwayProvider({
+          ...keychainAuth,
+          shadowedSecret: 'mockingbird.railway',
+        }),
+        railwayProvider({
+          ...keychainAuth,
+          shadowedSecret: 'mockingbird.railway',
+        }),
+      ],
+    });
+    expect(warnings).toEqual([
+      {
+        kind: 'shadowed',
+        name: 'mockingbird.jaeger',
+        path: '/home/me/.config/traces/secrets.json',
+        message:
+          'secret "mockingbird.jaeger" is in both /home/me/.config/traces/secrets.json and the keychain; the file wins',
+      },
+      {
+        kind: 'shadowed',
+        name: 'mockingbird.railway',
+        path: '/home/me/.config/traces/secrets.json',
+        message:
+          'secret "mockingbird.railway" is in both /home/me/.config/traces/secrets.json and the keychain; the file wins',
+      },
+    ]);
+  });
+});
+
 describe('servicesDocument', () => {
   test('is the config identity, services, providers and tracing in that order', () => {
     const tracingStatus = jaeger({ status: 'reachable', services: ['engine'] });
@@ -353,7 +561,9 @@ describe('servicesDocument', () => {
       'services',
       'providers',
       'tracing',
+      'warnings',
     ]);
+    expect(doc.warnings).toEqual([]);
     expect(doc.providers).toEqual([railwayProvider(keychainAuth)]);
     expect(doc.tracing).toBe(tracingStatus);
     expect(doc).not.toHaveProperty('home');
@@ -553,6 +763,72 @@ describe('renderServices', () => {
     );
     expect(output).toContain('hint: traces secret set mockingbird.jaeger');
     expect(output).not.toContain('is not in the keychain');
+  });
+
+  test('a header held by the file reads "from file"', () => {
+    const output = renderServices(
+      viewOf(
+        [railwayRecord('engine')],
+        jaeger({ status: 'reachable', services: ['engine'] }, [
+          { ...apiKey, store: 'file' },
+        ]),
+      ),
+      plain,
+    );
+    expect(output).toContain(
+      '✓ reachable, X-API-Key from file mockingbird.jaeger',
+    );
+    expect(output).not.toContain('X-API-Key from keychain');
+  });
+
+  test('a keychain that cannot prompt hints at --insecure-storage', () => {
+    const view = (cantPrompt: boolean) =>
+      viewOf(
+        [railwayRecord('engine')],
+        jaeger({ status: 'error', detail: 'keychain locked' }, [
+          {
+            ...apiKey,
+            status: 'error',
+            detail: 'User interaction is not allowed. (code: -25308)',
+            cantPrompt,
+          },
+        ]),
+      );
+    const output = renderServices(view(true), plain);
+    expect(output).toContain(
+      '✗ X-API-Key: keychain mockingbird.jaeger error (User interaction is not allowed. (code: -25308))',
+    );
+    expect(output).toContain(
+      'hint: traces secret set mockingbird.jaeger --insecure-storage',
+    );
+    expect(renderServices(view(false), plain)).not.toContain('hint:');
+  });
+
+  test('warnings follow the providers as `warning:` lines', () => {
+    const output = renderServices(
+      {
+        ...viewOf([railwayRecord('engine')]),
+        warnings: [
+          {
+            kind: 'file-mode',
+            path: '/home/me/.config/traces/secrets.json',
+            mode: '0644',
+            message: 'first',
+          },
+          {
+            kind: 'shadowed',
+            name: 'a',
+            path: '/p',
+            message: 'second',
+          },
+        ],
+      },
+      plain,
+    );
+    expect(output.endsWith('\n\nwarning: first\nwarning: second')).toBe(true);
+    expect(
+      renderServices(viewOf([railwayRecord('engine')]), plain),
+    ).not.toContain('warning:');
   });
 
   test('names each header source', () => {
