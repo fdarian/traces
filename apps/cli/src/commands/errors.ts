@@ -518,16 +518,25 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
         `note: ${outcome.name} (traces): the baseline trace scan was capped; \`new\` may over-report for this service.`,
       );
     }
-    for (const failure of failures) {
-      const rendered = renderError(failure.error);
+    const renderedFailures = failures.map((failure) => ({
+      label: failure.label,
+      rendered: renderError(failure.error),
+    }));
+    for (const failure of renderedFailures) {
       yield* Console.error(
-        rendered.hint === undefined
-          ? `error: ${failure.label}: ${rendered.message}`
-          : `error: ${failure.label}: ${rendered.message}\nhint: ${rendered.hint}`,
+        failure.rendered.hint === undefined
+          ? `error: ${failure.label}: ${failure.rendered.message}`
+          : `error: ${failure.label}: ${failure.rendered.message}\nhint: ${failure.rendered.hint}`,
       );
     }
-    if (failures.length > 0) {
-      return yield* new ExitWith({ code: EXIT_CODES.runtime });
+    if (renderedFailures.length > 0) {
+      // A login fixes an auth failure however many other services failed, so it wins: an agent must not retry.
+      const authFailed = renderedFailures.some(
+        (failure) => failure.rendered.code === EXIT_CODES.auth,
+      );
+      return yield* new ExitWith({
+        code: authFailed ? EXIT_CODES.auth : EXIT_CODES.runtime,
+      });
     }
   }),
 ).pipe(

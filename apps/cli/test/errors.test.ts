@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test,
+} from 'bun:test';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -104,6 +111,7 @@ const traceOf = (index: number) => ({
 let server: Server;
 let dir: string;
 let failingService: string | undefined;
+let unauthorizedService: string | undefined;
 let seen: Array<{ service: string | undefined; apiKey: string | null }> = [];
 
 const SERVICES = {
@@ -154,6 +162,10 @@ beforeAll(async () => {
     if (legacy || url.pathname === '/proxy/api/v3/trace-summaries') {
       if (service === failingService) {
         response.writeHead(500).end('boom');
+        return;
+      }
+      if (service === unauthorizedService) {
+        response.writeHead(401).end('denied');
         return;
       }
       const max = legacy
@@ -276,6 +288,41 @@ describe('traces errors, trace side, against a fake Jaeger', () => {
     expect(summarize(result.rows)).toEqual(['web:traces:3']);
     expect(result.stderr).toContain('error: x (traces):');
     failingService = undefined;
+  });
+
+  describe('with several services failing', () => {
+    const THREE = {
+      ...SERVICES,
+      y: { otelService: 'y-data' },
+    };
+
+    afterEach(() => {
+      failingService = undefined;
+      unauthorizedService = undefined;
+    });
+
+    test('one auth failure among them exits 3 and still notes every failure', async () => {
+      unauthorizedService = 'x-data';
+      failingService = 'y-data';
+      const result = await run([], configFor(true, THREE));
+      expect(result.code).toBe(3);
+      expect(summarize(result.rows)).toEqual(['web:traces:3']);
+      expect(result.stderr).toContain('error: x (traces): tracing backend');
+      expect(result.stderr).toContain('error: y (traces):');
+    });
+
+    test('the auth failure decides the exit code whichever service fails first', async () => {
+      failingService = 'x-data';
+      unauthorizedService = 'y-data';
+      const result = await run([], configFor(true, THREE));
+      expect(result.code).toBe(3);
+    });
+
+    test('only non-auth failures exit 1', async () => {
+      failingService = 'x-data';
+      const result = await run([], configFor(true, THREE));
+      expect(result.code).toBe(1);
+    });
   });
 
   test('a single failing service keeps its own error and exit code', async () => {
