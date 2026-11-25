@@ -19,6 +19,15 @@ const ParseableTimestamp = Schema.String.check(
   ),
 );
 
+/** Same reason as `ParseableTimestamp`: an out-of-range epoch makes `toISOString()` throw. */
+const EpochMs = Schema.Number.check(
+  Schema.makeFilter(
+    (ms) =>
+      !Number.isNaN(new Date(ms).getTime()) ||
+      'expected an epoch in milliseconds within the representable date range',
+  ),
+);
+
 export const RequestLogRow = Schema.Struct({
   requestId: Schema.String,
   traceId: Schema.optional(Schema.NullOr(Schema.String)),
@@ -46,7 +55,7 @@ export const DeploymentsResponse = Schema.Struct({
       uid: Schema.String,
       readyState: Schema.String,
       target: Schema.optional(Schema.NullOr(Schema.String)),
-      created: Schema.Number,
+      created: EpochMs,
       url: Schema.optional(Schema.NullOr(Schema.String)),
       meta: Schema.optional(
         Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)),
@@ -62,7 +71,7 @@ export type VercelDeployment =
 
 export const BuildEvent = Schema.Struct({
   id: Schema.optional(Schema.String),
-  created: Schema.optional(Schema.Number),
+  created: Schema.optional(EpochMs),
   type: Schema.String,
   text: Schema.optional(Schema.String),
   payload: Schema.optional(

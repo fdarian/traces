@@ -2,12 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { Effect, Option, Redacted } from 'effect';
 import {
   type Cursor,
+  type LogSource,
   makeVercelSource,
   mapBuildEvent,
   mapHttpRow,
   mapRuntimeRow,
   mapVercelDeployment,
   mapVercelStatus,
+  type ProviderError,
   type VercelTarget,
 } from '#/index.js';
 import { fakeHttp, fixture, type HttpCall } from './logs-helpers.ts';
@@ -453,6 +455,61 @@ describe('vercel source', () => {
       expect(result.failure).toMatchObject({
         _tag: 'ProviderResponseInvalid',
         operation: 'request-logs',
+      });
+    }
+  });
+
+  test.each<{
+    name: string;
+    operation: string;
+    path: string;
+    body: () => unknown;
+    call: (source: LogSource) => Effect.Effect<unknown, ProviderError>;
+  }>([
+    {
+      name: 'deployments',
+      operation: 'deployments',
+      body: () => {
+        const data = fixture('vercel-deployments.json') as {
+          deployments: Array<object>;
+        };
+        return {
+          ...data,
+          deployments: data.deployments.map((deployment) => ({
+            ...deployment,
+            created: 1e20,
+          })),
+        };
+      },
+      call: (source: LogSource) => source.deployments({ limit: 1 }),
+      path: '/v6/deployments',
+    },
+    {
+      name: 'build events',
+      operation: 'build-events',
+      body: () =>
+        (fixture('vercel-build-events.json') as Array<object>).map((event) => ({
+          ...event,
+          created: 1e20,
+        })),
+      call: (source: LogSource) =>
+        source.buildLogs({ levels: [], limit: 1, deploymentId: 'dpl_prod' }),
+      path: '/events',
+    },
+  ])('a $name `created` outside the date range is a typed provider error, not a throw', async (kind) => {
+    const result = await run(
+      sourceWith((url) =>
+        url.pathname.endsWith(kind.path) ? { body: kind.body() } : respond(url),
+      ).pipe(
+        Effect.flatMap((source) => kind.call(source)),
+        Effect.result,
+      ),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure).toMatchObject({
+        _tag: 'ProviderResponseInvalid',
+        operation: kind.operation,
       });
     }
   });
