@@ -9,7 +9,6 @@ import {
 } from '#/config.ts';
 import { UsageError } from '#/errors.ts';
 
-/** Directories the Vercel link search never enters. */
 const SKIPPED_DIRECTORIES = ['node_modules', '.git'];
 const VERCEL_LINK_DEPTH = 3;
 
@@ -139,7 +138,7 @@ export const assignServiceKeys = (
     providers.add(candidate.config.provider);
     providersByBase.set(base, providers);
   });
-  const services: Record<string, LogServiceConfig> = {};
+  const services = new Map<string, LogServiceConfig>();
   candidates.forEach((candidate, index) => {
     const base = bases[index];
     if (base === undefined) return;
@@ -148,12 +147,12 @@ export const assignServiceKeys = (
       ? `${base}-${candidate.config.provider}`
       : base;
     let key = preferred;
-    for (let attempt = 2; key in services; attempt++) {
+    for (let attempt = 2; services.has(key); attempt++) {
       key = `${preferred}-${attempt}`;
     }
-    services[key] = candidate.config;
+    services.set(key, candidate.config);
   });
-  return services;
+  return Object.fromEntries(services);
 };
 
 export const parseJaegerHeader = (
@@ -189,21 +188,23 @@ export const buildTracing = (
       }
       return Option.none<TracingConfig>();
     }
-    const headers: Record<string, HeaderValue> = {};
+    const headers = new Map<string, HeaderValue>();
     for (const flag of headerFlags) {
       const [name, value] = yield* parseJaegerHeader(flag);
-      if (name in headers) {
+      if (headers.has(name)) {
         return yield* new UsageError({
           message: `--jaeger-header "${name}" is given twice`,
           hint: 'pass each header name once',
         });
       }
-      headers[name] = value;
+      headers.set(name, value);
     }
     return Option.some<TracingConfig>({
       provider: 'jaeger',
       url: url.value,
-      ...(headerFlags.length === 0 ? {} : { headers }),
+      ...(headerFlags.length === 0
+        ? {}
+        : { headers: Object.fromEntries(headers) }),
     });
   });
 

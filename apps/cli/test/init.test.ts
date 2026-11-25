@@ -61,6 +61,21 @@ describe('assignServiceKeys', () => {
     expect(Object.keys(keys)).toEqual(['web', 'web-2', 'vercel']);
   });
 
+  test('names that are Object.prototype keys are taken like any other', () => {
+    const keys = assignServiceKeys([
+      { name: 'constructor', config: railway('constructor') },
+      { name: 'toString', config: railway('toString') },
+      { name: '__proto__', config: railway('__proto__') },
+      { name: 'constructor', config: railway('constructor') },
+    ]);
+    expect(Object.keys(keys)).toEqual([
+      'constructor',
+      'toString',
+      '__proto__',
+      'constructor-2',
+    ]);
+  });
+
   test('a suffixed key never overwrites an existing one', () => {
     const keys = assignServiceKeys([
       { name: 'web-vercel', config: railway('web-vercel') },
@@ -157,6 +172,14 @@ beforeAll(() => {
     `#!/bin/sh
 case "$1" in
   status)
+    if [ "$FAKE_RAILWAY" = logged-out ]; then
+      echo "Unauthorized. Please login with railway login" >&2
+      exit 1
+    fi
+    if [ "$FAKE_RAILWAY" = broken ]; then
+      echo "connection reset by peer" >&2
+      exit 1
+    fi
     if [ "$FAKE_RAILWAY" = unlinked ]; then
       echo "No linked project found. Run railway link to connect to a project" >&2
       exit 1
@@ -222,7 +245,12 @@ describe('findVercelLinks', () => {
 const traces = (
   cwd: string,
   args: ReadonlyArray<string>,
-  fakeRailway: 'linked' | 'unlinked' | 'missing' = 'linked',
+  fakeRailway:
+    | 'linked'
+    | 'unlinked'
+    | 'missing'
+    | 'logged-out'
+    | 'broken' = 'linked',
 ) => {
   const run = Bun.spawnSync(
     ['bun', join(import.meta.dir, '..', 'src', 'main.ts'), 'init', ...args],
@@ -374,6 +402,25 @@ describe('traces init', () => {
     const config = await decode(run.stdout);
     expect(Object.keys(config.services)).toEqual(['site']);
     expect(config.railway).toBeUndefined();
+  });
+
+  test('a Railway auth failure fails init with exit 3 and writes nothing, even with a Vercel link', () => {
+    const repo = newRepo('railway-logged-out');
+    link(repo, { projectName: 'site' });
+    const run = traces(repo, [], 'logged-out');
+    expect(run.code).toBe(3);
+    expect(run.stderr).toContain('railway login');
+    expect(run.stdout).toBe('');
+    expect(existsSync(join(repo, 'traces.json'))).toBe(false);
+  });
+
+  test('any other Railway failure fails init with exit 1 and writes nothing', () => {
+    const repo = newRepo('railway-broken');
+    link(repo, { projectName: 'site' });
+    const run = traces(repo, [], 'broken');
+    expect(run.code).toBe(1);
+    expect(run.stderr).toContain('connection reset');
+    expect(existsSync(join(repo, 'traces.json'))).toBe(false);
   });
 
   test('a written Vercel entry prints its team and project id', () => {

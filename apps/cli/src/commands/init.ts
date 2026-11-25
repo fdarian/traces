@@ -28,7 +28,7 @@ import { findVercelToken } from '#/vercel-token.ts';
 export const initOptions = {
   'railway-project': Flag.String('railway-project').pipe(
     Flag.withDescription(
-      'Railway project id to read services from (default: the project `railway status --json` reports for the git root; a failure there is a stderr note, not an error)',
+      'Railway project id to read services from (default: the project `railway status --json` reports for the git root; a folder with no Railway link is a stderr note, any other failure is an error)',
     ),
     Flag.optional,
   ),
@@ -63,17 +63,29 @@ const describeProviderError = (error: ProviderError) => {
     : `${rendered.message} (${rendered.hint})`;
 };
 
+/** Only a folder with no Railway link is skipped; a failed lookup would silently drop the Railway services from the config. */
+const linkedRailwayProject = (toplevel: string) =>
+  railwayLinkedProject(toplevel).pipe(
+    Effect.map((link) => Option.some(link.id)),
+    Effect.catchTag('ProviderNotFound', (error) =>
+      Console.error(
+        `note: railway: skipped: ${describeProviderError(error)}`,
+      ).pipe(Effect.as(Option.none<string>())),
+    ),
+  );
+
 const railwayCandidates = (
   toplevel: string,
   explicitProject: Option.Option<string>,
 ) =>
   Effect.gen(function* () {
     const projectId = Option.isSome(explicitProject)
-      ? explicitProject.value
-      : (yield* railwayLinkedProject(toplevel)).id;
+      ? explicitProject
+      : yield* linkedRailwayProject(toplevel);
+    if (Option.isNone(projectId)) return [];
     // No config exists yet to say how to reach Railway, so discovery always uses the `railway` CLI, like the folder link.
     const client = yield* makeRailwayCliClient;
-    const layout = yield* railwayProjectLayout(client, projectId);
+    const layout = yield* railwayProjectLayout(client, projectId.value);
     // `railway status --json` does not say which environment is linked, so the
     // only one that can be picked is the conventional default.
     const hasProduction = layout.environments.some(
@@ -84,22 +96,13 @@ const railwayCandidates = (
         name: service.name,
         config: {
           provider: 'railway',
-          project: projectId,
+          project: projectId.value,
           service: service.name,
           ...(hasProduction ? { environment: 'production' } : {}),
         },
       }),
     );
-  }).pipe(
-    // Only a discovery the user did not ask for may be skipped.
-    Effect.catch((error: ProviderError) =>
-      Option.isSome(explicitProject)
-        ? Effect.fail(error)
-        : Console.error(
-            `note: railway: skipped: ${describeProviderError(error)}`,
-          ).pipe(Effect.as([] as ReadonlyArray<ServiceCandidate>)),
-    ),
-  );
+  });
 
 const vercelCandidates = (toplevel: string) =>
   Effect.gen(function* () {
