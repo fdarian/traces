@@ -7,6 +7,11 @@ const FAKE_RAILWAY = `#!/usr/bin/env bun
 const args = process.argv.slice(2);
 const document = args[1];
 const reply = (data) => console.log(JSON.stringify({ data }));
+const networkProject = process.env.FAKE_RAILWAY_NETWORK;
+if (networkProject && args.includes('id=' + networkProject)) {
+  console.error('connection reset by peer');
+  process.exit(1);
+}
 const downProject = process.env.FAKE_RAILWAY_DOWN;
 if (downProject === '1' || (downProject && args.includes('id=' + downProject))) {
   console.error('Unauthorized. Please login');
@@ -308,6 +313,48 @@ describe('a service the config does not list', () => {
     expect(result.stderr).toContain('Railway project proj-1');
     expect(result.stderr).not.toContain('no service named');
     expect(result.stderr).not.toContain('is not in the config');
+  });
+
+  test('an auth failure in one project wins over a network failure in another, whichever is listed first', async () => {
+    for (const [first, second] of [
+      ['proj-1', 'proj-2'],
+      ['proj-2', 'proj-1'],
+    ] as const) {
+      const config = configWith({
+        api: railway(first, 'api'),
+        other: railway(second, 'worker'),
+      });
+      const result = await run('deploys', 'nope', config, {
+        FAKE_RAILWAY_NETWORK: 'proj-1',
+        FAKE_RAILWAY_DOWN: 'proj-2',
+      });
+      expect(result.code).toBe(3);
+      expect(result.stderr).toContain('Railway project proj-2');
+      expect(result.stderr).not.toContain('no service named');
+    }
+  });
+
+  test('a network failure alone exits 1', async () => {
+    const config = configWith({ api: railway('proj-1', 'api') });
+    const result = await run('deploys', 'nope', config, {
+      FAKE_RAILWAY_NETWORK: 'proj-1',
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Railway project proj-1');
+  });
+
+  test('a name that is an Object.prototype key is not found, with the normal exit 2', async () => {
+    for (const config of [
+      configWith({ api: railway('proj-1', 'api') }),
+      configWith({ web: { provider: 'vercel', project: 'prj_1' } }),
+    ]) {
+      const result = await run('logs', 'constructor', config);
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(
+        'no service named "constructor" in project "app"',
+      );
+      expect(result.stderr).not.toContain('trace-only');
+    }
   });
 
   test('a config with no Railway service has nothing to fall back to', async () => {

@@ -35,7 +35,7 @@ import { parseDuration, parseInstant } from '#/time.ts';
 
 const parseAttributes = (pairs: ReadonlyArray<string>) =>
   Effect.gen(function* () {
-    const attributes: Record<string, string> = {};
+    const attributes = new Map<string, string>();
     for (const pair of pairs) {
       const separator = pair.indexOf('=');
       if (separator < 1) {
@@ -45,15 +45,15 @@ const parseAttributes = (pairs: ReadonlyArray<string>) =>
         });
       }
       const key = pair.slice(0, separator);
-      if (key in attributes) {
+      if (attributes.has(key)) {
         return yield* new UsageError({
           message: `--attr "${key}" is given twice`,
           hint: 'Jaeger matches each attribute key once; pass it a single time',
         });
       }
-      attributes[key] = pair.slice(separator + 1);
+      attributes.set(key, pair.slice(separator + 1));
     }
-    return attributes;
+    return Object.fromEntries(attributes);
   });
 
 const optionalDuration = (flag: string, value: Option.Option<string>) =>

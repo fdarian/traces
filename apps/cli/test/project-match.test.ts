@@ -163,4 +163,20 @@ describe('selectProject', () => {
     if (result._tag === 'Failure')
       expect(result.failure.hint).toContain('narrow');
   });
+
+  test('--project is looked up by own key, so "constructor" is unknown', async () => {
+    const result = await Effect.runPromise(
+      selectProject({
+        ...base,
+        invocation: { cwd: '/code/app' },
+        projectFlag: Option.some('constructor'),
+      }).pipe(Effect.result),
+    );
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(result.failure.message).toContain(
+        'no project named "constructor"',
+      );
+    }
+  });
 });

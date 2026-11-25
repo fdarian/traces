@@ -234,7 +234,9 @@ export const selectProject = (input: {
   Effect.gen(function* () {
     if (Option.isSome(input.projectFlag)) {
       const name = input.projectFlag.value;
-      const project = input.config.projects[name];
+      const project = Object.hasOwn(input.config.projects, name)
+        ? input.config.projects[name]
+        : undefined;
       if (project === undefined) {
         return yield* new UsageError({
           message: `no project named "${name}" in ${input.configPath}`,

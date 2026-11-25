@@ -17,6 +17,8 @@ import {
   type LogServiceConfig,
   otelServiceName,
   type ProjectSettings,
+  type RailwayServiceConfig,
+  railwayEnvironmentOf,
   readConfig,
   resolveDefaultConfigPath,
   type SecretRef,
@@ -140,6 +142,12 @@ export const resolveProject = (flags: GlobalFlags) =>
     );
   });
 
+/** A config key is user text: `constructor` must not find `Object.prototype.constructor`. */
+const serviceConfigOf = (resolved: ResolvedProject, name: string) =>
+  Object.hasOwn(resolved.project.services, name)
+    ? resolved.project.services[name]
+    : undefined;
+
 export const selectService = (
   resolved: ResolvedProject,
   requested: Option.Option<string>,
@@ -147,7 +155,7 @@ export const selectService = (
   const names = Object.keys(resolved.project.services);
   const available = `available services in "${resolved.projectName}": ${names.join(', ')}`;
   if (Option.isSome(requested)) {
-    const config = resolved.project.services[requested.value];
+    const config = serviceConfigOf(resolved, requested.value);
     return config === undefined
       ? Effect.fail(
           new UsageError({
@@ -159,7 +167,7 @@ export const selectService = (
   }
   const only = names[0];
   const config =
-    only === undefined ? undefined : resolved.project.services[only];
+    only === undefined ? undefined : serviceConfigOf(resolved, only);
   if (names.length === 1 && only !== undefined && config !== undefined) {
     return Effect.succeed({ name: only, config });
   }
@@ -171,16 +179,11 @@ export const selectService = (
   );
 };
 
-type RailwayServiceConfig = Extract<ServiceConfig, { provider: 'railway' }>;
-
 const railwayServices = (resolved: ResolvedProject) =>
   Object.values(resolved.project.services).filter(
     (config): config is RailwayServiceConfig =>
       'provider' in config && config.provider === 'railway',
   );
-
-const environmentOf = (config: RailwayServiceConfig) =>
-  config.environment ?? 'production';
 
 /** With `--env` the flag picks the environment later, so targets differing only in environment are one. */
 const distinctRailwayTargets = (
@@ -191,39 +194,56 @@ const distinctRailwayTargets = (
   return configs.filter((config) => {
     const key = Option.isSome(envFlag)
       ? config.project
-      : `${config.project}\u0000${environmentOf(config)}`;
+      : `${config.project}\u0000${railwayEnvironmentOf(config)}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 };
 
-/** One listing per project (names and ids, since a reference may be either), however many services or environments of it the config has. Any project's failure fails the lookup: a name isn't called absent when a project that might hold it couldn't be read. */
+/**
+ * One listing per project (names and ids, since a reference may be either), however many services or environments of it the config has. Any project's failure fails the lookup: a name isn't called absent when a project that might hold it couldn't be read.
+ * Every project is tried and an auth failure wins over the others, so the exit code does not depend on which request finished first: a login fixes it, and a retry would not.
+ */
 const railwayServiceListings = (
-  resolved: ResolvedProject,
+  railwayClient: RailwayClientEffect,
   projects: string[],
 ) =>
-  resolveRailwayClient(resolved).pipe(
-    Effect.flatMap((client) =>
-      Effect.forEach(
-        projects,
-        (project) =>
-          railwayProjectLayout(client, project).pipe(
-            Effect.map((layout) => ({
-              project,
-              services: layout.services,
-            })),
-            Effect.mapError(
-              (cause) => new RailwayProjectLookupFailed({ project, cause }),
-            ),
+  Effect.gen(function* () {
+    const client = yield* railwayClient;
+    const results = yield* Effect.forEach(
+      projects,
+      (project) =>
+        railwayProjectLayout(client, project).pipe(
+          Effect.map((layout) => ({
+            project,
+            services: layout.services,
+          })),
+          Effect.mapError(
+            (cause) => new RailwayProjectLookupFailed({ project, cause }),
           ),
-        { concurrency: 'unbounded' },
-      ),
-    ),
-  );
+          Effect.result,
+        ),
+      { concurrency: 'unbounded' },
+    );
+    const listings: Array<{
+      readonly project: string;
+      readonly services: ReadonlyArray<{ id: string; name: string }>;
+    }> = [];
+    const failures: Array<RailwayProjectLookupFailed> = [];
+    for (const result of results) {
+      if (result._tag === 'Success') listings.push(result.success);
+      else failures.push(result.failure);
+    }
+    const failure =
+      failures.find((entry) => entry.cause instanceof ProviderAuthError) ??
+      failures[0];
+    if (failure !== undefined) return yield* failure;
+    return listings;
+  });
 
 const describeTarget = (config: RailwayServiceConfig) =>
-  `${config.project} (${environmentOf(config)})`;
+  `${config.project} (${railwayEnvironmentOf(config)})`;
 
 /**
  * `logs`, `deploys` and `errors <service>` accept a Railway service the config doesn't list. A
@@ -237,12 +257,13 @@ export const selectLogService = (
   resolved: ResolvedProject,
   requested: Option.Option<string>,
   envFlag: Option.Option<string>,
+  railwayClient: RailwayClientEffect,
 ) =>
   Effect.gen(function* () {
     if (Option.isNone(requested))
       return yield* selectService(resolved, requested);
     const name = requested.value;
-    const configured = resolved.project.services[name];
+    const configured = serviceConfigOf(resolved, name);
     if (configured !== undefined) return { name, config: configured };
 
     const targets = distinctRailwayTargets(railwayServices(resolved), envFlag);
@@ -255,7 +276,7 @@ export const selectLogService = (
     if (targets.length === 0) return yield* notFound(available);
 
     const projects = [...new Set(targets.map((entry) => entry.project))];
-    const live = yield* railwayServiceListings(resolved, projects);
+    const live = yield* railwayServiceListings(railwayClient, projects);
     const liveHint = `${available}; ${live
       .map(
         (entry) =>
@@ -280,7 +301,7 @@ export const selectLogService = (
       return yield* new UsageError({
         message: `"${name}" is ambiguous: ${matches.map(describeTarget).join(', ')} all have a Railway service with that id or name`,
         hint: sameProject
-          ? `${liveHint}; pass --env <name> to pick the environment (${matches.map(environmentOf).join(', ')})`
+          ? `${liveHint}; pass --env <name> to pick the environment (${matches.map(railwayEnvironmentOf).join(', ')})`
           : `${liveHint}; add the one you mean to the config under a name of its own`,
       });
     }
@@ -325,7 +346,7 @@ export const buildTarget = (
       serviceName: config.service,
       environment: Option.isSome(envFlag)
         ? envFlag.value
-        : (config.environment ?? 'production'),
+        : railwayEnvironmentOf(config),
     });
   }
   const environment = Option.isSome(envFlag) ? envFlag.value : 'production';
@@ -363,10 +384,12 @@ export const resolveRailwayClient = (resolved: ResolvedProject) =>
     );
   });
 
+type RailwayClientEffect = ReturnType<typeof resolveRailwayClient>;
+
 /** `railwayClient` is passed in so one command run reads the secret once, however many Railway services it builds. */
 export const buildSource = (
   target: ServiceTarget,
-  railwayClient: ReturnType<typeof resolveRailwayClient>,
+  railwayClient: RailwayClientEffect,
 ) =>
   target.provider === 'railway'
     ? railwayClient.pipe(
@@ -390,10 +413,16 @@ export const resolveService = (
 ) =>
   Effect.gen(function* () {
     const resolved = yield* resolveProject(flags);
-    const selected = yield* selectLogService(resolved, service, flags.env);
+    const railwayClient = yield* Effect.cached(resolveRailwayClient(resolved));
+    const selected = yield* selectLogService(
+      resolved,
+      service,
+      flags.env,
+      railwayClient,
+    );
     const config = yield* requireLogProvider(selected.name, selected.config);
     const target = yield* buildTarget(selected.name, config, flags.env);
-    const source = yield* buildSource(target, resolveRailwayClient(resolved));
+    const source = yield* buildSource(target, railwayClient);
     return {
       resolved,
       name: selected.name,
@@ -480,7 +509,7 @@ const buildLogService = (
   name: string,
   config: LogServiceConfig,
   env: GlobalFlags['env'],
-  railwayClient: ReturnType<typeof resolveRailwayClient>,
+  railwayClient: RailwayClientEffect,
 ) =>
   Effect.gen(function* () {
     const target = yield* buildTarget(name, config, env);
@@ -517,9 +546,18 @@ export const resolveErrorScope = (
     }
     const traceSide = wantTraces && resolved.project.tracing !== undefined;
 
+    // Built once per run: the fallback lookup and every service's source share it, so the keychain is read once.
+    const railwayClient = yield* Effect.cached(resolveRailwayClient(resolved));
     const candidates: Array<{ name: string; config: ServiceConfig }> =
       Option.isSome(requested)
-        ? [yield* selectLogService(resolved, requested, flags.env)]
+        ? [
+            yield* selectLogService(
+              resolved,
+              requested,
+              flags.env,
+              railwayClient,
+            ),
+          ]
         : Object.entries(resolved.project.services).map(([name, config]) => ({
             name,
             config,
@@ -540,7 +578,6 @@ export const resolveErrorScope = (
         : [],
     );
     // Built once per service: the trace side reuses the log side's source to find the deploy `--since deploy` anchors on.
-    const railwayClient = yield* Effect.cached(resolveRailwayClient(resolved));
     const builds = new Map<string, LogBuild>();
     for (const selected of logCandidates) {
       builds.set(
