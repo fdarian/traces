@@ -11,7 +11,7 @@ import type {
 } from '../model.js';
 import { floorMs, levelAllowed } from '../normalize.js';
 import type { LogSource } from '../source.js';
-import { makeRailwayClient } from './client.js';
+import type { RailwayClient } from './client.js';
 import {
   grepFilter,
   httpStatusFilter,
@@ -60,9 +60,11 @@ const findByIdOrName = (
 const describeNamed = (edges: ReadonlyArray<NamedEdge>): string =>
   edges.map((edge) => `${edge.node.name} (${edge.node.id})`).join(', ');
 
-export const makeRailwaySource = (target: RailwayTarget) =>
+export const makeRailwaySource = (
+  target: RailwayTarget,
+  client: RailwayClient,
+) =>
   Effect.gen(function* () {
-    const client = yield* makeRailwayClient;
     const query = client.query;
 
     const ids = yield* Effect.cached(
@@ -70,7 +72,7 @@ export const makeRailwaySource = (target: RailwayTarget) =>
         const data = yield* query(
           'project',
           PROJECT_QUERY,
-          { raw: { id: target.project } },
+          { id: target.project },
           ProjectData,
         );
         const project = data.project;
@@ -78,7 +80,7 @@ export const makeRailwaySource = (target: RailwayTarget) =>
           return yield* new ProviderNotFound({
             provider: PROVIDER,
             what: `project ${target.project}`,
-            hint: 'check `project` in the config against `railway list --json`',
+            hint: 'check `project` in the config',
           });
         }
         const service = findByIdOrName(
@@ -123,13 +125,11 @@ export const makeRailwaySource = (target: RailwayTarget) =>
           'deployments',
           DEPLOYMENTS_QUERY,
           {
-            raw: {
-              after,
-              p: target.project,
-              e: resolved.environmentId,
-              s: resolved.serviceId,
-            },
-            json: { first: input.limit },
+            after,
+            p: target.project,
+            e: resolved.environmentId,
+            s: resolved.serviceId,
+            first: input.limit,
           },
           DeploymentsData,
         );
@@ -197,16 +197,12 @@ export const makeRailwaySource = (target: RailwayTarget) =>
             'deploymentLogs',
             DEPLOYMENT_LOGS_QUERY,
             {
-              raw: {
-                d: deploymentId,
-                f: filter,
-                s:
-                  since === undefined
-                    ? undefined
-                    : new Date(since).toISOString(),
-                e: endDate,
-              },
-              json: { l: fetchLimit },
+              d: deploymentId,
+              f: filter,
+              s:
+                since === undefined ? undefined : new Date(since).toISOString(),
+              e: endDate,
+              l: fetchLimit,
             },
             DeploymentLogsData,
           );
@@ -239,14 +235,11 @@ export const makeRailwaySource = (target: RailwayTarget) =>
           'environmentLogs',
           ENVIRONMENT_LOGS_QUERY,
           {
-            raw: {
-              e: resolved.environmentId,
-              f: joinFilter([`@service:${resolved.serviceId}`, filter]),
-              a: anchor,
-              b:
-                since === undefined ? undefined : new Date(since).toISOString(),
-            },
-            json: { l: fetchLimit },
+            e: resolved.environmentId,
+            f: joinFilter([`@service:${resolved.serviceId}`, filter]),
+            a: anchor,
+            b: since === undefined ? undefined : new Date(since).toISOString(),
+            l: fetchLimit,
           },
           EnvironmentLogsData,
         );
@@ -282,17 +275,11 @@ export const makeRailwaySource = (target: RailwayTarget) =>
           'buildLogs',
           BUILD_LOGS_QUERY,
           {
-            raw: {
-              d: deploymentId,
-              f: joinFilter([
-                levelFilter(input.levels),
-                grepFilter(input.grep),
-              ]),
-              s:
-                since === undefined ? undefined : new Date(since).toISOString(),
-              e: endDate,
-            },
-            json: { l: fetchLimitFor(input, cursor) },
+            d: deploymentId,
+            f: joinFilter([levelFilter(input.levels), grepFilter(input.grep)]),
+            s: since === undefined ? undefined : new Date(since).toISOString(),
+            e: endDate,
+            l: fetchLimitFor(input, cursor),
           },
           BuildLogsData,
         );
@@ -326,17 +313,14 @@ export const makeRailwaySource = (target: RailwayTarget) =>
           'httpLogs',
           HTTP_LOGS_QUERY,
           {
-            raw: {
-              d: deploymentId,
-              f: joinFilter([
-                httpStatusFilter(input.levels),
-                grepFilter(input.grep),
-              ]),
-              a: anchor,
-              b:
-                since === undefined ? undefined : new Date(since).toISOString(),
-            },
-            json: { l: fetchLimitFor(input, cursor) },
+            d: deploymentId,
+            f: joinFilter([
+              httpStatusFilter(input.levels),
+              grepFilter(input.grep),
+            ]),
+            a: anchor,
+            b: since === undefined ? undefined : new Date(since).toISOString(),
+            l: fetchLimitFor(input, cursor),
           },
           HttpLogsData,
         );

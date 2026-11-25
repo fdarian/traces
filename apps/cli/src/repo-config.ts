@@ -52,6 +52,9 @@ export const findRepoConfig = (cwd: string) =>
           ...(config.value.tracing === undefined
             ? {}
             : { tracing: config.value.tracing }),
+          ...(config.value.railway === undefined
+            ? {}
+            : { railway: config.value.railway }),
           services: config.value.services,
         },
       } satisfies RepoConfigFound);

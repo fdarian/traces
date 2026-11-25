@@ -11,8 +11,8 @@ import {
   ProviderNotFound,
   ProviderRequestError,
   ProviderResponseInvalid,
+  ProviderToolMissing,
   type SpanRow,
-  stripAnsi,
   TraceBackendUnauthorized,
   TraceNotFound,
   type TraceRow,
@@ -262,6 +262,13 @@ export const renderError = (error: unknown): RenderedError => {
       code: EXIT_CODES.runtime,
     };
   }
+  if (error instanceof ProviderToolMissing) {
+    return {
+      message: `${error.provider}: ${error.tool} not found`,
+      hint: error.hint,
+      code: EXIT_CODES.auth,
+    };
+  }
   if (error instanceof ProviderNotFound) {
     return {
       message: `${error.provider}: ${error.what} not found`,
@@ -358,43 +365,13 @@ export class ExitWith extends Schema.TaggedError<ExitWith>()('ExitWith', {
 }) {}
 
 /**
- * The framework prints the full usage block (to stdout) before failing a parse.
- * Its formatter returns this marker instead and `plainWhenPiped` drops it, so
- * the failure surfaces only as the one-line error from `reportError`.
+ * The framework prints the full usage block before failing a parse. The
+ * failure surfaces instead as the one-line `error:` + `hint:` that `main.ts`
+ * renders from the `ShowHelp` error, so the block is dropped here.
  */
-const SUPPRESSED_HELP = '\u0000traces:suppressed-help';
-
-export const withoutFrameworkHelp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.provideService(effect, CliOutput.Formatter, {
-    ...CliOutput.defaultFormatter({ colors: false }),
-    formatHelpDoc: () => SUPPRESSED_HELP,
-  });
-
-const plainArgs = (args: ReadonlyArray<unknown>) =>
-  args.map((arg) => (typeof arg === 'string' ? stripAnsi(arg) : arg));
-
-/** The CLI framework colors its own messages; keep escapes out of piped output. */
-export const plainWhenPiped = (
-  base: Console.Console,
-  tty: { readonly stdout: boolean; readonly stderr: boolean },
-): Console.Console => ({
-  ...base,
-  log: (...args) => {
-    if (args.length === 1 && args[0] === SUPPRESSED_HELP) return;
-    base.log(...(tty.stdout ? args : plainArgs(args)));
-  },
-  error: (...args) => base.error(...(tty.stderr ? args : plainArgs(args))),
-  warn: (...args) => base.warn(...(tty.stderr ? args : plainArgs(args))),
-});
-
-export const withPlainConsole = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Console.consoleWith((base) =>
-    Effect.provideService(
-      effect,
-      Console.Console,
-      plainWhenPiped(base, {
-        stdout: process.stdout.isTTY === true,
-        stderr: process.stderr.isTTY === true,
-      }),
-    ),
-  );
+export const parseErrorPresenter: CliOutput.Presenter = {
+  present: (event) =>
+    event._tag === 'InvalidInvocation'
+      ? Effect.void
+      : CliOutput.defaultPresenter.present(event),
+};

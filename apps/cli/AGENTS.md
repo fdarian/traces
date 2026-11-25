@@ -11,6 +11,9 @@
 
 ## Notes
 - Provider adapters live in `@traces/core` (`packages/core/src/logs/`); this app owns config, project matching, commands, and output.
-- All help is hand-written in `src/help.ts`; `COMMAND_HELP` is the one place each command's flags are documented, and `test/help.test.ts` fails when a command's flags and its help disagree. Adding a flag means adding it there.
-- Adapter tests, fixtures and fakes live in `packages/core/test`; config, matcher, help and output tests live here.
+- Help is the Effect framework's own: each command's description, flag descriptions and examples live on its `Command` / `Flag` / `Argument` in `src/commands/*.ts` (and `globalOptions` in `src/resolve.ts`). Only `--help` is a built-in flag, and `parseErrorPresenter` (`src/output.ts`) keeps parse errors to the one-line `error:` + `hint:` on stderr with no usage block.
+- Long-form guidance (resolution, config, tracing, output/exit codes/limits, recipes) is markdown under `skills/`, one directory per skill (`skills/core/SKILL.md` + `references/*.md`), so each is also a valid Claude Code skill. `traces skills` (`src/commands/skills.ts`) serves them: `list`, `get <name> [--full | --ref <name>]` (raw markdown, frontmatter stripped), `path [name]`. The root description points agents at `traces skills get core`. The skills root is found relative to the source file, not the cwd; frontmatter is parsed by hand (`key: value` lines only, no YAML dependency).
+- The limits in `skills/core/references/output.md` are literal numbers, update them with `src/limits.ts`. A new reference file needs a line in the References list at the end of `SKILL.md`.
+- Railway GraphQL goes through one `RailwayClient` (`packages/core/src/logs/railway/`), picked by `resolveRailwayClient` in `src/resolve.ts` from the project's `railway.auth`: a `SecretRef` token uses `http-client.ts` (HTTP, bearer); `"cli"` uses `cli-client.ts` (spawns the logged-in `railway api`). The token is recommended for agents: the CLI login exposes every `railway` command. `traces services` probes either with the same project read (`checkRailwayAccess`).
+- Adapter tests, fixtures and fakes live in `packages/core/test`; config, matcher and output tests live here.
 - stdout carries one record type only (NDJSON when piped); hints and pagination go to stderr.

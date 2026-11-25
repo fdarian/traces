@@ -244,7 +244,7 @@ export const servicesCommand = Command.make(
           yield* Console.log(formatTracing(tracing, missing));
         }
       }
-      const authCache = new Map<'vercel' | 'railway', AuthStatus>();
+      const authCache = new Map<string, AuthStatus>();
       for (const [service, ref] of Object.entries(resolved.project.services)) {
         const found = inJaeger(otelServiceName(service, ref));
         const common = {
@@ -268,12 +268,14 @@ export const servicesCommand = Command.make(
           );
           continue;
         }
-        let auth = authCache.get(ref.provider);
+        const authKey =
+          ref.provider === 'railway' ? `railway:${ref.project}` : 'vercel';
+        let auth = authCache.get(authKey);
         if (auth === undefined) {
           auth = yield* ref.provider === 'railway'
-            ? railwayAuthStatus
+            ? railwayAuthStatus(resolved, ref.project)
             : vercelAuthStatus;
-          authCache.set(ref.provider, auth);
+          authCache.set(authKey, auth);
         }
         yield* emitRecord(
           mode,
@@ -282,4 +284,15 @@ export const servicesCommand = Command.make(
         );
       }
     }),
+).pipe(
+  Command.withShortDescription(
+    'matched project, services, provider auth status',
+  ),
+  Command.withDescription(
+    "Show the project matched for the current directory (the repo's traces.json, else the global config), its services, whether each provider is authenticated, and the tracing setup (URL, header secrets, otelService) with a live reachability check of the tracing URL.",
+  ),
+  Command.withExamples([
+    { command: 'traces services' },
+    { command: 'traces services --project myapp --json' },
+  ]),
 );

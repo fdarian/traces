@@ -2,10 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import { Effect, Redacted } from 'effect';
 import {
   fetchVercelProjectName,
+  makeRailwayCliClient,
+  makeRailwayHttpClient,
   railwayLinkedProject,
   railwayProjectLayout,
 } from '#/index.js';
-import { fakeHttp, fakeRailway, fixture } from './logs-helpers.ts';
+import {
+  fakeHttp,
+  fakeRailwayCli,
+  fakeRailwayHttp,
+  fixture,
+  type HttpCall,
+} from './logs-helpers.ts';
 
 const run = <A, E>(effect: Effect.Effect<A, E, never>) =>
   Effect.runPromise(Effect.result(effect));
@@ -19,7 +27,7 @@ describe('railwayLinkedProject', () => {
     const result = await run(
       railwayLinkedProject('/repo').pipe(
         Effect.provide(
-          fakeRailway(nothing, [], {
+          fakeRailwayCli(nothing, [], {
             stdout: JSON.stringify({
               id: 'proj-1',
               name: 'mockingbird',
@@ -39,7 +47,7 @@ describe('railwayLinkedProject', () => {
     const result = await run(
       railwayLinkedProject('/repo').pipe(
         Effect.provide(
-          fakeRailway(nothing, [], {
+          fakeRailwayCli(nothing, [], {
             exitCode: 1,
             stdout: 'Unauthorized. Please login with `railway login`',
           }),
@@ -56,7 +64,7 @@ describe('railwayLinkedProject', () => {
     const result = await run(
       railwayLinkedProject('/repo').pipe(
         Effect.provide(
-          fakeRailway(nothing, [], {
+          fakeRailwayCli(nothing, [], {
             exitCode: 1,
             stdout:
               'No linked project found. Run railway link to connect to a project',
@@ -73,7 +81,7 @@ describe('railwayLinkedProject', () => {
   test('output without an id is a response-shape error', async () => {
     const result = await run(
       railwayLinkedProject('/repo').pipe(
-        Effect.provide(fakeRailway(nothing, [], { stdout: '{"name":"x"}' })),
+        Effect.provide(fakeRailwayCli(nothing, [], { stdout: '{"name":"x"}' })),
       ),
     );
     expect(result).toMatchObject({
@@ -84,31 +92,42 @@ describe('railwayLinkedProject', () => {
 });
 
 describe('railwayProjectLayout', () => {
-  test('lists the services and environments of the project', async () => {
+  const layout = {
+    services: [
+      { id: 'svc-api', name: 'api' },
+      { id: 'svc-web', name: 'web' },
+    ],
+    environments: [
+      { id: 'env-prod', name: 'production' },
+      { id: 'env-stg', name: 'staging' },
+    ],
+  };
+
+  test('lists the services and environments through the CLI client', async () => {
     const result = await run(
-      railwayProjectLayout('proj-1').pipe(
-        Effect.provide(fakeRailway(() => fixture('railway-project.json'))),
+      makeRailwayCliClient.pipe(
+        Effect.flatMap((client) => railwayProjectLayout(client, 'proj-1')),
+        Effect.provide(fakeRailwayCli(() => fixture('railway-project.json'))),
       ),
     );
-    expect(result).toMatchObject({
-      _tag: 'Success',
-      success: {
-        services: [
-          { id: 'svc-api', name: 'api' },
-          { id: 'svc-web', name: 'web' },
-        ],
-        environments: [
-          { id: 'env-prod', name: 'production' },
-          { id: 'env-stg', name: 'staging' },
-        ],
-      },
-    });
+    expect(result).toMatchObject({ _tag: 'Success', success: layout });
+  });
+
+  test('lists the services and environments through the HTTP client', async () => {
+    const result = await run(
+      makeRailwayHttpClient(Redacted.make('tok')).pipe(
+        Effect.flatMap((client) => railwayProjectLayout(client, 'proj-1')),
+        Effect.provide(fakeRailwayHttp(() => fixture('railway-project.json'))),
+      ),
+    );
+    expect(result).toMatchObject({ _tag: 'Success', success: layout });
   });
 
   test('a project Railway cannot see is a not-found', async () => {
     const result = await run(
-      railwayProjectLayout('proj-1').pipe(
-        Effect.provide(fakeRailway(() => ({ project: null }))),
+      makeRailwayCliClient.pipe(
+        Effect.flatMap((client) => railwayProjectLayout(client, 'proj-1')),
+        Effect.provide(fakeRailwayCli(() => ({ project: null }))),
       ),
     );
     expect(result).toMatchObject({
@@ -120,7 +139,7 @@ describe('railwayProjectLayout', () => {
 
 describe('fetchVercelProjectName', () => {
   test('asks GET /v9/projects/{id} scoped to the team and returns the name', async () => {
-    const calls: Array<{ url: string }> = [];
+    const calls: Array<HttpCall> = [];
     const result = await run(
       fetchVercelProjectName(
         { id: 'prj_1', team: 'team_9' },

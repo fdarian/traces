@@ -14,9 +14,22 @@ import { globalOptions, resolveService } from '#/resolve.ts';
 
 export const deploysOptions = {
   ...globalOptions,
-  service: Argument.String('service').pipe(Argument.optional),
-  limit: Flag.Int('limit').pipe(Flag.withDefault(DEPLOYS_LIMIT.default)),
-  cursor: Flag.String('cursor').pipe(Flag.optional),
+  service: Argument.String('service').pipe(
+    Argument.withDescription(
+      "service name from the config; optional when the project has exactly one. A name the config doesn't list is tried as a Railway service when all the config's Railway services share one Railway project and environment (stderr says so); otherwise exit 2",
+    ),
+    Argument.optional,
+  ),
+  limit: Flag.Int('limit').pipe(
+    Flag.withDescription(
+      `deployments per page, 1-${DEPLOYS_LIMIT.max} (default ${DEPLOYS_LIMIT.default})`,
+    ),
+    Flag.withDefault(DEPLOYS_LIMIT.default),
+  ),
+  cursor: Flag.String('cursor').pipe(
+    Flag.withDescription('continue from a `more:` line'),
+    Flag.optional,
+  ),
 };
 
 export const deploysCommand = Command.make('deploys', deploysOptions, (args) =>
@@ -62,4 +75,15 @@ export const deploysCommand = Command.make('deploys', deploysOptions, (args) =>
       );
     }
   }),
+).pipe(
+  Command.withShortDescription(
+    'deployments: status, commit sha, branch, time, url',
+  ),
+  Command.withDescription(
+    'List deployments of a service, newest first: status, commit, branch, time, url.',
+  ),
+  Command.withExamples([
+    { command: 'traces deploys api' },
+    { command: 'traces deploys web --env preview --limit 3 --json' },
+  ]),
 );

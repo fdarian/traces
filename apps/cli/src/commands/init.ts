@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import {
   fetchVercelProjectName,
+  makeRailwayCliClient,
   type ProviderError,
   railwayLinkedProject,
   railwayProjectLayout,
@@ -25,11 +26,34 @@ import { REPO_CONFIG_FILE } from '#/repo-config.ts';
 import { findVercelToken } from '#/vercel-token.ts';
 
 export const initOptions = {
-  'railway-project': Flag.String('railway-project').pipe(Flag.optional),
-  'jaeger-url': Flag.String('jaeger-url').pipe(Flag.optional),
-  'jaeger-header': Flag.String('jaeger-header').pipe(Flag.atLeast(0)),
-  force: Flag.Boolean('force').pipe(Flag.withDefault(false)),
-  'dry-run': Flag.Boolean('dry-run').pipe(Flag.withDefault(false)),
+  'railway-project': Flag.String('railway-project').pipe(
+    Flag.withDescription(
+      'Railway project id to read services from (default: the project `railway status --json` reports for the git root; a failure there is a stderr note, not an error)',
+    ),
+    Flag.optional,
+  ),
+  'jaeger-url': Flag.String('jaeger-url').pipe(
+    Flag.withDescription(
+      'add `tracing: {provider: jaeger, url}`; without it there is no tracing block',
+    ),
+    Flag.optional,
+  ),
+  'jaeger-header': Flag.String('jaeger-header').pipe(
+    Flag.withDescription(
+      'Name=keychain:<secret>: a tracing header whose value is read from that keychain secret at use time; repeatable; needs --jaeger-url',
+    ),
+    Flag.atLeast(0),
+  ),
+  force: Flag.Boolean('force').pipe(
+    Flag.withDescription(
+      'overwrite an existing traces.json (default: refuse, exit 2)',
+    ),
+    Flag.withDefault(false),
+  ),
+  'dry-run': Flag.Boolean('dry-run').pipe(
+    Flag.withDescription('print the JSON to stdout and write nothing'),
+    Flag.withDefault(false),
+  ),
 };
 
 const describeProviderError = (error: ProviderError) => {
@@ -47,7 +71,9 @@ const railwayCandidates = (
     const projectId = Option.isSome(explicitProject)
       ? explicitProject.value
       : (yield* railwayLinkedProject(toplevel)).id;
-    const layout = yield* railwayProjectLayout(projectId);
+    // No config exists yet to say how to reach Railway, so discovery always uses the `railway` CLI, like the folder link.
+    const client = yield* makeRailwayCliClient;
+    const layout = yield* railwayProjectLayout(client, projectId);
     // `railway status --json` does not say which environment is linked, so the
     // only one that can be picked is the conventional default.
     const hasProduction = layout.environments.some(
@@ -170,13 +196,36 @@ export const initCommand = Command.make('init', initOptions, (args) =>
       yield* emitRecord(mode, { path, service, ref }, formatService);
     }
     const secrets = keychainSecrets(config.tracing);
+    const usesRailway = Object.values(config.services).some(
+      (ref) => 'provider' in ref && ref.provider === 'railway',
+    );
     yield* Console.error(
       [
         'next:',
+        ...(usesRailway
+          ? [
+              '  add "railway": {"auth": ...} to traces.json: a token ({"keychain"} or {"env"}, recommended for agents) or "cli"; see `traces skills get core --ref config`',
+            ]
+          : []),
         '  traces services   (verify)',
         ...secrets.map((name) => `  traces secret set ${name}`),
         `  commit ${REPO_CONFIG_FILE}`,
       ].join('\n'),
     );
   }),
+).pipe(
+  Command.withShortDescription(
+    'write traces.json at the git root from Railway and Vercel',
+  ),
+  Command.withDescription(
+    'Write <git root>/traces.json, discovering the services from the linked Railway project and every Vercel-linked folder, so no config has to be written by hand. Run it from inside the repo; outside a git repository it exits 2. Takes no global flags. See `traces skills get core --ref commands` for what it discovers.',
+  ),
+  Command.withExamples([
+    { command: 'traces init --dry-run' },
+    { command: 'traces init' },
+    {
+      command:
+        'traces init --jaeger-url https://jaeger.example.com --jaeger-header X-API-Key=keychain:myapp.jaeger',
+    },
+  ]),
 );

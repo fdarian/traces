@@ -45,6 +45,7 @@ export {
   ProviderNotFound,
   ProviderRequestError,
   ProviderResponseInvalid,
+  ProviderToolMissing,
 } from './logs/errors.js';
 export type { ErrorGroup } from './logs/errors-group.js';
 export {
@@ -86,11 +87,15 @@ export type { BackwardPage, PageResume } from './logs/paging.js';
 export { pageBackwards } from './logs/paging.js';
 export { Provider } from './logs/provider.js';
 export {
+  checkRailwayAccess,
+  makeRailwayCliClient,
+  makeRailwayHttpClient,
   makeRailwaySource,
   mapRailwayHttpLog,
   mapRailwayLog,
   mapRailwayStatus,
   RAILWAY_RETENTION_NOTE,
+  type RailwayClient,
   railwayLinkedProject,
   railwayProjectLayout,
 } from './logs/railway/index.js';

@@ -86,10 +86,30 @@ const SOURCES = ['logs', 'traces'] as const;
 
 export const errorsOptions = {
   ...globalOptions,
-  service: Argument.String('service').pipe(Argument.optional),
-  since: Flag.String('since').pipe(Flag.optional),
-  until: Flag.String('until').pipe(Flag.optional),
-  source: Flag.Literals('source', SOURCES).pipe(Flag.optional),
+  service: Argument.String('service').pipe(
+    Argument.withDescription(
+      "service name from the config; omit to cover all services of the project. A name the config doesn't list is tried as a Railway service when all the config's Railway services share one Railway project and environment (stderr says so); otherwise exit 2",
+    ),
+    Argument.optional,
+  ),
+  since: Flag.String('since').pipe(
+    Flag.withDescription(
+      `30m | 1h | 2d | ISO timestamp | deploy (default ${DEFAULT_WINDOW}). deploy: each service's window starts at its own latest ready deploy, and groups carry new, deploymentId and deployedAt`,
+    ),
+    Flag.optional,
+  ),
+  until: Flag.String('until').pipe(
+    Flag.withDescription(
+      'window end, same formats except deploy (default now)',
+    ),
+    Flag.optional,
+  ),
+  source: Flag.Literals('source', SOURCES).pipe(
+    Flag.withDescription(
+      'only log groups, or only trace groups (default: both; the trace side runs only when the project has `tracing`)',
+    ),
+    Flag.optional,
+  ),
 };
 
 interface Failure {
@@ -483,4 +503,26 @@ export const errorsCommand = Command.make('errors', errorsOptions, (args) =>
       return yield* new ExitWith({ code: EXIT_CODES.runtime });
     }
   }),
+).pipe(
+  Command.withShortDescription(
+    'error logs and error spans grouped by fingerprint, most frequent first',
+  ),
+  Command.withDescription(
+    'Group error and fatal logs, plus error spans from Jaeger when the project has `tracing`, by fingerprint, most frequent first. Start here for "what is failing".',
+  ),
+  Command.withExamples([
+    { command: 'traces errors api --since 1h' },
+    {
+      command: 'traces errors --since deploy',
+      description: 'then read the groups with new: true',
+    },
+    {
+      command: 'traces errors --since 1d --source traces',
+      description: 'error spans only',
+    },
+    {
+      command: "traces errors --source traces --json | jq -r '.hint'",
+      description: 'trace commands to run',
+    },
+  ]),
 );

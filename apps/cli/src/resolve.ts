@@ -1,12 +1,15 @@
 import {
   type LogSource,
   makeJaegerBackend,
+  makeRailwayCliClient,
+  makeRailwayHttpClient,
   makeRailwaySource,
   makeVercelSource,
+  ProviderAuthError,
   railwayProjectLayout,
   type ServiceTarget,
 } from '@traces/core';
-import { Config, Console, Effect, Option } from 'effect';
+import { Config, Console, Effect, Option, Redacted } from 'effect';
 import { Flag } from 'effect/cli';
 import {
   type HeaderValue,
@@ -16,6 +19,7 @@ import {
   type ProjectSettings,
   readConfig,
   resolveDefaultConfigPath,
+  type SecretRef,
   type ServiceConfig,
 } from '#/config.ts';
 import { EnvVarMissing, UsageError } from '#/errors.ts';
@@ -33,10 +37,30 @@ import {
 import { findVercelToken } from '#/vercel-token.ts';
 
 export const globalOptions = {
-  project: Flag.String('project').pipe(Flag.optional),
-  env: Flag.String('env').pipe(Flag.optional),
-  config: Flag.String('config').pipe(Flag.optional),
-  json: Flag.Boolean('json').pipe(Flag.withDefault(false)),
+  project: Flag.String('project').pipe(
+    Flag.withDescription(
+      'project from the global config; overrides cwd matching and skips the repo traces.json',
+    ),
+    Flag.optional,
+  ),
+  env: Flag.String('env').pipe(
+    Flag.withDescription(
+      'Railway environment name, or Vercel target (production | preview)',
+    ),
+    Flag.optional,
+  ),
+  config: Flag.String('config').pipe(
+    Flag.withDescription(
+      'config file (default: traces.json at the git root, else $XDG_CONFIG_HOME/traces/config.json)',
+    ),
+    Flag.optional,
+  ),
+  json: Flag.Boolean('json').pipe(
+    Flag.withDescription(
+      'NDJSON output even on a TTY (it is the default when piped)',
+    ),
+    Flag.withDefault(false),
+  ),
 };
 
 export interface GlobalFlags {
@@ -154,8 +178,9 @@ const railwayServices = (resolved: ResolvedProject) =>
   );
 
 /** The names are a hint only, so a Railway failure (logged out, offline) just leaves them out. */
-const railwayServiceNames = (project: string) =>
-  railwayProjectLayout(project).pipe(
+const railwayServiceNames = (resolved: ResolvedProject, project: string) =>
+  resolveRailwayClient(resolved).pipe(
+    Effect.flatMap((client) => railwayProjectLayout(client, project)),
     Effect.map((layout) => layout.services.map((service) => service.name)),
     Effect.option,
     Effect.map(Option.getOrUndefined),
@@ -188,7 +213,7 @@ export const selectLogService = (
       const available = `available services in "${resolved.projectName}": ${Object.keys(resolved.project.services).join(', ')}`;
       const live =
         first !== undefined && projects.size === 1
-          ? yield* railwayServiceNames(first.project)
+          ? yield* railwayServiceNames(resolved, first.project)
           : undefined;
       return yield* new UsageError({
         message: `no service named "${name}" in project "${resolved.projectName}"`,
@@ -260,9 +285,32 @@ export const buildTarget = (
   });
 };
 
-export const buildSource = (target: ServiceTarget) =>
+export const missingRailwayAuth = (resolved: ResolvedProject) =>
+  new ProviderAuthError({
+    provider: 'railway',
+    hint: `project "${resolved.projectName}" has Railway services but no railway.auth; either add "railway": { "auth": { "keychain": "${resolved.projectName}.railway" } } to the project config and run traces secret set ${resolved.projectName}.railway (a token; recommended for agents), or add "railway": { "auth": "cli" } to use the logged-in railway CLI`,
+  });
+
+/** The one place that picks the transport: a token goes over HTTP, `cli` shells out to `railway`. */
+export const resolveRailwayClient = (resolved: ResolvedProject) =>
+  Effect.gen(function* () {
+    const auth = resolved.project.railway?.auth;
+    if (auth === undefined) return yield* missingRailwayAuth(resolved);
+    if (auth === 'cli') return yield* makeRailwayCliClient;
+    return yield* makeRailwayHttpClient(
+      Redacted.make(yield* resolveSecretRef(auth)),
+    );
+  });
+
+/** `railwayClient` is passed in so one command run reads the secret once, however many Railway services it builds. */
+export const buildSource = (
+  target: ServiceTarget,
+  railwayClient: ReturnType<typeof resolveRailwayClient>,
+) =>
   target.provider === 'railway'
-    ? makeRailwaySource(target)
+    ? railwayClient.pipe(
+        Effect.flatMap((client) => makeRailwaySource(target, client)),
+      )
     : Effect.gen(function* () {
         const token = yield* findVercelToken;
         return yield* makeVercelSource(target, token.token);
@@ -284,7 +332,7 @@ export const resolveService = (
     const selected = yield* selectLogService(resolved, service);
     const config = yield* requireLogProvider(selected.name, selected.config);
     const target = yield* buildTarget(selected.name, config, flags.env);
-    const source = yield* buildSource(target);
+    const source = yield* buildSource(target, resolveRailwayClient(resolved));
     return {
       resolved,
       name: selected.name,
@@ -296,26 +344,28 @@ export const resolveService = (
 const TRACING_HINT_EXAMPLE =
   '"tracing": {"provider":"jaeger","url":"https://jaeger.example.com","headers":{"X-API-Key":{"keychain":"<name>"}}}';
 
-const resolveHeaderValue = (
-  value: HeaderValue,
+export const resolveSecretRef = (
+  ref: SecretRef,
 ): Effect.Effect<
   string,
   SecretMissing | SecretStoreError | EnvVarMissing | Config.ConfigError,
   Secrets
 > => {
-  if (typeof value === 'string') return Effect.succeed(value);
-  if ('keychain' in value) {
-    return Secrets.use((secrets) => secrets.get(value.keychain));
+  if ('keychain' in ref) {
+    return Secrets.use((secrets) => secrets.get(ref.keychain));
   }
-  return Config.String(value.env).pipe(
+  return Config.String(ref.env).pipe(
     Config.option,
     Effect.flatMap((found) =>
       Option.isSome(found) && found.value !== ''
         ? Effect.succeed(found.value)
-        : new EnvVarMissing({ name: value.env }),
+        : new EnvVarMissing({ name: ref.env }),
     ),
   );
 };
+
+const resolveHeaderValue = (value: HeaderValue) =>
+  typeof value === 'string' ? Effect.succeed(value) : resolveSecretRef(value);
 
 /** Reads keychain and env values only when called, so log commands never touch either. */
 export const resolveHeaders = (
@@ -333,7 +383,7 @@ export const resolveHeaders = (
 const noTracingConfig = (resolved: ResolvedProject) =>
   new UsageError({
     message: `project "${resolved.projectName}" has no tracing config`,
-    hint: `add to ${resolved.configSource === 'repo' ? 'the top level of' : 'the project in'} ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces --help\``,
+    hint: `add to ${resolved.configSource === 'repo' ? 'the top level of' : 'the project in'} ${resolved.configPath}: ${TRACING_HINT_EXAMPLE}; see \`traces skills get core --ref tracing\``,
   });
 
 export const resolveTraceBackend = (resolved: ResolvedProject) =>
@@ -369,10 +419,11 @@ const buildLogService = (
   name: string,
   config: LogServiceConfig,
   env: GlobalFlags['env'],
+  railwayClient: ReturnType<typeof resolveRailwayClient>,
 ) =>
   Effect.gen(function* () {
     const target = yield* buildTarget(name, config, env);
-    const source = yield* buildSource(target);
+    const source = yield* buildSource(target, railwayClient);
     return { target, source };
   });
 
@@ -428,12 +479,18 @@ export const resolveErrorScope = (
         : [],
     );
     // Built once per service: the trace side reuses the log side's source to find the deploy `--since deploy` anchors on.
+    const railwayClient = yield* Effect.cached(resolveRailwayClient(resolved));
     const builds = new Map<string, LogBuild>();
     for (const selected of logCandidates) {
       builds.set(
         selected.name,
         yield* Effect.cached(
-          buildLogService(selected.name, selected.config, flags.env),
+          buildLogService(
+            selected.name,
+            selected.config,
+            flags.env,
+            railwayClient,
+          ),
         ),
       );
     }

@@ -1,4 +1,7 @@
-export { railwayLinkedProject, railwayProjectLayout } from './discovery.js';
+export { makeRailwayCliClient, railwayLinkedProject } from './cli-client.js';
+export { checkRailwayAccess, type RailwayClient } from './client.js';
+export { railwayProjectLayout } from './discovery.js';
+export { makeRailwayHttpClient } from './http-client.js';
 export {
   mapRailwayDeployment,
   mapRailwayHttpLog,

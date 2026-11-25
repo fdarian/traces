@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Redacted } from 'effect';
 import {
   type Cursor,
+  makeRailwayHttpClient,
   makeRailwaySource,
   mapRailwayHttpLog,
   mapRailwayLog,
@@ -9,7 +10,14 @@ import {
   type RailwayTarget,
   shortHash,
 } from '#/index.js';
-import { fakeRailway, fixture, type RailwayCall } from './logs-helpers.ts';
+import {
+  fakeRailwayHttp,
+  fixture,
+  type RailwayCall,
+  type RailwayHttpCall,
+} from './logs-helpers.ts';
+
+const token = Redacted.make('rw-token');
 
 const target: RailwayTarget = {
   provider: 'railway',
@@ -43,9 +51,14 @@ const respondWith =
 const run = <A>(effect: Effect.Effect<A, unknown, never>) =>
   Effect.runPromise(effect);
 
-const sourceWith = (rows: unknown, calls: Array<RailwayCall> = []) =>
-  makeRailwaySource(target).pipe(
-    Effect.provide(fakeRailway(respondWith(rows), calls)),
+const httpSourceFor = (railwayTarget: RailwayTarget) =>
+  makeRailwayHttpClient(token).pipe(
+    Effect.flatMap((client) => makeRailwaySource(railwayTarget, client)),
+  );
+
+const sourceWith = (rows: unknown, calls: Array<RailwayHttpCall> = []) =>
+  httpSourceFor(target).pipe(
+    Effect.provide(fakeRailwayHttp(respondWith(rows), calls)),
   );
 
 describe('railway log mapping', () => {
@@ -204,7 +217,7 @@ describe('railway log mapping', () => {
 
 describe('railway source', () => {
   test('trims the limit+1 extra row and signals more history', async () => {
-    const calls: Array<RailwayCall> = [];
+    const calls: Array<RailwayHttpCall> = [];
     const page = await run(
       Effect.flatMap(sourceWith(logRows, calls), (source) =>
         source.logs({
@@ -222,7 +235,7 @@ describe('railway source', () => {
     expect(page.next?.kind).toBe('railway-time');
     const query = calls.find((c) => c.document.includes('environmentLogs'));
     expect(query?.variables.f).toBe(`@service:svc-api`);
-    expect(query?.variables.l).toBe('3');
+    expect(query?.variables.l).toBe(3);
   });
 
   test('does not signal more history when the window is exhausted', async () => {
@@ -236,7 +249,7 @@ describe('railway source', () => {
   });
 
   test('builds level and grep filters', async () => {
-    const calls: Array<RailwayCall> = [];
+    const calls: Array<RailwayHttpCall> = [];
     await run(
       Effect.flatMap(sourceWith([], calls), (source) =>
         source.logs({ levels: ['error', 'warn'], grep: 'say "hi"', limit: 10 }),
@@ -266,9 +279,9 @@ describe('railway source', () => {
   });
 
   test('resolves services and environments by name, failing with the available names', async () => {
-    const missing = makeRailwaySource({ ...target, serviceName: 'ghost' }).pipe(
+    const missing = httpSourceFor({ ...target, serviceName: 'ghost' }).pipe(
       Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
-      Effect.provide(fakeRailway(respondWith([]))),
+      Effect.provide(fakeRailwayHttp(respondWith([]))),
       Effect.result,
     );
     const result = await run(missing);
@@ -281,15 +294,15 @@ describe('railway source', () => {
   });
 
   test('resolves services and environments given by id', async () => {
-    const calls: Array<RailwayCall> = [];
+    const calls: Array<RailwayHttpCall> = [];
     await run(
-      makeRailwaySource({
+      httpSourceFor({
         ...target,
         serviceName: 'svc-web',
         environment: 'env-stg',
       }).pipe(
         Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
-        Effect.provide(fakeRailway(respondWith([]), calls)),
+        Effect.provide(fakeRailwayHttp(respondWith([]), calls)),
       ),
     );
     const query = calls.find((c) => c.document.includes('environmentLogs'));
@@ -319,7 +332,7 @@ describe('railway source', () => {
   });
 
   test('latest deployment skips SKIPPED ones for build logs', async () => {
-    const calls: Array<RailwayCall> = [];
+    const calls: Array<RailwayHttpCall> = [];
     await run(
       Effect.flatMap(sourceWith([], calls), (source) =>
         source.buildLogs({ levels: [], limit: 5, deploymentId: 'latest' }),
@@ -329,26 +342,71 @@ describe('railway source', () => {
     expect(build?.variables.d).toBe('dep-ready');
   });
 
-  test('turns "Not Authorized" into an auth error', async () => {
-    const result = await run(
-      makeRailwaySource(target).pipe(
-        Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
-        Effect.provide(
-          fakeRailway(() => null, [], {
-            exitCode: 1,
-            stdout: JSON.stringify({
-              data: null,
-              errors: [{ message: 'Not Authorized' }],
-            }),
-          }),
+  describe('transport', () => {
+    const failWith = (
+      override: { readonly status?: number; readonly body: unknown },
+      calls: Array<RailwayHttpCall> = [],
+    ) =>
+      run(
+        httpSourceFor(target).pipe(
+          Effect.flatMap((source) => source.logs({ levels: [], limit: 1 })),
+          Effect.provide(fakeRailwayHttp(() => null, calls, override)),
+          Effect.flip,
         ),
-        Effect.result,
-      ),
-    );
-    expect(result._tag).toBe('Failure');
-    if (result._tag === 'Failure') {
-      expect(result.failure).toMatchObject({ _tag: 'ProviderAuthError' });
-    }
+      );
+
+    test('sends the token as a bearer header', async () => {
+      const calls: Array<RailwayHttpCall> = [];
+      await run(
+        Effect.flatMap(sourceWith([], calls), (source) =>
+          source.logs({ levels: [], limit: 1 }),
+        ),
+      );
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(call.authorization).toBe('Bearer rw-token');
+      }
+    });
+
+    test('sends numeric variables as numbers and drops undefined ones', async () => {
+      const calls: Array<RailwayHttpCall> = [];
+      await run(
+        Effect.flatMap(sourceWith([], calls), (source) =>
+          source.logs({ levels: [], limit: 1 }),
+        ),
+      );
+      const query = calls.find((c) => c.document.includes('environmentLogs'));
+      expect(typeof query?.variables.l).toBe('number');
+      expect(query?.variables).not.toHaveProperty('b');
+    });
+
+    test('turns a 200 with "Not Authorized" errors into an auth error', async () => {
+      const failure = await failWith({
+        body: { data: null, errors: [{ message: 'Not Authorized' }] },
+      });
+      expect(failure).toMatchObject({ _tag: 'ProviderAuthError' });
+    });
+
+    test('turns HTTP 401 into an auth error', async () => {
+      const failure = await failWith({ status: 401, body: {} });
+      expect(failure).toMatchObject({ _tag: 'ProviderAuthError' });
+    });
+
+    test('turns HTTP 429 into a rate-limit request error', async () => {
+      const failure = await failWith({ status: 429, body: {} });
+      expect(failure).toMatchObject({ _tag: 'ProviderRequestError' });
+      expect(String((failure as { cause: unknown }).cause)).toContain(
+        'rate limited by Railway',
+      );
+    });
+
+    test('reports other GraphQL errors as request errors with the messages', async () => {
+      const failure = await failWith({
+        body: { data: null, errors: [{ message: 'boom' }] },
+      });
+      expect(failure).toMatchObject({ _tag: 'ProviderRequestError' });
+      expect(String((failure as { cause: unknown }).cause)).toContain('boom');
+    });
   });
 
   test('fails loudly when a row has the wrong shape', async () => {

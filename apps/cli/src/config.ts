@@ -58,12 +58,17 @@ const HeaderName = Schema.String.check(
   }),
 );
 
-/** A literal, `{ env }` (read at use time) or `{ keychain }` (read from the OS keychain at use time). */
-const HeaderValue = Schema.Union([
-  NonEmpty,
+/** `{ env }` or `{ keychain }`, both read at use time. */
+const SecretRef = Schema.Union([
   Schema.Struct({ env: NonEmpty }),
   Schema.Struct({ keychain: NonEmpty }),
 ]);
+
+/** A token the CLI sends to Railway's API, or `cli` to borrow the logged-in `railway` binary. */
+const RailwayAuth = Schema.Union([SecretRef, Schema.Literal('cli')]);
+
+/** A literal or a `SecretRef`. */
+const HeaderValue = Schema.Union([NonEmpty, SecretRef]);
 
 const TracingConfig = Schema.Struct({
   provider: Schema.Literal('jaeger'),
@@ -84,6 +89,8 @@ const Matcher = Schema.Union([
 
 const projectFields = {
   tracing: Schema.optional(TracingConfig),
+  /** Optional at decode time: it is required only when a Railway service is actually used. */
+  railway: Schema.optional(Schema.Struct({ auth: RailwayAuth })),
   services: Schema.Record(Identifier, ServiceConfig).check(
     Schema.makeFilter((services) => Object.keys(services).length > 0, {
       message: 'a project needs at least one service',
@@ -113,6 +120,8 @@ export type RepoConfig = typeof RepoConfigSchema.Type;
 export type ServiceConfig = typeof ServiceConfig.Type;
 export type TracingConfig = typeof TracingConfig.Type;
 export type HeaderValue = typeof HeaderValue.Type;
+export type SecretRef = typeof SecretRef.Type;
+export type RailwayAuth = typeof RailwayAuth.Type;
 export type LogServiceConfig = Exclude<
   ServiceConfig,
   typeof TraceOnlyService.Type
@@ -138,7 +147,7 @@ export const resolveDefaultConfigPath = Effect.gen(function* () {
 });
 
 const EXAMPLE_HINT =
-  '`traces --help` shows a minimal example for each provider';
+  '`traces skills get core --ref config` shows a minimal example for each provider';
 
 const createFileHint = (path: string) =>
   `run \`traces init\` in the repo to write traces.json, or create ${path}; ${EXAMPLE_HINT}`;

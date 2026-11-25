@@ -47,7 +47,11 @@ const configWith = (services: Record<string, object>) => {
     path,
     JSON.stringify({
       projects: {
-        app: { matcher: { type: 'git', repo: 'acme/app' }, services },
+        app: {
+          matcher: { type: 'git', repo: 'acme/app' },
+          railway: { auth: 'cli' },
+          services,
+        },
       },
     }),
   );

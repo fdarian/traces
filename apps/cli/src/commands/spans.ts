@@ -62,16 +62,56 @@ const optionalDuration = (flag: string, value: Option.Option<string>) =>
 
 export const spansOptions = {
   ...globalOptions,
-  service: Argument.String('service').pipe(Argument.optional),
-  since: Flag.String('since').pipe(Flag.optional),
-  until: Flag.String('until').pipe(Flag.optional),
-  op: Flag.String('op').pipe(Flag.optional),
-  'min-duration': Flag.String('min-duration').pipe(Flag.optional),
-  'max-duration': Flag.String('max-duration').pipe(Flag.optional),
-  errors: Flag.Boolean('errors').pipe(Flag.withDefault(false)),
-  attr: Flag.String('attr').pipe(Flag.atLeast(0)),
-  limit: Flag.Int('limit').pipe(Flag.withDefault(SPANS_LIMIT.default)),
-  cursor: Flag.String('cursor').pipe(Flag.optional),
+  service: Argument.String('service').pipe(
+    Argument.withDescription(
+      'service name from the config; optional when the project has exactly one',
+    ),
+    Argument.optional,
+  ),
+  since: Flag.String('since').pipe(
+    Flag.withDescription(
+      `30m | 1h | 2d | ISO timestamp (default ${DEFAULT_WINDOW})`,
+    ),
+    Flag.optional,
+  ),
+  until: Flag.String('until').pipe(
+    Flag.withDescription('window end, same formats (default now)'),
+    Flag.optional,
+  ),
+  op: Flag.String('op').pipe(
+    Flag.withDescription('only traces with this operation name (exact match)'),
+    Flag.optional,
+  ),
+  'min-duration': Flag.String('min-duration').pipe(
+    Flag.withDescription(
+      'only traces at least this long: 500ms | 1s | 1.5s | 2m | 1h',
+    ),
+    Flag.optional,
+  ),
+  'max-duration': Flag.String('max-duration').pipe(
+    Flag.withDescription('only traces at most this long, same formats'),
+    Flag.optional,
+  ),
+  errors: Flag.Boolean('errors').pipe(
+    Flag.withDescription('only traces with at least one error span'),
+    Flag.withDefault(false),
+  ),
+  attr: Flag.String('attr').pipe(
+    Flag.withDescription(
+      'only traces with a span attribute equal to the value (k=v); repeat for several. Without /api/traces on tracing.url it reads whole traces through /api/v3 and matches on the client (slower)',
+    ),
+    Flag.atLeast(0),
+  ),
+  limit: Flag.Int('limit').pipe(
+    Flag.withDescription(
+      `traces per page, 1-${SPANS_LIMIT.max} (default ${SPANS_LIMIT.default})`,
+    ),
+    Flag.withDefault(SPANS_LIMIT.default),
+  ),
+  cursor: Flag.String('cursor').pipe(
+    Flag.withDescription('continue backwards from a `more:` line'),
+    Flag.optional,
+  ),
 };
 
 export const spansCommand = Command.make('spans', spansOptions, (args) =>
@@ -254,4 +294,21 @@ export const spansCommand = Command.make('spans', spansOptions, (args) =>
       );
     }
   }),
+).pipe(
+  Command.withShortDescription(
+    'search traces of a service in Jaeger, oldest to newest',
+  ),
+  Command.withDescription(
+    `List traces that touch a service's otelService, one summary per trace. Default: the last ${DEFAULT_WINDOW}. Needs a \`tracing\` block in the project config.`,
+  ),
+  Command.withExamples([
+    {
+      command: 'traces spans web --min-duration 1s',
+      description: 'slow requests',
+    },
+    { command: 'traces spans web --errors --since 1d' },
+    {
+      command: 'traces spans web --op "GET /api/x" --attr http.status_code=500',
+    },
+  ]),
 );

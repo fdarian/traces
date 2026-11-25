@@ -165,6 +165,7 @@ const configFor = (withTracing: boolean) => {
       projects: {
         app: {
           matcher: { type: 'git', repo: 'acme/app' },
+          railway: { auth: 'cli' },
           ...(withTracing
             ? {
                 tracing: {

@@ -29,14 +29,13 @@ describe('hoistGlobalFlags', () => {
     expect(hoist()).toEqual([]);
   });
 
-  test('stops at unknown flags and help', () => {
+  test('stops at unknown flags', () => {
     expect(hoist('--json', '--help')).toEqual(['--json', '--help']);
     expect(hoist('--json', '--bogus', 'logs')).toEqual([
       '--json',
       '--bogus',
       'logs',
     ]);
-    expect(hoist('--json', 'help', 'logs')).toEqual(['--json', 'help', 'logs']);
   });
 
   test('leaves a dangling value flag or a missing command alone', () => {

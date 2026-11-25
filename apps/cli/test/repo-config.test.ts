@@ -91,6 +91,19 @@ describe('findRepoConfig', () => {
     expect(found.project.services).toEqual(services);
   });
 
+  test('carries railway.auth to the project', async () => {
+    const repo = join(root, 'railway-repo');
+    initRepo(repo);
+    write(join(repo, 'traces.json'), {
+      railway: { auth: { keychain: 'app.railway' } },
+      services,
+    });
+    const found = Option.getOrThrow(await find(repo));
+    expect(found.project.railway).toEqual({
+      auth: { keychain: 'app.railway' },
+    });
+  });
+
   test('walks up from a subdirectory, and an explicit name wins', async () => {
     const repo = join(root, 'walk-repo');
     initRepo(repo);
