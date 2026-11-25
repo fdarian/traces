@@ -21,4 +21,8 @@ export interface LogSource {
   readonly deployments: (
     query: DeploymentQuery,
   ) => Effect.Effect<DeploymentPage, ProviderError>;
+  /** A concrete id comes back unchanged; `latest` becomes the id of the newest deployment, so a caller can pin it across pages. */
+  readonly resolveDeploymentId: (
+    requested: string,
+  ) => Effect.Effect<string, ProviderError>;
 }

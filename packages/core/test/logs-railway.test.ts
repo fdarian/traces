@@ -407,6 +407,79 @@ describe('railway source', () => {
     expect(build?.variables.d).toBe('dep-ready');
   });
 
+  describe('resolving latest', () => {
+    const deploymentNode = (id: string, status: string, createdAt: string) => ({
+      node: { id, status, createdAt, staticUrl: null, meta: null },
+    });
+    const pagedDeployments = (calls: Array<RailwayHttpCall>) =>
+      httpSourceFor(target).pipe(
+        Effect.provide(
+          fakeRailwayHttp((call) => {
+            if (call.document.includes('project(id'))
+              return fixture('railway-project.json');
+            if (call.document.includes('deployments(')) {
+              const first = call.variables.after === undefined;
+              return {
+                deployments: {
+                  edges: first
+                    ? Array.from({ length: 10 }, (_, index) =>
+                        deploymentNode(
+                          `dep-skipped-${index}`,
+                          'SKIPPED',
+                          '2026-10-11T00:00:00.000Z',
+                        ),
+                      )
+                    : [
+                        deploymentNode(
+                          'dep-failed',
+                          'FAILED',
+                          '2026-10-10T00:00:00.000Z',
+                        ),
+                        deploymentNode(
+                          'dep-ok',
+                          'SUCCESS',
+                          '2026-10-09T00:00:00.000Z',
+                        ),
+                      ],
+                  pageInfo: {
+                    hasNextPage: first,
+                    endCursor: first ? 'page-2' : null,
+                  },
+                },
+              };
+            }
+            throw new Error(`unexpected query: ${call.document}`);
+          }, calls),
+        ),
+      );
+
+    test('pages past ten deployments when they are all skipped', async () => {
+      const calls: Array<RailwayHttpCall> = [];
+      const id = await run(
+        Effect.flatMap(pagedDeployments(calls), (source) =>
+          source.resolveDeploymentId('latest'),
+        ),
+      );
+      expect(id).toBe('dep-failed');
+      expect(
+        calls
+          .filter((call) => call.document.includes('deployments('))
+          .map((call) => call.variables.after),
+      ).toEqual([undefined, 'page-2']);
+    });
+
+    test('a concrete id comes back unchanged without a request', async () => {
+      const calls: Array<RailwayHttpCall> = [];
+      const id = await run(
+        Effect.flatMap(pagedDeployments(calls), (source) =>
+          source.resolveDeploymentId('dep-given'),
+        ),
+      );
+      expect(id).toBe('dep-given');
+      expect(calls).toEqual([]);
+    });
+  });
+
   describe('transport', () => {
     const failWith = (
       override: { readonly status?: number; readonly body: unknown },

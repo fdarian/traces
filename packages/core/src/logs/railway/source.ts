@@ -149,18 +149,20 @@ export const makeRailwaySource = (
     const resolveDeploymentId = (requested: string | undefined) =>
       Effect.gen(function* () {
         if (requested !== undefined && requested !== 'latest') return requested;
-        const page = yield* deployments({ limit: 10 });
-        const latest = page.deployments.find(
-          (deployment) => deployment.rawStatus !== 'SKIPPED',
-        );
-        if (latest === undefined) {
-          return yield* new ProviderNotFound({
-            provider: PROVIDER,
-            what: `a deployment of ${target.service} in ${target.environment}`,
-            hint: 'run `traces deploys` to see what exists',
-          });
-        }
-        return latest.id;
+        let cursor: DeploymentQuery['cursor'];
+        do {
+          const page = yield* deployments({ limit: 10, cursor });
+          const latest = page.deployments.find(
+            (deployment) => deployment.rawStatus !== 'SKIPPED',
+          );
+          if (latest !== undefined) return latest.id;
+          cursor = page.next;
+        } while (cursor !== undefined);
+        return yield* new ProviderNotFound({
+          provider: PROVIDER,
+          what: `a deployment of ${target.service} in ${target.environment}`,
+          hint: 'run `traces deploys` to see what exists',
+        });
       });
 
     const timeCursor = (input: LogQuery): TimeCursor | undefined =>
@@ -361,6 +363,7 @@ export const makeRailwaySource = (
       httpLogs,
       buildLogs,
       deployments,
+      resolveDeploymentId,
     };
     return source;
   });

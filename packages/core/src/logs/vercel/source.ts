@@ -328,6 +328,7 @@ export const makeVercelSource = (
       httpLogs,
       buildLogs,
       deployments,
+      resolveDeploymentId,
     };
     return source;
   });

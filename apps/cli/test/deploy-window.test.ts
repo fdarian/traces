@@ -31,6 +31,9 @@ if (document.includes('project(')) {
     edges: state.deployments.map((node) => ({ node })),
     pageInfo: { hasNextPage: false, endCursor: null },
   } });
+} else if (document.includes('deploymentLogs') || document.includes('buildLogs')) {
+  const rows = state.logs.slice(-(Number(vars.l) + 1));
+  reply({ [document.includes('buildLogs') ? 'buildLogs' : 'deploymentLogs']: rows });
 } else if (document.includes('environmentLogs')) {
   const before = Date.parse(vars.a);
   const since = vars.b === undefined ? -Infinity : Date.parse(vars.b);
@@ -527,6 +530,43 @@ describe('an inverted window', () => {
       expect(result.stderr).toContain('--since is not before now');
     });
   }
+});
+
+describe('traces logs --deploy latest', () => {
+  const NEWEST = deployment('dep-newest', 'SUCCESS', DEPLOY_AT);
+
+  test('the more: command pins the resolved deployment, not the word latest', async () => {
+    const state = writeState('latest-more', [NEWEST, DEPLOYMENTS[3] as object]);
+    const result = await spawnCli(
+      'logs',
+      [
+        'api',
+        '--deploy',
+        'latest',
+        '--since',
+        '2026-10-15T00:00:00Z',
+        '--limit',
+        '2',
+      ],
+      configFor(false),
+      state,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain('--deploy dep-newest');
+    expect(result.stderr).not.toContain('--deploy latest');
+  });
+
+  test('--build defaults to latest and its more: command pins the deployment too', async () => {
+    const state = writeState('build-more', [NEWEST]);
+    const result = await spawnCli(
+      'logs',
+      ['api', '--build', '--limit', '2'],
+      configFor(false),
+      state,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain('--deploy dep-newest');
+  });
 });
 
 describe('traces logs --since deploy', () => {

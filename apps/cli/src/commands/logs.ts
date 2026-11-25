@@ -158,7 +158,7 @@ export const logsOptions = {
   ),
   deploy: Flag.String('deploy').pipe(
     Flag.withDescription(
-      'one deployment (id or latest) instead of the whole service',
+      'one deployment (id, or latest: the newest of any status, Railway skipping SKIPPED ones) instead of the whole service',
     ),
     Flag.optional,
   ),
@@ -253,14 +253,20 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
       since = when?.at;
       if (since !== undefined) yield* requireWindow(since, until, now);
     }
+    const requestedDeployment =
+      Option.getOrUndefined(args.deploy) ??
+      (kind === 'build' ? 'latest' : undefined);
+    // `latest` is resolved once so the `more:` command pages the same deployment even if a newer one lands.
+    const deploymentId =
+      requestedDeployment === undefined
+        ? undefined
+        : yield* resolved.source.resolveDeploymentId(requestedDeployment);
     const query: LogQuery = {
       since,
       until,
       levels,
       grep: Option.getOrUndefined(args.grep),
-      deploymentId:
-        Option.getOrUndefined(args.deploy) ??
-        (kind === 'build' ? 'latest' : undefined),
+      deploymentId,
       limit: args.limit,
       cursor,
     };
@@ -305,7 +311,7 @@ export const logsCommand = Command.make('logs', logsOptions, (args) =>
             ['until', Option.getOrUndefined(args.until)],
             ['level', Option.getOrUndefined(args.level)],
             ['grep', Option.getOrUndefined(args.grep)],
-            ['deploy', Option.getOrUndefined(args.deploy)],
+            ['deploy', deploymentId],
             ['build', args.build],
             ['http', args.http],
             ['limit', String(args.limit)],

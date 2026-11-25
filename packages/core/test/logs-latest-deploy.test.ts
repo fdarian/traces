@@ -35,6 +35,7 @@ const fakeSource = (
     logs: unused,
     httpLogs: unused,
     buildLogs: unused,
+    resolveDeploymentId: unused,
     deployments: (query) => {
       queries.push(query);
       const offset =
