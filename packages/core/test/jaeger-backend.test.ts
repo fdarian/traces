@@ -231,6 +231,23 @@ describe('searchTraces with attributes', () => {
     expect(request?.headers['x-api-key']).toBe('k');
   });
 
+  test('rounds the window end up, so a resume bound inside a millisecond keeps that millisecond', async () => {
+    const { client, requests } = recordingClient(200, {
+      data: [],
+      total: 0,
+      errors: null,
+    });
+    await run(client, { url: 'http://localhost:16686', headers: {} }, (b) =>
+      b.searchTraces({
+        ...query,
+        startTimeMax: '2026-10-15T00:00:00.123456000Z',
+      }),
+    );
+    expect(requests[0]?.url.searchParams.get('end')).toBe(
+      String(Date.parse('2026-10-15T00:00:00.123Z') * 1000 + 456),
+    );
+  });
+
   test('summarizes the legacy traces, counting error spans from either error tag', async () => {
     const { client } = recordingClient(200, {
       data: [

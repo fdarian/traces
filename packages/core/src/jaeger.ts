@@ -29,6 +29,7 @@ import type {
   TraceSummary,
 } from './model.js';
 import {
+  isoToEpochMicrosCeil,
   nanoToIso,
   normalizeAttributes,
   normalizeDurationMs,
@@ -37,7 +38,7 @@ import {
   normalizeTimestamp,
 } from './normalize.js';
 import { attributePage, scanTraceWindow } from './traces/paging.js';
-import { computeTraceSummary } from './traces/summary.js';
+import { computeTraceSummary, countServices } from './traces/summary.js';
 
 export function buildSearchParams(query: TraceQuery): URLSearchParams {
   const params = new URLSearchParams();
@@ -62,6 +63,9 @@ export function buildSearchParams(query: TraceQuery): URLSearchParams {
 // Not in buildSearchParams: the v3 gateway ignores `query.attributes`
 // (jaeger v2.15.0 sets it to an empty map), so a tag search goes through the
 // legacy API, which takes the window in epoch microseconds.
+// The window end is rounded up, never down: a page cut inside a millisecond
+// resumes at a sub-millisecond bound, and flooring it would skip the unseen
+// traces of that millisecond. `pageBackwards` drops the rows re-sent above the cut.
 export function buildLegacySearchParams(query: TraceQuery): URLSearchParams {
   const params = new URLSearchParams();
   params.append('service', query.service);
@@ -69,7 +73,7 @@ export function buildLegacySearchParams(query: TraceQuery): URLSearchParams {
     params.append('operation', query.operation);
   }
   params.append('start', String(Date.parse(query.startTimeMin) * 1000));
-  params.append('end', String(Date.parse(query.startTimeMax) * 1000));
+  params.append('end', String(isoToEpochMicrosCeil(query.startTimeMax)));
   if (query.minDuration !== undefined) {
     params.append('minDuration', query.minDuration);
   }
@@ -183,13 +187,10 @@ export function mapLegacyTrace(trace: JaegerLegacyTrace): TraceSummary {
   };
   const root = trace.spans.find((span) => (span.references ?? []).length === 0);
 
-  const serviceMap: Map<string, number> = new Map();
   let errorSpanCount = 0;
   let minStartMicros = Number.POSITIVE_INFINITY;
   let maxEndMicros = Number.NEGATIVE_INFINITY;
   for (const span of trace.spans) {
-    const serviceName = serviceOf(span);
-    serviceMap.set(serviceName, (serviceMap.get(serviceName) ?? 0) + 1);
     if (isLegacyErrorSpan(span)) errorSpanCount += 1;
     minStartMicros = Math.min(minStartMicros, span.startTime);
     maxEndMicros = Math.max(maxEndMicros, span.startTime + span.duration);
@@ -201,10 +202,7 @@ export function mapLegacyTrace(trace: JaegerLegacyTrace): TraceSummary {
     rootOperation: root !== undefined ? root.operationName : 'unknown',
     spanCount: trace.spans.length,
     errorSpanCount,
-    services: Array.from(serviceMap.entries()).map(([name, spanCount]) => ({
-      name,
-      spanCount,
-    })),
+    services: countServices(trace.spans.map(serviceOf)),
     startTimeUnixNano: (BigInt(minStartMicros) * 1000n).toString(),
     durationMs: Math.floor((maxEndMicros - minStartMicros) / 1000),
   };
