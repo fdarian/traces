@@ -28,7 +28,7 @@ import { findVercelToken } from '#/vercel-token.ts';
 export const initOptions = {
   'railway-project': Flag.String('railway-project').pipe(
     Flag.withDescription(
-      'Railway project id to read services from (default: the project `railway status --json` reports for the git root; a folder with no Railway link is a stderr note, any other failure is an error)',
+      'Railway project id to read services from (default: the project `railway status --json` reports for the git root; a folder with no Railway link, or no `railway` binary, is a stderr note; any other failure is an error)',
     ),
     Flag.optional,
   ),
@@ -63,15 +63,19 @@ const describeProviderError = (error: ProviderError) => {
     : `${rendered.message} (${rendered.hint})`;
 };
 
-/** Only a folder with no Railway link is skipped; a failed lookup would silently drop the Railway services from the config. */
+const skipRailway = (error: ProviderError) =>
+  Console.error(`note: railway: skipped: ${describeProviderError(error)}`).pipe(
+    Effect.as(Option.none<string>()),
+  );
+
+/** Only a folder with no Railway link, or no `railway` binary at all (a Vercel-only user), is skipped; any other failed lookup would silently drop the Railway services from the config. */
 const linkedRailwayProject = (toplevel: string) =>
   railwayLinkedProject(toplevel).pipe(
     Effect.map((link) => Option.some(link.id)),
-    Effect.catchTag('ProviderNotFound', (error) =>
-      Console.error(
-        `note: railway: skipped: ${describeProviderError(error)}`,
-      ).pipe(Effect.as(Option.none<string>())),
-    ),
+    Effect.catchTags({
+      ProviderNotFound: skipRailway,
+      ProviderToolMissing: skipRailway,
+    }),
   );
 
 const railwayCandidates = (

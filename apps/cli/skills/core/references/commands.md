@@ -8,7 +8,7 @@ Write `<git root>/traces.json`, discovering the services from the linked Railway
 
 Usage: `traces init [flags]`
 
-Flags: `--railway-project <id>` (default: the project `railway status --json` reports for the git root; a folder with no Railway link is a stderr note, any other failure is an error), `--jaeger-url <url>` (adds `tracing: {provider: jaeger, url}`; without it there is no tracing block), `--jaeger-header <Name>=keychain:<secret>` (repeatable; needs `--jaeger-url`), `--force` (overwrite an existing traces.json; default: refuse, exit 2), `--dry-run` (print the JSON and write nothing).
+Flags: `--railway-project <id>` (default: the project `railway status --json` reports for the git root; a folder with no Railway link, or no `railway` binary, is a stderr note; any other failure is an error), `--jaeger-url <url>` (adds `tracing: {provider: jaeger, url}`; without it there is no tracing block), `--jaeger-header <Name>=keychain:<secret>` (repeatable; needs `--jaeger-url`), `--force` (overwrite an existing traces.json; default: refuse, exit 2), `--dry-run` (print the JSON and write nothing).
 
 Examples:
 
@@ -24,7 +24,7 @@ with --dry-run, the traces.json content (pretty-printed JSON, not NDJSON). Other
 
 ### Notes
 
-- Railway: every service of the project becomes an entry {provider, project, service, environment}; environment is "production" when the project has one, else left out. `railway status --json` does not say which environment is linked, so a non-production link is not detected. Discovery always goes through the `railway` CLI (the folder link, then the project's services), whatever `railway.auth` is: there is no config yet to say otherwise. A folder not linked to a Railway project is a stderr note, not an error; a CLI that is missing, logged out or failing fails `init` (exit 3 when logged out, else 1) and writes nothing, as does any failure with `--railway-project`.
+- Railway: every service of the project becomes an entry {provider, project, service, environment}; environment is "production" when the project has one, else left out. `railway status --json` does not say which environment is linked, so a non-production link is not detected. Discovery always goes through the `railway` CLI (the folder link, then the project's services), whatever `railway.auth` is: there is no config yet to say otherwise. A folder not linked to a Railway project, or a machine without the `railway` binary (a Vercel-only user), is a stderr note, not an error; a CLI that is logged out or failing fails `init` (exit 3 when logged out, else 1) and writes nothing. With `--railway-project` there is no skip: a missing binary or any other failure fails `init`.
 - When any Railway service is written, init also writes `"railway": {"auth": "cli"}`: discovery just proved the `railway` CLI works for this user. To use a token instead (recommended for agents), replace it with a `{"keychain"}` or `{"env"}` ref; see [config](config.md).
 - Vercel: each `.vercel/project.json` up to 3 folders below the git root (skipping node_modules) becomes {provider: vercel, project: <projectId>, team: <orgId>} (team only when the orgId starts with `team_`; a personal account's orgId is a user id, so the entry has no team). The key is the project name from the Vercel API; without a token it is the file's projectName, else the folder name.
 - Keys are the service names reduced to letters, digits, `_` and `-`. A name used by both providers becomes `<name>-railway` and `<name>-vercel`.

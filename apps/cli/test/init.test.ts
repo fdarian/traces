@@ -7,6 +7,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -166,6 +167,11 @@ beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), 'traces-init-')));
   mkdirSync(join(root, 'bin'));
   mkdirSync(join(root, 'home'));
+  // The one tool init needs besides `railway`, so a missing binary is the only thing that differs.
+  mkdirSync(join(root, 'no-railway'));
+  const git = Bun.which('git');
+  if (git === null) throw new Error('git is not on PATH');
+  symlinkSync(git, join(root, 'no-railway', 'git'));
   const script = join(root, 'bin', 'railway');
   writeFileSync(
     script,
@@ -250,14 +256,23 @@ const traces = (
     | 'unlinked'
     | 'missing'
     | 'logged-out'
-    | 'broken' = 'linked',
+    | 'broken'
+    | 'not-installed' = 'linked',
 ) => {
   const run = Bun.spawnSync(
-    ['bun', join(import.meta.dir, '..', 'src', 'main.ts'), 'init', ...args],
+    [
+      process.execPath,
+      join(import.meta.dir, '..', 'src', 'main.ts'),
+      'init',
+      ...args,
+    ],
     {
       cwd,
       env: {
-        PATH: `${join(root, 'bin')}:${process.env.PATH}`,
+        PATH:
+          fakeRailway === 'not-installed'
+            ? join(root, 'no-railway')
+            : `${join(root, 'bin')}:${process.env.PATH}`,
         HOME: join(root, 'home'),
         XDG_DATA_HOME: join(root, 'home', 'data'),
         FAKE_RAILWAY: fakeRailway,
@@ -402,6 +417,25 @@ describe('traces init', () => {
     const config = await decode(run.stdout);
     expect(Object.keys(config.services)).toEqual(['site']);
     expect(config.railway).toBeUndefined();
+  });
+
+  test('a missing railway binary is a note, and Vercel links alone still work', async () => {
+    const repo = newRepo('no-railway-binary');
+    link(repo, { projectName: 'site' });
+    const run = traces(repo, ['--dry-run'], 'not-installed');
+    expect(run.code).toBe(0);
+    expect(run.stderr).toContain('railway: skipped');
+    expect(run.stderr).toContain('install the Railway CLI');
+    const config = await decode(run.stdout);
+    expect(Object.keys(config.services)).toEqual(['site']);
+  });
+
+  test('a missing railway binary with --railway-project is still an error', () => {
+    const repo = newRepo('no-railway-binary-explicit');
+    link(repo);
+    const run = traces(repo, ['--railway-project', 'p'], 'not-installed');
+    expect(run.code).toBe(3);
+    expect(run.stderr).toContain('install the Railway CLI');
   });
 
   test('a Railway auth failure fails init with exit 3 and writes nothing, even with a Vercel link', () => {
