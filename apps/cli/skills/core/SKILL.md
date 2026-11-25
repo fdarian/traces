@@ -13,7 +13,7 @@ Flags and examples: `traces <command> --help`. Deeper topics are listed under Re
 
 The project comes from the repo's `traces.json` (found walking up from the cwd to the git root; `traces init` writes it), else the cwd's git remote or path is matched against the global config; `--project <name>` skips `traces.json` and picks from the global config. The service is the positional argument, and may be omitted when the project has exactly one (`traces errors` without one covers all services). A Railway service the config doesn't list is looked up by id or name in every Railway project the config uses; if it exists in exactly one, that one is used. When only the environment differs (one project, several environments), pass `--env <name>`. Global flags may come before the command. Run `traces services` to see what matched and whether each provider is authenticated. Railway services need `railway.auth` in the config: a token (`{"keychain"}` or `{"env"}`, recommended for agents) or `"cli"` for the logged-in `railway` CLI; see the config reference.
 
-Global flags (not on `init`): `--project <name>`, `--env <name>` (Railway environment name, or Vercel target: production | preview), `--config <path>`, `--json`.
+Global flags (not on `init` or `secret`; `skills` takes only `--json`): `--project <name>`, `--env <name>` (Railway environment name, or Vercel target: production | preview), `--config <path>`, `--json`.
 
 ## Commands
 

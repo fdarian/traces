@@ -17,6 +17,7 @@ stdout: compact text by default, piped or on a terminal; `--json` prints JSON in
 
 - `logs --limit`: default 100, max 1000 per page.
 - `deploys --limit`: default 10, max 100 per page.
+- `spans --limit`: default 20, max 200.
 - `errors` has no `--limit`: it reads at most 2000 error logs per service, and fetches at most 200 error traces per service.
 
 ## Retention

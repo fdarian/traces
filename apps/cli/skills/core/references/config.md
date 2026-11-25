@@ -48,7 +48,14 @@ Tracing is configured per project, see [tracing](tracing.md).
 One project, no `projects` map and no `matcher`: the file's location is the matcher.
 
 ```json
-{ "name": "myapp", "railway": { "auth": { "keychain": "myapp.railway" } }, "tracing": {}, "services": {} }
+{
+  "name": "myapp",
+  "railway": { "auth": { "keychain": "myapp.railway" } },
+  "tracing": { "provider": "jaeger", "url": "https://jaeger.example.com" },
+  "services": {
+    "web": { "provider": "railway", "project": "<railway-project-id>", "service": "web" }
+  }
+}
 ```
 
 - `name` is optional and defaults to the git root's folder name; `railway`, `tracing` and `services` take the same shape as a project in the global file. `"$schema"` is allowed and ignored; unknown keys are an error.
