@@ -116,11 +116,14 @@ describe('coalesceMultiline', () => {
   test('chains on the previous record, not the first, and splits past the gap', () => {
     const events = coalesceMultiline([
       line('a', 0),
-      line('b', 40),
-      line('c', 80),
-      line('d', 131),
+      line('  b', 40),
+      line('  c', 80),
+      line('  d', 131),
     ]);
-    expect(events.map((event) => event.message)).toEqual(['a\nb\nc', 'd']);
+    expect(events.map((event) => event.message)).toEqual([
+      'a\n  b\n  c',
+      '  d',
+    ]);
   });
 
   test('keeps two errors 10ms apart in different deployments separate', () => {
@@ -136,10 +139,10 @@ describe('coalesceMultiline', () => {
       line('one', 0),
       line('two', 5, { service: 'web' }),
       line('three', 8, { level: 'warn' }),
-      line('four', 9, { level: 'fatal' }),
+      line('  four', 9, { level: 'fatal' }),
     ]);
     expect(events.map((event) => event.message)).toEqual([
-      'one\nfour',
+      'one\n  four',
       'two',
       'three',
     ]);
@@ -203,5 +206,51 @@ describe('coalesceMultiline', () => {
       ]),
     );
     expect(groups[0]).toMatchObject({ count: 2, lines: 6 });
+  });
+
+  test('a burst of distinct errors stays distinct', () => {
+    const events = coalesceMultiline(
+      Array.from({ length: 5 }, (_, index) =>
+        line(index % 2 === 0 ? 'TypeError: a' : 'DatabaseError: b', index * 40),
+      ),
+    );
+    expect(events.map((event) => event.message)).toEqual([
+      'TypeError: a',
+      'DatabaseError: b',
+      'TypeError: a',
+      'DatabaseError: b',
+      'TypeError: a',
+    ]);
+    expect(events.every((event) => event.lines === 1)).toBe(true);
+  });
+
+  test('snippet lines, a headline and its frames are one event, and the next headline is not', () => {
+    const events = coalesceMultiline([
+      line('370 | status: 404,', 0),
+      line('371 | });', 1),
+      line('error: Not found', 2),
+      line('      at handler (a.ts:1:2)', 3),
+      line('error: Other', 4),
+    ]);
+    expect(events.map((event) => event.message)).toEqual([
+      'error: Not found\n370 | status: 404,\n371 | });\n      at handler (a.ts:1:2)',
+      'error: Other',
+    ]);
+    expect(events[0]?.lines).toBe(4);
+  });
+
+  test('a headline followed by a bare { object dump is one event', () => {
+    const events = coalesceMultiline([
+      line('Request failed', 0),
+      line('{', 1),
+      line('  status: 500,', 2),
+      line('  code: "E",', 3),
+      line('}', 4),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.message).toBe(
+      'Request failed\n{\n  status: 500,\n  code: "E",\n}',
+    );
+    expect(events[0]?.lines).toBe(5);
   });
 });

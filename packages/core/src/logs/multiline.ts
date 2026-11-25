@@ -14,14 +14,19 @@ interface OpenEvent {
   readonly record: LogRecord;
   readonly lines: Array<string>;
   merged: boolean;
+  hasHeadline: boolean;
   lastTs: number;
   traceId: string | undefined;
 }
 
 const CONTINUATION = /^(\s|\}|\]|at |\d+ \| )/;
 
+/** A bare `{` or `[` opens an object dump from `console.error("msg", obj)`, so it stays with its message. */
 const isContinuation = (line: string): boolean =>
-  line === '' || CONTINUATION.test(line);
+  line === '' || line === '{' || line === '[' || CONTINUATION.test(line);
+
+const containsHeadline = (lines: ReadonlyArray<string>): boolean =>
+  lines.some((line) => !isContinuation(line));
 
 /**
  * Same-microsecond records can arrive out of order, and Bun prints source
@@ -52,6 +57,12 @@ const eventKey = (record: LogRecord): string =>
  * record: the first record's fields with the lines joined into `message`
  * (capped), headline line first, so a stack trace or object dump groups under
  * its headline.
+ *
+ * Within the gap, a record whose first line is a continuation (indented, `at`,
+ * a closing bracket, a bare `{` or `[`, a Bun `370 | ...` snippet) always
+ * merges. A record whose first line is a headline merges only while the open
+ * event has no headline yet (Bun prints snippets before the error); otherwise
+ * it starts a new event, so a burst of distinct errors stays distinct.
  * Events open per service/deployment/level, so interleaved deployments do not
  * split each other's events. Output follows each event's first record.
  */
@@ -68,9 +79,15 @@ export const coalesceMultiline = (
     }
     const lines = record.message.split('\n');
     const event = open.get(key);
-    if (event !== undefined && ts - event.lastTs <= MULTILINE_GAP_MS) {
+    const startsHeadline = containsHeadline(lines.slice(0, 1));
+    if (
+      event !== undefined &&
+      ts - event.lastTs <= MULTILINE_GAP_MS &&
+      !(startsHeadline && event.hasHeadline)
+    ) {
       event.lines.push(...lines);
       event.merged = true;
+      event.hasHeadline ||= containsHeadline(lines);
       event.lastTs = ts;
       event.traceId ??= record.traceId;
       continue;
@@ -79,6 +96,7 @@ export const coalesceMultiline = (
       record,
       lines: [...lines],
       merged: false,
+      hasHeadline: containsHeadline(lines),
       lastTs: ts,
       traceId: record.traceId,
     };
