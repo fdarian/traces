@@ -53,7 +53,7 @@ export const TraceSummary = Schema.Struct({
   rootService: Schema.String,
   rootOperation: Schema.String,
   spanCount: Schema.Number,
-  errorSpanCount: Schema.optional(Schema.Number),
+  errorSpanCount: Schema.Number,
   services: Schema.Array(TraceSummaryService),
   startTimeUnixNano: Schema.String,
   durationMs: Schema.Number,

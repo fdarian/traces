@@ -6,7 +6,7 @@ import {
   type TraceBackendInterface,
   TraceNotFound,
 } from '@traces/core';
-import { Context, Effect } from 'effect';
+import { Context, Effect, Option } from 'effect';
 import { HttpServerResponse } from 'effect/http';
 import { handler } from '#/rpc/handler';
 import type { EngineContext } from '#/rpc/implementer';
@@ -15,6 +15,8 @@ import { router } from '#/rpc/router';
 const stubBackend: TraceBackendInterface = {
   listServices: Effect.succeed(['checkout', 'payments']),
   listOperations: () => Effect.succeed([]),
+  searchFullTraces: () => Effect.succeed([]),
+  searchTagged: () => Effect.succeed(Option.none()),
   searchTraces: () => Effect.succeed([]),
   getTrace: (traceId) =>
     traceId === 'unreachable'

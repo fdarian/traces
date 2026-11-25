@@ -6,9 +6,9 @@ import {
   type JaegerBadResponse,
   type JaegerUnreachable,
   type Span,
-  type TraceBackendUnauthorized,
   serializeAttribute,
   TraceBackend,
+  type TraceBackendUnauthorized,
 } from '@traces/core';
 import { Config, Effect, Fiber, Layer, Ref, Schedule } from 'effect';
 import type { IssueStoreError } from '#/issues/errors';
@@ -113,10 +113,7 @@ const ingestService = (
 
     for (const summary of summaries) {
       // a trace without error spans can't yield an issue, and getTrace is a full trace load in Jaeger
-      if (
-        summary.errorSpanCount === undefined ||
-        summary.errorSpanCount === 0
-      ) {
+      if (summary.errorSpanCount === 0) {
         continue;
       }
       const traceResult = yield* backend

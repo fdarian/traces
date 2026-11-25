@@ -5,7 +5,7 @@ import {
   type TraceBackendInterface,
   type TraceSummary,
 } from '@traces/core';
-import { ConfigProvider, Effect, Layer } from 'effect';
+import { ConfigProvider, Effect, Layer, Option } from 'effect';
 import { SqliteDbLayer } from '#/db/sqlite';
 import { runIngestOnce } from '#/issues/ingester';
 import { SqliteIssueStoreLayer } from '#/issues/sqlite-store';
@@ -23,10 +23,7 @@ afterEach(() => {
   }
 });
 
-function summary(
-  traceId: string,
-  errorSpanCount: number | undefined,
-): TraceSummary {
+function summary(traceId: string, errorSpanCount: number): TraceSummary {
   return {
     traceId,
     rootService: 'web',
@@ -50,6 +47,8 @@ function runIngest(options: {
   const backend: TraceBackendInterface = {
     listServices: Effect.succeed(options.services),
     listOperations: () => Effect.succeed([]),
+    searchFullTraces: () => Effect.succeed([]),
+    searchTagged: () => Effect.succeed(Option.none()),
     searchTraces: (query) => {
       searchedServices.push(query.service);
       return Effect.succeed(options.summaries);
@@ -74,11 +73,7 @@ function runIngest(options: {
 test('fetches full traces only for summaries with error spans', async () => {
   const result = await runIngest({
     services: ['web'],
-    summaries: [
-      summary('ok', 0),
-      summary('unknown', undefined),
-      summary('bad', 2),
-    ],
+    summaries: [summary('ok', 0), summary('bad', 2)],
   });
   expect(result.fetchedTraces).toEqual(['bad']);
 });

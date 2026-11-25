@@ -93,7 +93,7 @@ export const ErrorTraceSummary = Schema.Struct({
   rootService: Schema.String,
   rootOperation: Schema.String,
   spanCount: Schema.Number,
-  errorSpanCount: Schema.optional(Schema.Number),
+  errorSpanCount: Schema.Number,
   durationMs: Schema.Number,
   startTimeUnixNano: Schema.String,
 });

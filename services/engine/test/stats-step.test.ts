@@ -83,6 +83,7 @@ function summary(overrides: Partial<TraceSummary>): TraceSummary {
     rootService: 'web',
     rootOperation: 'GET /',
     spanCount: 4,
+    errorSpanCount: 0,
     services: [{ name: 'web', spanCount: 4 }],
     startTimeUnixNano: '1700000000123456789',
     durationMs: 12.5,
@@ -90,7 +91,7 @@ function summary(overrides: Partial<TraceSummary>): TraceSummary {
   };
 }
 
-test('toCountedTrace floors start to ms from BigInt ns and defaults missing errors to 0', () => {
+test('toCountedTrace floors start to ms from BigInt ns and carries the error span count', () => {
   expect(toCountedTrace(summary({}))).toEqual({
     traceId: 't1',
     startMs: 1_700_000_000_123,

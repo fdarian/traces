@@ -6,7 +6,7 @@ import {
   type TraceBackendInterface,
   type TraceSummary,
 } from '@traces/core';
-import { ConfigProvider, Effect, Layer } from 'effect';
+import { ConfigProvider, Effect, Layer, Option } from 'effect';
 import { TestClock } from 'effect/testing';
 import { SqliteDbLayer } from '#/db/sqlite';
 import { SqliteServiceStatsStoreLayer } from '#/service-stats/sqlite-store';
@@ -93,6 +93,8 @@ function runTick(options: {
   const backend: TraceBackendInterface = {
     listServices: Effect.succeed(options.services),
     listOperations: () => Effect.succeed([]),
+    searchFullTraces: () => Effect.succeed([]),
+    searchTagged: () => Effect.succeed(Option.none()),
     searchTraces: (query) => {
       if (options.failingServices?.includes(query.service)) {
         return Effect.fail(

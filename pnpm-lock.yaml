@@ -217,6 +217,34 @@ importers:
         specifier: 2.9.18
         version: 2.9.18
 
+  apps/cli:
+    dependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)
+      '@traces/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.4
+      effect-cli-skills:
+        specifier: github:fdarian/effect-cli-skills#3bbc96325813adb4526aadd03de172127866da38
+        version: https://codeload.github.com/fdarian/effect-cli-skills/tar.gz/3bbc96325813adb4526aadd03de172127866da38(effect@4.1.4)
+    devDependencies:
+      '@types/bun':
+        specifier: 1.3.14
+        version: 1.3.14
+      '@types/node':
+        specifier: 25.9.3
+        version: 25.9.3
+      tsrs:
+        specifier: 'catalog:'
+        version: 0.18.0-ts7.1.0-dev.20260929
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
   apps/docs:
     dependencies:
       '@traces/react':
@@ -4768,6 +4796,12 @@ packages:
 
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
+
+  effect-cli-skills@https://codeload.github.com/fdarian/effect-cli-skills/tar.gz/3bbc96325813adb4526aadd03de172127866da38:
+    resolution: {gitHosted: true, integrity: sha512-BSBTDfXYhxPxerzDJVxl/lTWGHblhzRD3XOj58EvQYsn934c5F+CWKh3WrbQmSe8rt1Jck52deqOfuJMDps7xA==, tarball: https://codeload.github.com/fdarian/effect-cli-skills/tar.gz/3bbc96325813adb4526aadd03de172127866da38}
+    version: 0.2.0
+    peerDependencies:
+      effect: ^4.0.5
 
   effect@4.1.4:
     resolution: {integrity: sha512-Tgrv/9FN+TZYyOn8XSli+fVqAfwDrDAkiX5Uu9vztINb675VTQdhD0gWI5Kzvhlh9QqzjZvw72iugqw5pwoghQ==}
@@ -11325,6 +11359,10 @@ snapshots:
       gopd: 1.2.0
 
   ee-first@1.1.1: {}
+
+  effect-cli-skills@https://codeload.github.com/fdarian/effect-cli-skills/tar.gz/3bbc96325813adb4526aadd03de172127866da38(effect@4.1.4):
+    dependencies:
+      effect: 4.1.4
 
   effect@4.1.4: {}
 

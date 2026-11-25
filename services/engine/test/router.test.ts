@@ -17,7 +17,15 @@ import {
   TraceBackend,
   type TraceBackendInterface,
 } from '@traces/core';
-import { ConfigProvider, Context, Effect, Layer, Schema, Scope } from 'effect';
+import {
+  ConfigProvider,
+  Context,
+  Effect,
+  Layer,
+  Option,
+  Schema,
+  Scope,
+} from 'effect';
 import { SqliteDbLayer } from '#/db/sqlite';
 import { SqliteIssueStoreLayer } from '#/issues/sqlite-store';
 import {
@@ -35,7 +43,7 @@ import {
 
 const summary = (
   traceId: string,
-  errorSpanCount: number | undefined,
+  errorSpanCount: number,
 ): CoreTraceSummary => ({
   traceId,
   rootService: 'checkout',
@@ -50,8 +58,9 @@ const summary = (
 const stubBackend: TraceBackendInterface = {
   listServices: Effect.succeed(['checkout', 'payments']),
   listOperations: () => Effect.succeed(['POST /pay']),
-  searchTraces: () =>
-    Effect.succeed([summary('t1', 1), summary('t2', undefined)]),
+  searchFullTraces: () => Effect.succeed([]),
+  searchTagged: () => Effect.succeed(Option.none()),
+  searchTraces: () => Effect.succeed([summary('t1', 1), summary('t2', 0)]),
   getTrace: (traceId) =>
     Effect.succeed({
       traceId,
