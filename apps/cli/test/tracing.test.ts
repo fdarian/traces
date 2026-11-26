@@ -24,10 +24,17 @@ import {
 } from '#/resolve.ts';
 import { SecretMissing, SecretStoreError, Secrets } from '#/secrets.ts';
 
-const fakeSecrets = (entries: Record<string, string>) => {
+const fakeSecrets = (
+  entries: Record<string, string>,
+  files: {
+    readonly inFile?: ReadonlyArray<string>;
+    readonly shadowed?: ReadonlyArray<string>;
+  } = {},
+) => {
   const reads: Array<string> = [];
   const stored = new Map(Object.entries(entries));
   const layer = Layer.succeed(Secrets, {
+    filePath: '/fake/traces/secrets.json',
     get: (name: string) => {
       reads.push(name);
       const value = stored.get(name);
@@ -35,9 +42,21 @@ const fakeSecrets = (entries: Record<string, string>) => {
         ? Effect.fail(new SecretMissing({ name }))
         : Effect.succeed(value);
     },
+    source: (name: string) =>
+      stored.has(name)
+        ? Effect.succeed(
+            files.inFile?.includes(name)
+              ? ({
+                  store: 'file',
+                  shadowed: files.shadowed?.includes(name) ?? false,
+                } as const)
+              : ({ store: 'keychain', shadowed: false } as const),
+          )
+        : Effect.fail(new SecretMissing({ name })),
     set: (name: string, value: string) =>
       Effect.sync(() => void stored.set(name, value)),
     delete: (name: string) => Effect.sync(() => stored.delete(name)),
+    fileStatus: Effect.succeed(Option.none()),
   });
   return { layer, reads, stored };
 };
@@ -718,6 +737,31 @@ describe('railwayAuthStatus', () => {
     expect(result).toEqual({
       status: 'ok',
       detail: 'token from keychain app.railway',
+    });
+  });
+
+  test('labels a token held by the secrets file as from file', async () => {
+    const result = await status(configured, {
+      secrets: fakeSecrets({ 'app.railway': 'rw' }, { inFile: ['app.railway'] })
+        .layer,
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      detail: 'token from file app.railway',
+    });
+  });
+
+  test('reports a token that is in both the file and the keychain', async () => {
+    const result = await status(configured, {
+      secrets: fakeSecrets(
+        { 'app.railway': 'rw' },
+        { inFile: ['app.railway'], shadowed: ['app.railway'] },
+      ).layer,
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      detail: 'token from file app.railway',
+      shadowedSecret: 'app.railway',
     });
   });
 

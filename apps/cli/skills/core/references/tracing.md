@@ -20,6 +20,9 @@ Run by the user (agents cannot answer the hidden prompt):
 ```
 traces secret set myapp.jaeger
 pbpaste | traces secret set myapp.jaeger
+pbpaste | traces secret set myapp.jaeger --insecure-storage
 ```
 
-`traces services` shows the URL, each referenced secret as present or missing, whether the URL answers (reachable, unauthorized or error), and the `otelService` per service, flagging any Jaeger does not report. A missing secret or env var is reported in that output (the `traces secret set <ref>` fix on the next line) and the command still exits 0.
+The last form writes `~/.config/traces/secrets.json` (plain text, mode 0600) instead of the keychain: use it over SSH or headless, where the keychain cannot prompt. A name in the file wins over the keychain.
+
+`traces services` shows the URL, each referenced secret as present (and from which store) or missing, whether the URL answers (reachable, unauthorized or error), and the `otelService` per service, flagging any Jaeger does not report. A missing secret or env var is reported in that output (the `traces secret set <ref>` fix on the next line) and the command still exits 0.

@@ -13,20 +13,29 @@ import {
   type ResolvedProject,
   resolveRailwayClient,
 } from '#/resolve.ts';
-import { SecretMissing } from '#/secrets.ts';
+import { SecretMissing, Secrets } from '#/secrets.ts';
 import { findVercelToken } from '#/vercel-token.ts';
 
 export interface AuthStatus {
   /** `error`: the provider could not answer the check (rate limit, outage), so the credentials are neither confirmed nor rejected. */
   readonly status: 'ok' | 'missing' | 'invalid' | 'error';
   readonly detail: string;
+  /** Set when the Railway token is in the secrets file and the keychain too, so the keychain copy is never read. */
+  readonly shadowedSecret?: string;
 }
 
-const describeRef = (ref: SecretRef) =>
-  'keychain' in ref ? `keychain ${ref.keychain}` : `env ${ref.env}`;
-
-const describeAuth = (auth: RailwayAuth) =>
-  auth === 'cli' ? 'railway CLI login' : `token from ${describeRef(auth)}`;
+const describeAuth = (auth: RailwayAuth) => {
+  if (auth === 'cli') return Effect.succeed({ label: 'railway CLI login' });
+  if ('env' in auth) {
+    return Effect.succeed({ label: `token from env ${auth.env}` });
+  }
+  return Secrets.use((secrets) => secrets.source(auth.keychain)).pipe(
+    Effect.map((found) => ({
+      label: `token from ${found.store} ${auth.keychain}`,
+      ...(found.shadowed ? { shadowedSecret: auth.keychain } : {}),
+    })),
+  );
+};
 
 /** Reads the project through whichever transport is configured, so it also proves the credentials can see that Railway project. */
 export const railwayAuthStatus = (
@@ -41,7 +50,6 @@ export const railwayAuthStatus = (
         detail: missingRailwayAuth(resolved).hint,
       } as const satisfies AuthStatus;
     }
-    const source = describeAuth(auth);
     const client = yield* resolveRailwayClient(resolved).pipe(Effect.result);
     if (client._tag === 'Failure') {
       const error = client.failure;
@@ -59,12 +67,22 @@ export const railwayAuthStatus = (
       }
       return yield* Effect.fail(error);
     }
+    const described = yield* describeAuth(auth);
+    const source = described.label;
+    const shadow =
+      'shadowedSecret' in described
+        ? { shadowedSecret: described.shadowedSecret }
+        : {};
     const checked = yield* checkRailwayAccess(
       client.success,
       railwayProjectId,
     ).pipe(Effect.result);
     if (checked._tag === 'Success') {
-      return { status: 'ok', detail: source } as const satisfies AuthStatus;
+      return {
+        status: 'ok',
+        detail: source,
+        ...shadow,
+      } as const satisfies AuthStatus;
     }
     const error = checked.failure;
     if (error instanceof ProviderToolMissing) {
@@ -77,12 +95,14 @@ export const railwayAuthStatus = (
       return {
         status: 'invalid',
         detail: `${source}: ${error.hint}`,
+        ...shadow,
       } as const satisfies AuthStatus;
     }
     if (error instanceof ProviderNotFound) {
       return {
         status: 'invalid',
         detail: `${source} cannot see ${error.what}; ${error.hint}`,
+        ...shadow,
       } as const satisfies AuthStatus;
     }
     return yield* Effect.fail(error);

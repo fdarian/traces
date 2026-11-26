@@ -39,15 +39,15 @@ Usage: `traces services [flags]`
 
 ### Output
 
-`--json` prints one document: configPath, configSource (flag | repo | global), project, matchedBy (flag | path | git | repo), services[] {service, provider (absent for trace-only), ref (the config entry), otelService (the Jaeger service name; set when the project has tracing or the entry names one), otelInJaeger (boolean, only when check is reachable: whether Jaeger reports the otelService; `false` means not reporting)}, providers[] {provider, scope (`project <id>` or `team <id>`), auth {status: ok | missing | invalid | error, detail}} (one per Railway project, Vercel team or project), and tracing (when the project has it) {provider, url, headers[], check}, check being {status: reachable, services[]} (the Jaeger service names) | {status: unauthorized} | {status: error, detail}. Each tracing header is {name, source: literal | env | keychain, ref, status: present | missing | error, detail?}; literal headers carry no ref or status. Values are never printed.
+`--json` prints one document: configPath, configSource (flag | repo | global), project, matchedBy (flag | path | git | repo), services[] {service, provider (absent for trace-only), ref (the config entry), otelService (the Jaeger service name; set when the project has tracing or the entry names one), otelInJaeger (boolean, only when check is reachable: whether Jaeger reports the otelService; `false` means not reporting)}, providers[] {provider, scope (`project <id>` or `team <id>`), auth {status: ok | missing | invalid | error, detail}} (one per Railway project, Vercel team or project), and tracing (when the project has it) {provider, url, headers[], check}, check being {status: reachable, services[]} (the Jaeger service names) | {status: unauthorized} | {status: error, detail}. Each tracing header is {name, source: literal | env | keychain, ref, status: present | missing | error, detail?}; literal headers carry no ref or status. A present keychain-source header adds `store` (file | keychain) and `shadowed` (true when the name is in both stores, so the keychain copy is never read); an `error` one adds `cantPrompt` (the keychain refused without a user to ask, typical over SSH). A Railway token provider's `auth` carries `shadowedSecret` when shadowed. `warnings[]` is a top-level array of {kind: file-mode | shadowed, message, path, ...} (`mode` for file-mode, `name` for shadowed). Values are never printed.
 
 ### Notes
 
 - Run this first when another command says no project matches or auth fails.
 - Auth check: Railway reads the configured project through `railway.auth`, whether a token or the `railway` CLI login (`missing` without `railway.auth`, its secret, or the `railway` binary; `invalid` when Railway rejects the token or the login); Vercel validates the token against the API (`invalid` only on HTTP 401 or 403; any other non-200 answer, such as a 429 or 5xx, is `error` with the status code, since the token was neither confirmed nor rejected).
 - With a `tracing` block, one `/api/v3/services` request (5s timeout) checks the URL: reachable, unauthorized (credentials rejected), or error with a short reason (an HTML page, a redirect, a missing secret, no answer). A failed check still exits 0. A service whose otelService Jaeger does not report shows `– no spans` in the TRACES column and has `otelInJaeger: false` in `--json`; a wrong name there is why `traces spans` comes back empty. Projects without `tracing` make no request.
-- Text output is two sections after a header naming the project and config file. `Services`: a header row `SERVICE PROVIDER [PROJECT] ENV TRACES`, then one row per configured service (key, provider, the Railway environment, and when Jaeger answered a TRACES cell: `✓`, `✓ <otelService>` when the Jaeger name differs from the key, or `– no spans`). PROJECT (the Railway project id, 8 characters on a terminal) appears only when the services span more than one Railway project; a trace-only service reads `traces only`. `Providers`: one line per Railway project, Vercel team or project and for Jaeger, with the auth or reachability result, the fix on the next line when something is wrong, and the Jaeger services no configured service maps to. The full config entry is only in `--json`.
-- Tracing: `traces secret set <ref>` fixes a missing keychain secret; an env header is `missing` until that variable is exported. Reading keychain entries here may prompt macOS for access.
+- Text output is two sections after a header naming the project and config file, plus `warning:` lines at the end (a secrets file readable by others: `chmod 600` it; a secret in both stores). Secret-backed headers and the Railway token read `from file` or `from keychain`. `Services`: a header row `SERVICE PROVIDER [PROJECT] ENV TRACES`, then one row per configured service (key, provider, the Railway environment, and when Jaeger answered a TRACES cell: `✓`, `✓ <otelService>` when the Jaeger name differs from the key, or `– no spans`). PROJECT (the Railway project id, 8 characters on a terminal) appears only when the services span more than one Railway project; a trace-only service reads `traces only`. `Providers`: one line per Railway project, Vercel team or project and for Jaeger, with the auth or reachability result, the fix on the next line when something is wrong, and the Jaeger services no configured service maps to. The full config entry is only in `--json`.
+- Tracing: `traces secret set <ref>` fixes a missing keychain secret (with `--insecure-storage` when `cantPrompt`: the hint line says so); an env header is `missing` until that variable is exported. Reading keychain entries here may prompt macOS for access.
 
 ## traces logs
 
@@ -165,9 +165,9 @@ SpanRow per line, depth first with children by start time: traceId, spanId, pare
 
 ## traces secret
 
-Manage the OS-keychain secrets that tracing headers and a Railway token (`railway.auth`) refer to as {"keychain": "<name>"}. Values are stored under the keychain service `traces` and are never printed or logged.
+Manage the secrets that tracing headers and a Railway token (`railway.auth`) refer to as {"keychain": "<name>"}. Values go to the OS keychain (service `traces`) or, with `--insecure-storage`, to `~/.config/traces/secrets.json` (`$XDG_CONFIG_HOME/traces/secrets.json`; plain text, mode 0600, directory 0700). They are never printed or logged.
 
-Usage: `traces secret set|delete <name>`
+Usage: `traces secret set <name> [--insecure-storage]`, `traces secret delete <name>`
 
 ### Output
 
@@ -177,7 +177,8 @@ no records on stdout. stderr confirms what was stored or deleted.
 
 - `set` reads the value from a hidden prompt on a terminal, or from stdin when piped (one trailing newline is dropped). An empty value is refused.
 - Agents cannot answer the hidden prompt: the user runs `traces secret set <name>` once; after that every trace and Railway command reads the secret itself.
-- `delete` of a name that does not exist exits 0 and says so on stderr.
+- `--insecure-storage` is the way to run over SSH or headless, where the keychain cannot prompt (a keychain error says so and names the flag). Lookup reads the file first, then the keychain, so the same config works on both; `set` without the flag does not touch the file, so a stale file entry keeps winning until `delete`.
+- `delete` clears the name from both stores. A name in neither exits 0 and says so on stderr.
 - There is no `list`: the keychain cannot be enumerated. `traces services` shows present or missing for every secret the config references.
 - A command with a missing secret exits 3 and prints the `traces secret set <name>` to run.
 - Takes no global flags.
